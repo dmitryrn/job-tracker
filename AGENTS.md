@@ -13,8 +13,18 @@ service. Do not start `go run ./cmd/server` manually or stop its process
 directly. Use `systemctl --user` to inspect or restart either service and
 `journalctl --user -u jobs.service` to view backend logs.
 
+`jobs-ui.service` has a `Wants=` and `After=` dependency on `jobs.service`, so
+starting the UI also starts the backend and waits for its startup ordering.
+
+`~/.config/systemd/user/jobs.service` and
+`~/.config/systemd/user/jobs-ui.service` are symlinks to
+`systemd/jobs.service` and `systemd/jobs-ui.service` in this repository.
+Edit those tracked files, then run `systemctl --user daemon-reload` after
+changing a unit definition.
+
 # Rules
 - don't hallucinate lib versions when adding
 - add spacing between code blocks as per clean code, for readability
 - handlers should log all errors, including service errors
 - run tests, build after making changes
+- when restarting a service, make sure it works, check logs, etc
