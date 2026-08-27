@@ -7,8 +7,8 @@ downloadable database.
 
 ## Configuration
 
-Create `config.toml` from `config.toml.example`. Every setting is required;
-the application does not supply defaults:
+Create `config.toml` from `config.toml.example`. The application does not
+supply defaults; Jobicy's `geo`, `industry`, and `tag` filters are optional:
 
 ```toml
 [server]
@@ -28,6 +28,13 @@ sync_interval = "6h"
 
 [providers.remotive]
 query = "software engineer"
+sync_interval = "6h"
+
+[providers.jobicy]
+count = 50
+geo = "europe"
+industry = "engineering"
+tag = ""
 sync_interval = "6h"
 ```
 
@@ -58,9 +65,12 @@ trigger an early repeat request. Both sources are upserted into SQLite with
 their advertised company names. Set `providers.adzuna.workplace` to `any`,
 `remote`, or `remote-hybrid`.
 
-Adzuna provides a description snippet, not a complete job description.
-Remotive provides full HTML job descriptions. The database keeps every source
-URL so an interesting role can be opened at its source.
+Adzuna provides a description snippet, while Remotive and Jobicy provide full
+HTML job descriptions. Jobicy accepts up to 200 results and can be filtered by
+an optional `geo`, `industry`, or `tag`; leave a filter blank to omit it. Look
+up current geography and industry slugs from Jobicy before adding a filter. Its
+sync interval must be at least one hour. The database keeps every source URL so
+an interesting role can be opened at its source.
 
 ## API
 

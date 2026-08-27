@@ -16,3 +16,10 @@ sync_interval = "6h"
 [providers.remotive]
 query = "software engineer"
 sync_interval = "6h"
+
+[providers.jobicy]
+count = 50
+geo = "europe"
+industry = "engineering"
+tag = ""
+sync_interval = "6h"

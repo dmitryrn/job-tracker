@@ -10,6 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"nice/internal/clients/adzuna"
+	"nice/internal/clients/jobicy"
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
 	"nice/internal/migrations"
@@ -25,6 +26,7 @@ func main() {
 			config.Load,
 			openDatabase,
 			adzuna.NewClient,
+			jobicy.NewClient,
 			remotive.NewClient,
 			repositories.NewSQLite,
 			services.NewJobSync,
@@ -55,8 +57,6 @@ func registerLifecycle(
 
 func newLogger() (*zap.Logger, error) {
 	config := zap.NewProductionConfig()
-	config.OutputPaths = []string{"stderr", "jobs.log"}
-	config.ErrorOutputPaths = config.OutputPaths
 	return config.Build()
 }
 

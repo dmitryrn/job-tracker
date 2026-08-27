@@ -24,6 +24,7 @@ type Config struct {
 
 type ProviderConfig struct {
 	Adzuna   AdzunaConfig
+	Jobicy   JobicyConfig
 	Remotive RemotiveConfig
 }
 
@@ -44,6 +45,14 @@ type RemotiveConfig struct {
 	SyncInterval time.Duration
 }
 
+type JobicyConfig struct {
+	Count        int
+	Geo          string
+	Industry     string
+	Tag          string
+	SyncInterval time.Duration
+}
+
 type fileConfig struct {
 	Server struct {
 		HTTPAddress string `toml:"http_address" validate:"notblank"`
@@ -53,6 +62,7 @@ type fileConfig struct {
 	} `toml:"database"`
 	Providers struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
+		Jobicy   fileJobicyConfig   `toml:"jobicy"`
 		Remotive fileRemotiveConfig `toml:"remotive"`
 	} `toml:"providers"`
 }
@@ -69,6 +79,14 @@ type fileAdzunaConfig struct {
 
 type fileRemotiveConfig struct {
 	Query        string `toml:"query" validate:"notblank"`
+	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
+}
+
+type fileJobicyConfig struct {
+	Count        int    `toml:"count" validate:"gte=1,lte=200"`
+	Geo          string `toml:"geo"`
+	Industry     string `toml:"industry"`
+	Tag          string `toml:"tag"`
 	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
 }
 
@@ -109,6 +127,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.remotive.sync_interval: %w", err)
 	}
+	jobicyInterval, err := time.ParseDuration(source.Providers.Jobicy.SyncInterval)
+	if err != nil {
+		return Config{}, fmt.Errorf("parse providers.jobicy.sync_interval: %w", err)
+	}
+	if jobicyInterval < time.Hour {
+		return Config{}, fmt.Errorf("providers.jobicy.sync_interval must be at least 1h")
+	}
 
 	return Config{
 		HTTPAddress:  source.Server.HTTPAddress,
@@ -128,6 +153,13 @@ func Load() (Config, error) {
 			Remotive: RemotiveConfig{
 				Query:        source.Providers.Remotive.Query,
 				SyncInterval: remotiveInterval,
+			},
+			Jobicy: JobicyConfig{
+				Count:        source.Providers.Jobicy.Count,
+				Geo:          source.Providers.Jobicy.Geo,
+				Industry:     source.Providers.Jobicy.Industry,
+				Tag:          source.Providers.Jobicy.Tag,
+				SyncInterval: jobicyInterval,
 			},
 		},
 	}, nil

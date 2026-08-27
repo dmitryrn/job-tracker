@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"nice/internal/clients/adzuna"
+	"nice/internal/clients/jobicy"
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
 	"nice/internal/repositories"
@@ -16,9 +17,11 @@ import (
 
 type JobSync struct {
 	adzuna           *adzuna.Client
+	jobicy           *jobicy.Client
 	remotive         *remotive.Client
 	repository       repositories.JobRepository
 	adzunaInterval   time.Duration
+	jobicyInterval   time.Duration
 	remotiveInterval time.Duration
 	logger           *zap.Logger
 	cancel           context.CancelFunc
@@ -26,12 +29,14 @@ type JobSync struct {
 	mutex            sync.Mutex
 }
 
-func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, remotiveClient *remotive.Client, repository repositories.JobRepository, logger *zap.Logger) *JobSync {
+func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, remotiveClient *remotive.Client, repository repositories.JobRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:           adzunaClient,
+		jobicy:           jobicyClient,
 		remotive:         remotiveClient,
 		repository:       repository,
 		adzunaInterval:   cfg.Providers.Adzuna.SyncInterval,
+		jobicyInterval:   cfg.Providers.Jobicy.SyncInterval,
 		remotiveInterval: cfg.Providers.Remotive.SyncInterval,
 		logger:           logger,
 	}
@@ -84,6 +89,7 @@ func (syncer *JobSync) run(ctx context.Context) {
 
 func (syncer *JobSync) sync(ctx context.Context) {
 	syncer.syncAdzuna(ctx)
+	syncer.syncJobicy(ctx)
 	syncer.syncRemotive(ctx)
 }
 
@@ -125,6 +131,26 @@ func (syncer *JobSync) syncRemotive(ctx context.Context) {
 	}
 	syncer.completeProviderRun(ctx, "remotive", nil)
 	syncer.logger.Info("stored Remotive jobs", zap.Int("count", len(jobs)))
+}
+
+func (syncer *JobSync) syncJobicy(ctx context.Context) {
+	if !syncer.startProviderRun(ctx, "jobicy", syncer.jobicyInterval) {
+		return
+	}
+	syncer.logger.Info("syncing Jobicy jobs")
+	jobs, err := syncer.jobicy.Fetch(ctx)
+	if err != nil {
+		syncer.logger.Error("Jobicy sync failed", zap.Error(err))
+		syncer.completeProviderRun(ctx, "jobicy", err)
+		return
+	}
+	if err := syncer.repository.Upsert(ctx, jobs); err != nil {
+		syncer.logger.Error("persist Jobicy jobs failed", zap.Error(err))
+		syncer.completeProviderRun(ctx, "jobicy", err)
+		return
+	}
+	syncer.completeProviderRun(ctx, "jobicy", nil)
+	syncer.logger.Info("stored Jobicy jobs", zap.Int("count", len(jobs)))
 }
 
 func (syncer *JobSync) startProviderRun(ctx context.Context, provider string, interval time.Duration) bool {

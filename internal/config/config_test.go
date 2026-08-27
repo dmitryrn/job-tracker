@@ -13,26 +13,38 @@ import (
 
 func TestLoadUsesProviderConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
-	writeTestConfig(t, "6h", "12h")
+	writeTestConfig(t, "6h", "12h", "24h")
 
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.Equal(t, 6*time.Hour, cfg.Providers.Adzuna.SyncInterval)
 	assert.Equal(t, 12*time.Hour, cfg.Providers.Remotive.SyncInterval)
+	assert.Equal(t, 24*time.Hour, cfg.Providers.Jobicy.SyncInterval)
 	assert.Equal(t, "software engineer", cfg.Providers.Adzuna.Query)
 	assert.Equal(t, "backend engineer", cfg.Providers.Remotive.Query)
+	assert.Equal(t, 50, cfg.Providers.Jobicy.Count)
+	assert.Equal(t, "europe", cfg.Providers.Jobicy.Geo)
+	assert.Equal(t, "engineering", cfg.Providers.Jobicy.Industry)
 }
 
 func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
 	t.Chdir(t.TempDir())
-	writeTestConfig(t, "daily", "12h")
+	writeTestConfig(t, "6h", "12h", "daily")
 
 	_, err := Load()
 	assert.ErrorContains(t, err, "duration")
 }
 
+func TestLoadRejectsJobicyIntervalBelowOneHour(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeTestConfig(t, "6h", "12h", "30m")
+
+	_, err := Load()
+	assert.ErrorContains(t, err, "at least 1h")
+}
+
 func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
-	config := testConfig("6h", "12h")
+	config := testConfig("6h", "12h", "24h")
 	tests := []struct {
 		name    string
 		content string
@@ -54,6 +66,10 @@ func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 			content: strings.Replace(config, "sync_interval = \"6h\"\n", "", 1),
 		},
 		{
+			name:    "Jobicy count",
+			content: strings.Replace(config, "count = 50\n", "", 1),
+		},
+		{
 			name:    "server section",
 			content: strings.Replace(config, "[server]\nhttp_address = \":8080\"\n\n", "", 1),
 		},
@@ -70,12 +86,12 @@ func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 	}
 }
 
-func writeTestConfig(t *testing.T, adzunaInterval, remotiveInterval string) {
+func writeTestConfig(t *testing.T, adzunaInterval, remotiveInterval, jobicyInterval string) {
 	t.Helper()
-	writeTestConfigContent(t, testConfig(adzunaInterval, remotiveInterval))
+	writeTestConfigContent(t, testConfig(adzunaInterval, remotiveInterval, jobicyInterval))
 }
 
-func testConfig(adzunaInterval, remotiveInterval string) string {
+func testConfig(adzunaInterval, remotiveInterval, jobicyInterval string) string {
 	return fmt.Sprintf(`[server]
 http_address = ":8080"
 
@@ -94,7 +110,14 @@ sync_interval = %q
 [providers.remotive]
 query = "backend engineer"
 sync_interval = %q
-`, adzunaInterval, remotiveInterval)
+
+[providers.jobicy]
+count = 50
+geo = "europe"
+industry = "engineering"
+tag = ""
+sync_interval = %q
+`, adzunaInterval, remotiveInterval, jobicyInterval)
 }
 
 func writeTestConfigContent(t *testing.T, content string) {
