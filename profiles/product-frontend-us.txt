@@ -1,0 +1,46 @@
+Jordan Lee
+Product-focused Frontend Engineer
+Chicago, Illinois, United States | jordan.lee@example.test
+
+ABOUT
+Six years of experience creating accessible web interfaces for consumer and
+healthcare products. I combine React implementation with close design and user
+research collaboration. Authorized to work in the United States without
+sponsorship.
+
+SELECTED EXPERIENCE
+
+Frontend Engineer | Daylight Health | Remote, United States | 2023 - present
+Owned the appointment-booking experience used by patients and care coordinators.
+Built TypeScript and React features, maintained component-library documentation,
+and partnered with designers to improve keyboard navigation and screen-reader
+support. Helped reduce booking abandonment by 18 percent through performance
+and usability work. Used GraphQL and Cypress; I did not own backend services.
+
+Web Developer | Circle Market | Chicago, IL | 2020 - 2023
+Implemented e-commerce pages using JavaScript, React, Next.js, CSS, and a
+Node.js BFF maintained by another team. Added unit and end-to-end tests, joined
+weekly incident triage, and mentored two interns. Worked hybrid, three days in
+the office.
+
+Junior Web Developer | Maker House | Chicago, IL | 2018 - 2020
+Created marketing sites and internal dashboards with HTML, CSS, JavaScript, and
+WordPress. Collaborated directly with small-business customers.
+
+EDUCATION
+BA, Information Design, University of Illinois Chicago, 2018
+
+TECHNICAL SKILLS
+React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG),
+GraphQL, Cypress, Jest, Figma, Git
+
+INTERESTS AND PRACTICAL CONSTRAINTS
+Interested in product engineering, education technology, and civic technology.
+Seeking full-time employment, ideally remote in the United States; open to a
+hybrid role in Chicago. I prefer not to take a regular on-call rotation. Salary
+goal is USD 135,000+, although I will consider lower compensation for a strong
+mission fit.
+
+OTHER
+Volunteer organizer for ChiHackNight. English is my first language; conversational
+Spanish.

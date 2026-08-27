@@ -1,0 +1,47 @@
+Riley Morgan
+Senior Backend Engineer
+Berlin, Germany | riley.morgan@example.test | github.com/rileymorgan
+
+SUMMARY
+Backend engineer with eight years of experience building and operating B2B SaaS
+products. I work mainly in Go and enjoy systems that need reliable asynchronous
+processing, clear operational ownership, and pragmatic APIs. Eligible to work
+in Germany and other EU member states.
+
+EXPERIENCE
+
+Senior Backend Engineer, RelayFox GmbH, Berlin, Germany
+May 2022 - Present
+- Lead a team of four engineers responsible for tenant provisioning, billing
+  events, and internal developer APIs for a multi-tenant SaaS platform.
+- Designed and operated Go services using PostgreSQL, Kafka, Redis, Docker, and
+  Kubernetes. Reduced duplicate billing events by adding idempotency controls
+  and a reconciliation workflow.
+- Participated in a paid, follow-the-sun on-call rotation. Wrote runbooks,
+  dashboards, and alerts using Prometheus and Grafana.
+- Worked with product and support teams on enterprise customer escalations.
+
+Software Engineer, Northstar Systems, Hamburg, Germany
+July 2018 - April 2022
+- Built REST and gRPC APIs in Go for a logistics planning product used by
+  customers in Germany, France, and the Netherlands.
+- Migrated scheduled imports from a monolith to event-driven workers and
+  improved delivery monitoring.
+- Maintained Terraform modules and AWS infrastructure with the platform team.
+
+EDUCATION
+BSc Computer Science, University of Bremen, 2018
+
+SKILLS
+Strong: Go, PostgreSQL, distributed systems, REST APIs, Kafka, Docker, Linux
+Working knowledge: Kubernetes, Terraform, AWS, gRPC, TypeScript
+Used briefly: Python, React
+
+PREFERENCES
+Looking for a permanent senior backend or platform role. Prefer remote work
+within European time zones or hybrid work in Berlin. Open to on-call when the
+rotation is sustainable. Not willing to relocate outside Germany. Target total
+compensation: EUR 100,000 or more per year.
+
+LANGUAGES
+English (fluent), German (native)

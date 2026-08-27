@@ -1,0 +1,53 @@
+Samira Patel
+Data Platform Engineer
+Manchester, United Kingdom | samira.patel@example.test | linkedin.com/in/samira-patel-example
+
+PROFILE
+Engineer experienced in data pipelines, analytics platforms, and cloud
+operations. I have worked in small teams and regulated environments, with a
+focus on making data products understandable for their users. I have indefinite
+leave to remain in the UK.
+
+CAREER HISTORY
+
+Data Platform Engineer, BrightLedger Ltd, Manchester (remote within UK)
+January 2021 - present
+
+Responsibilities included:
+* Developed Python services and batch pipelines that process financial reporting
+  data. Deployed them to AWS using Terraform and GitHub Actions.
+* Modelled warehouse data in Snowflake and introduced dbt tests for critical
+  revenue reports.
+* Built a small internal API in FastAPI for metadata and data-quality results.
+* Worked with information-security colleagues on access reviews and audit
+  evidence. On-call support was occasional during month-end releases.
+* Led technical delivery for two projects, but have not had direct reports.
+
+Software Engineer, Greenfield Analytics, Leeds
+September 2017 - December 2020
+
+Created reporting integrations in Python and SQL for public-sector customers.
+Used Airflow, PostgreSQL, Docker, and Linux. Pair-programmed with graduate
+engineers and regularly demonstrated work to client analysts.
+
+Earlier: one-year career break for family care (2016 - 2017).
+
+EDUCATION AND CERTIFICATION
+MSc Data Science, University of Manchester, 2016
+BSc Mathematics, University of York, 2015
+AWS Certified Cloud Practitioner, 2022
+
+TOOLS I HAVE USED
+Python (7 years), SQL (8 years), PostgreSQL, Snowflake, dbt, Airflow, AWS,
+Terraform, Docker, GitHub Actions, FastAPI, pandas, Linux.
+
+I have read Go code and completed an online course, but have not used Go
+professionally. I have no professional Kubernetes experience.
+
+ROLE PREFERENCES
+I am interested in permanent senior individual-contributor data platform,
+analytics engineering, or backend-data roles. Remote within the UK is preferred;
+I can travel to Manchester once or twice a month. I am not looking to relocate
+or take contract-only roles. Minimum base salary: GBP 75,000 annually.
+
+LANGUAGES: English (native), Gujarati (fluent), French (basic)
