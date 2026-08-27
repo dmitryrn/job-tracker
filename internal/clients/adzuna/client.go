@@ -52,8 +52,8 @@ type job struct {
 
 func NewClient(cfg config.Config) *Client {
 	return &Client{
-		config: cfg.Adzuna,
-		query:  cfg.JobQuery,
+		config: cfg.Providers.Adzuna,
+		query:  cfg.Providers.Adzuna.Query,
 		http:   &http.Client{Timeout: 30 * time.Second},
 	}
 }

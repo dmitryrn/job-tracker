@@ -45,7 +45,7 @@ type job struct {
 }
 
 func NewClient(cfg config.Config) *Client {
-	return newClient(&http.Client{Timeout: 30 * time.Second}, baseURL, cfg.JobQuery)
+	return newClient(&http.Client{Timeout: 30 * time.Second}, baseURL, cfg.Providers.Remotive.Query)
 }
 
 func newClient(httpClient *http.Client, baseURL, query string) *Client {

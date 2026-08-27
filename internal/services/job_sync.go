@@ -31,8 +31,8 @@ func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, remotiveClient *
 		adzuna:           adzunaClient,
 		remotive:         remotiveClient,
 		repository:       repository,
-		adzunaInterval:   cfg.Sync.AdzunaInterval,
-		remotiveInterval: cfg.Sync.RemotiveInterval,
+		adzunaInterval:   cfg.Providers.Adzuna.SyncInterval,
+		remotiveInterval: cfg.Providers.Remotive.SyncInterval,
 		logger:           logger,
 	}
 }

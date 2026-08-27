@@ -7,20 +7,28 @@ downloadable database.
 
 ## Configuration
 
-Create `.env` from `.env.example`. Every setting is required; the application
-does not supply defaults:
+Create `config.toml` from `config.toml.example`. Every setting is required;
+the application does not supply defaults:
 
-```dotenv
-HTTP_ADDRESS=:8080
-DATABASE_PATH=jobs.db
-ADZUNA_COUNTRY=de
-JOB_QUERY=software engineer
-ADZUNA_MAX_DAYS_OLD=30
-ADZUNA_MAX_PAGES=5
-ADZUNA_RESULTS_PER_PAGE=50
-ADZUNA_WORKPLACE=remote-hybrid
-ADZUNA_SYNC_INTERVAL=6h
-REMOTIVE_SYNC_INTERVAL=6h
+```toml
+[server]
+http_address = ":8080"
+
+[database]
+path = "jobs.db"
+
+[providers.adzuna]
+query = "software engineer"
+country = "de"
+max_days_old = 30
+max_pages = 5
+results_per_page = 50
+workplace = "remote-hybrid"
+sync_interval = "6h"
+
+[providers.remotive]
+query = "software engineer"
+sync_interval = "6h"
 ```
 
 Create `.env.tokens` from `.env.tokens.example` and place the Adzuna
@@ -43,12 +51,12 @@ go run ./cmd/server
 ```
 
 The server requests the configured number of Adzuna result pages, filters for
-the configured workplace preference, and also searches Remotive using
-`JOB_QUERY`. Each provider has its own minimum sync interval; the database
+the configured workplace preference, and searches each provider using its own
+configured query. Each provider has its own minimum sync interval; the database
 records every attempt before it starts, so restarting the server does not
 trigger an early repeat request. Both sources are upserted into SQLite with
-their advertised company names. Set `ADZUNA_WORKPLACE` to `any`, `remote`, or
-`remote-hybrid`.
+their advertised company names. Set `providers.adzuna.workplace` to `any`,
+`remote`, or `remote-hybrid`.
 
 Adzuna provides a description snippet, not a complete job description.
 Remotive provides full HTML job descriptions. The database keeps every source

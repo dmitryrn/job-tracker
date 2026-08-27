@@ -22,7 +22,7 @@ type Server struct {
 
 func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse) *Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/database", databaseHandler(cfg.Database.Path))
+	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
 	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))

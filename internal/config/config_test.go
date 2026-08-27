@@ -1,38 +1,56 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestLoadUsesSeparateProviderIntervals(t *testing.T) {
+func TestLoadUsesProviderConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
-	if err := os.WriteFile(envFile, []byte(`HTTP_ADDRESS=:8080
-DATABASE_PATH=jobs.db
-ADZUNA_COUNTRY=de
-JOB_QUERY=software engineer
-ADZUNA_MAX_DAYS_OLD=30
-ADZUNA_MAX_PAGES=5
-ADZUNA_RESULTS_PER_PAGE=50
-ADZUNA_WORKPLACE=remote-hybrid
-ADZUNA_SYNC_INTERVAL=6h
-REMOTIVE_SYNC_INTERVAL=12h
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, "6h", "12h")
 
 	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Sync.AdzunaInterval != 6*time.Hour {
-		t.Errorf("Adzuna interval = %s, want 6h", cfg.Sync.AdzunaInterval)
-	}
-	if cfg.Sync.RemotiveInterval != 12*time.Hour {
-		t.Errorf("Remotive interval = %s, want 12h", cfg.Sync.RemotiveInterval)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 6*time.Hour, cfg.Providers.Adzuna.SyncInterval)
+	assert.Equal(t, 12*time.Hour, cfg.Providers.Remotive.SyncInterval)
+	assert.Equal(t, "software engineer", cfg.Providers.Adzuna.Query)
+	assert.Equal(t, "backend engineer", cfg.Providers.Remotive.Query)
+}
+
+func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeTestConfig(t, "daily", "12h")
+
+	_, err := Load()
+	assert.ErrorContains(t, err, "duration")
+}
+
+func writeTestConfig(t *testing.T, adzunaInterval, remotiveInterval string) {
+	t.Helper()
+	config := fmt.Sprintf(`[server]
+http_address = ":8080"
+
+[database]
+path = "jobs.db"
+
+[providers.adzuna]
+query = "software engineer"
+country = "de"
+max_days_old = 30
+max_pages = 5
+results_per_page = 50
+workplace = "remote-hybrid"
+sync_interval = %q
+
+[providers.remotive]
+query = "backend engineer"
+sync_interval = %q
+`, adzunaInterval, remotiveInterval)
+	require.NoError(t, os.WriteFile(configFile, []byte(config), 0o600))
+	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\n"), 0o600))
 }

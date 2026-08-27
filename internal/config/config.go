@@ -4,131 +4,156 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/pelletier/go-toml/v2"
 )
 
 const (
-	envFile       = ".env"
+	configFile    = "config.toml"
 	tokensEnvFile = ".env.tokens"
 )
 
 type Config struct {
-	HTTPAddress string
-	Database    DatabaseConfig
-	JobQuery    string
-	Adzuna      AdzunaConfig
-	Sync        SyncConfig
+	HTTPAddress  string
+	DatabasePath string
+	Providers    ProviderConfig
 }
 
-type DatabaseConfig struct {
-	Path string
+type ProviderConfig struct {
+	Adzuna   AdzunaConfig
+	Remotive RemotiveConfig
 }
 
 type AdzunaConfig struct {
 	AppID          string
 	APIKey         string
+	Query          string
 	Country        string
 	MaxDaysOld     int
 	MaxPages       int
 	ResultsPerPage int
 	Workplace      string
+	SyncInterval   time.Duration
 }
 
-type SyncConfig struct {
-	AdzunaInterval   time.Duration
-	RemotiveInterval time.Duration
+type RemotiveConfig struct {
+	Query        string
+	SyncInterval time.Duration
+}
+
+type fileConfig struct {
+	Server struct {
+		HTTPAddress string `toml:"http_address" validate:"notblank"`
+	} `toml:"server"`
+	Database struct {
+		Path string `toml:"path" validate:"notblank"`
+	} `toml:"database"`
+	Providers struct {
+		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
+		Remotive fileRemotiveConfig `toml:"remotive"`
+	} `toml:"providers"`
+}
+
+type fileAdzunaConfig struct {
+	Query          string `toml:"query" validate:"notblank"`
+	Country        string `toml:"country" validate:"notblank"`
+	MaxDaysOld     int    `toml:"max_days_old" validate:"gte=1"`
+	MaxPages       int    `toml:"max_pages" validate:"gte=1"`
+	ResultsPerPage int    `toml:"results_per_page" validate:"gte=1"`
+	Workplace      string `toml:"workplace" validate:"oneof=any remote remote-hybrid"`
+	SyncInterval   string `toml:"sync_interval" validate:"notblank,duration"`
+}
+
+type fileRemotiveConfig struct {
+	Query        string `toml:"query" validate:"notblank"`
+	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
 }
 
 func Load() (Config, error) {
-	values, err := readEnvFile(envFile)
+	file, err := os.Open(configFile)
 	if err != nil {
 		return Config{}, err
 	}
-	if values["ADZUNA_APP_ID"] != "" || values["ADZUNA_API_KEY"] != "" {
-		return Config{}, fmt.Errorf("move ADZUNA_APP_ID and ADZUNA_API_KEY from %s to %s", envFile, tokensEnvFile)
+	defer file.Close()
+
+	var source fileConfig
+	decoder := toml.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&source); err != nil {
+		return Config{}, fmt.Errorf("decode %s: %w", configFile, err)
 	}
+	if err := validateFileConfig(source); err != nil {
+		return Config{}, err
+	}
+
 	tokens, err := readEnvFile(tokensEnvFile)
 	if err != nil {
 		return Config{}, err
 	}
-	for key, value := range tokens {
-		if _, exists := values[key]; exists {
-			return Config{}, fmt.Errorf("%s must not be defined in both %s and %s", key, envFile, tokensEnvFile)
-		}
-		values[key] = value
-	}
-	httpAddress, err := requiredString(values, "HTTP_ADDRESS")
+	appID, err := requiredString(tokens["ADZUNA_APP_ID"], "ADZUNA_APP_ID")
 	if err != nil {
 		return Config{}, err
 	}
-	databasePath, err := requiredString(values, "DATABASE_PATH")
+	apiKey, err := requiredString(tokens["ADZUNA_API_KEY"], "ADZUNA_API_KEY")
 	if err != nil {
 		return Config{}, err
 	}
-	adzunaAppID, err := requiredString(values, "ADZUNA_APP_ID")
+	adzunaInterval, err := time.ParseDuration(source.Providers.Adzuna.SyncInterval)
 	if err != nil {
-		return Config{}, err
+		return Config{}, fmt.Errorf("parse providers.adzuna.sync_interval: %w", err)
 	}
-	adzunaAPIKey, err := requiredString(values, "ADZUNA_API_KEY")
+	remotiveInterval, err := time.ParseDuration(source.Providers.Remotive.SyncInterval)
 	if err != nil {
-		return Config{}, err
-	}
-	adzunaCountry, err := requiredString(values, "ADZUNA_COUNTRY")
-	if err != nil {
-		return Config{}, err
-	}
-	jobQuery, err := requiredString(values, "JOB_QUERY")
-	if err != nil {
-		return Config{}, err
-	}
-
-	maxDaysOld, err := requiredPositiveInt(values, "ADZUNA_MAX_DAYS_OLD")
-	if err != nil {
-		return Config{}, err
-	}
-	maxPages, err := requiredPositiveInt(values, "ADZUNA_MAX_PAGES")
-	if err != nil {
-		return Config{}, err
-	}
-	resultsPerPage, err := requiredPositiveInt(values, "ADZUNA_RESULTS_PER_PAGE")
-	if err != nil {
-		return Config{}, err
-	}
-	adzunaInterval, err := requiredDuration(values, "ADZUNA_SYNC_INTERVAL")
-	if err != nil {
-		return Config{}, err
-	}
-	remotiveInterval, err := requiredDuration(values, "REMOTIVE_SYNC_INTERVAL")
-	if err != nil {
-		return Config{}, err
-	}
-	workplace, err := requiredWorkplace(values)
-	if err != nil {
-		return Config{}, err
+		return Config{}, fmt.Errorf("parse providers.remotive.sync_interval: %w", err)
 	}
 
 	return Config{
-		HTTPAddress: httpAddress,
-		Database: DatabaseConfig{
-			Path: databasePath,
-		},
-		JobQuery: jobQuery,
-		Adzuna: AdzunaConfig{
-			AppID:          adzunaAppID,
-			APIKey:         adzunaAPIKey,
-			Country:        adzunaCountry,
-			MaxDaysOld:     maxDaysOld,
-			MaxPages:       maxPages,
-			ResultsPerPage: resultsPerPage,
-			Workplace:      workplace,
-		},
-		Sync: SyncConfig{
-			AdzunaInterval:   adzunaInterval,
-			RemotiveInterval: remotiveInterval,
+		HTTPAddress:  source.Server.HTTPAddress,
+		DatabasePath: source.Database.Path,
+		Providers: ProviderConfig{
+			Adzuna: AdzunaConfig{
+				AppID:          appID,
+				APIKey:         apiKey,
+				Query:          source.Providers.Adzuna.Query,
+				Country:        source.Providers.Adzuna.Country,
+				MaxDaysOld:     source.Providers.Adzuna.MaxDaysOld,
+				MaxPages:       source.Providers.Adzuna.MaxPages,
+				ResultsPerPage: source.Providers.Adzuna.ResultsPerPage,
+				Workplace:      source.Providers.Adzuna.Workplace,
+				SyncInterval:   adzunaInterval,
+			},
+			Remotive: RemotiveConfig{
+				Query:        source.Providers.Remotive.Query,
+				SyncInterval: remotiveInterval,
+			},
 		},
 	}, nil
+}
+
+func validateFileConfig(source fileConfig) error {
+	validate := validator.New()
+	if err := validate.RegisterValidation("notblank", isNotBlank); err != nil {
+		return fmt.Errorf("register notblank validator: %w", err)
+	}
+	if err := validate.RegisterValidation("duration", isPositiveDuration); err != nil {
+		return fmt.Errorf("register duration validator: %w", err)
+	}
+	if err := validate.Struct(source); err != nil {
+		return fmt.Errorf("validate %s: %w", configFile, err)
+	}
+	return nil
+}
+
+func isNotBlank(level validator.FieldLevel) bool {
+	return strings.TrimSpace(level.Field().String()) != ""
+}
+
+func isPositiveDuration(level validator.FieldLevel) bool {
+	duration, err := time.ParseDuration(level.Field().String())
+	return err == nil && duration > 0
 }
 
 func readEnvFile(path string) (map[string]string, error) {
@@ -161,47 +186,10 @@ func readEnvFile(path string) (map[string]string, error) {
 	return values, nil
 }
 
-func requiredString(values map[string]string, key string) (string, error) {
-	value := strings.TrimSpace(values[key])
+func requiredString(value, key string) (string, error) {
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return "", fmt.Errorf("%s is required", key)
 	}
 	return value, nil
-}
-
-func requiredPositiveInt(values map[string]string, key string) (int, error) {
-	value, err := requiredString(values, key)
-	if err != nil {
-		return 0, err
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed < 1 {
-		return 0, fmt.Errorf("%s must be a positive integer", key)
-	}
-	return parsed, nil
-}
-
-func requiredDuration(values map[string]string, key string) (time.Duration, error) {
-	value, err := requiredString(values, key)
-	if err != nil {
-		return 0, err
-	}
-	parsed, err := time.ParseDuration(value)
-	if err != nil || parsed <= 0 {
-		return 0, fmt.Errorf("%s must be a positive Go duration", key)
-	}
-	return parsed, nil
-}
-
-func requiredWorkplace(values map[string]string) (string, error) {
-	workplace, err := requiredString(values, "ADZUNA_WORKPLACE")
-	if err != nil {
-		return "", err
-	}
-	switch workplace {
-	case "any", "remote", "remote-hybrid":
-		return workplace, nil
-	default:
-		return "", fmt.Errorf("ADZUNA_WORKPLACE must be any, remote, or remote-hybrid")
-	}
 }

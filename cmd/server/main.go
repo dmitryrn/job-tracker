@@ -61,7 +61,7 @@ func newLogger() (*zap.Logger, error) {
 }
 
 func openDatabase(cfg config.Config, logger *zap.Logger) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", cfg.Database.Path)
+	db, err := sql.Open("sqlite", cfg.DatabasePath)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +74,6 @@ func openDatabase(cfg config.Config, logger *zap.Logger) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
-	logger.Info("database migrations applied", zap.String("path", cfg.Database.Path))
+	logger.Info("database migrations applied", zap.String("path", cfg.DatabasePath))
 	return db, nil
 }
