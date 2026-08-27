@@ -3,19 +3,20 @@ package server
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 
 	"nice/internal/config"
 )
 
 type Server struct {
-	http *http.Server
+	http   *http.Server
+	logger *zap.Logger
 }
 
-func New(cfg config.Config) *Server {
+func New(cfg config.Config, logger *zap.Logger) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.Database.Path))
 
@@ -24,6 +25,7 @@ func New(cfg config.Config) *Server {
 			Addr:    cfg.HTTPAddress,
 			Handler: mux,
 		},
+		logger: logger,
 	}
 }
 
@@ -39,9 +41,10 @@ func databaseHandler(path string) http.HandlerFunc {
 func (server *Server) Register(lifecycle fx.Lifecycle) {
 	lifecycle.Append(fx.Hook{
 		OnStart: func(context.Context) error {
+			server.logger.Info("HTTP server starting", zap.String("address", server.http.Addr))
 			go func() {
 				if err := server.http.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					log.Printf("HTTP server failed: %v", err)
+					server.logger.Error("HTTP server failed", zap.Error(err))
 				}
 			}()
 			return nil

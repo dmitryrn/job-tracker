@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 
 	"nice/internal/clients/adzuna"
 	"nice/internal/config"
@@ -17,16 +17,18 @@ type JobSync struct {
 	client     *adzuna.Client
 	repository repositories.JobRepository
 	interval   time.Duration
+	logger     *zap.Logger
 	cancel     context.CancelFunc
 	done       chan struct{}
 	mutex      sync.Mutex
 }
 
-func NewJobSync(cfg config.Config, client *adzuna.Client, repository repositories.JobRepository) *JobSync {
+func NewJobSync(cfg config.Config, client *adzuna.Client, repository repositories.JobRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		client:     client,
 		repository: repository,
 		interval:   cfg.Sync.Interval,
+		logger:     logger,
 	}
 }
 
@@ -38,6 +40,7 @@ func (syncer *JobSync) Register(lifecycle fx.Lifecycle) {
 			ctx, cancel := context.WithCancel(context.Background())
 			syncer.cancel = cancel
 			syncer.done = make(chan struct{})
+			syncer.logger.Info("job sync scheduler started", zap.Duration("interval", syncer.interval))
 			go syncer.run(ctx)
 			return nil
 		},
@@ -75,14 +78,15 @@ func (syncer *JobSync) run(ctx context.Context) {
 }
 
 func (syncer *JobSync) sync(ctx context.Context) {
+	syncer.logger.Info("syncing Adzuna jobs")
 	jobs, err := syncer.client.Fetch(ctx)
 	if err != nil {
-		log.Printf("Adzuna sync failed: %v", err)
+		syncer.logger.Error("Adzuna sync failed", zap.Error(err))
 		return
 	}
 	if err := syncer.repository.Upsert(ctx, jobs); err != nil {
-		log.Printf("persist Adzuna jobs: %v", err)
+		syncer.logger.Error("persist Adzuna jobs failed", zap.Error(err))
 		return
 	}
-	log.Printf("stored %d Adzuna jobs", len(jobs))
+	syncer.logger.Info("stored Adzuna jobs", zap.Int("count", len(jobs)))
 }

@@ -3,6 +3,7 @@
 jobs.db
 jobs.db-shm
 jobs.db-wal
+jobs.log
 ui/node_modules/
 ui/dist/
 ui/*.tsbuildinfo

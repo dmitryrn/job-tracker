@@ -7,32 +7,19 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
-
-	"nice/internal/config"
 	"nice/internal/models"
 )
 
 type JobRepository interface {
 	Upsert(context.Context, []models.Job) error
-	Close() error
 }
 
 type SQLite struct {
 	db *sql.DB
 }
 
-func NewSQLite(cfg config.Config) (JobRepository, error) {
-	db, err := sql.Open("sqlite", cfg.Database.Path)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	if err := initialize(context.Background(), db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return &SQLite{db: db}, nil
+func NewSQLite(db *sql.DB) JobRepository {
+	return &SQLite{db: db}
 }
 
 func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
@@ -74,56 +61,6 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 		}
 	}
 	return transaction.Commit()
-}
-
-func (repository *SQLite) Close() error {
-	return repository.db.Close()
-}
-
-func initialize(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx, `
-		PRAGMA foreign_keys = ON;
-		CREATE TABLE IF NOT EXISTS companies (
-			id INTEGER PRIMARY KEY,
-			name TEXT NOT NULL,
-			normalized_name TEXT NOT NULL UNIQUE,
-			first_seen_at TEXT NOT NULL,
-			last_seen_at TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS jobs (
-			id INTEGER PRIMARY KEY,
-			source TEXT NOT NULL,
-			source_job_id TEXT NOT NULL,
-			company_id INTEGER REFERENCES companies(id),
-			source_url TEXT NOT NULL,
-			title TEXT NOT NULL,
-			body_text TEXT NOT NULL,
-			location TEXT,
-			workplace TEXT NOT NULL,
-			employment_type TEXT,
-			salary_min INTEGER,
-			salary_max INTEGER,
-			posted_at TEXT,
-			first_seen_at TEXT NOT NULL,
-			last_seen_at TEXT NOT NULL,
-			metadata_json TEXT NOT NULL,
-			UNIQUE(source, source_job_id)
-		);
-		CREATE VIRTUAL TABLE IF NOT EXISTS jobs_fts USING fts5(
-			title, body_text, content='jobs', content_rowid='id'
-		);
-		CREATE TRIGGER IF NOT EXISTS jobs_ai AFTER INSERT ON jobs BEGIN
-			INSERT INTO jobs_fts(rowid, title, body_text) VALUES (new.id, new.title, new.body_text);
-		END;
-		CREATE TRIGGER IF NOT EXISTS jobs_ad AFTER DELETE ON jobs BEGIN
-			INSERT INTO jobs_fts(jobs_fts, rowid, title, body_text) VALUES ('delete', old.id, old.title, old.body_text);
-		END;
-		CREATE TRIGGER IF NOT EXISTS jobs_au AFTER UPDATE OF title, body_text ON jobs BEGIN
-			INSERT INTO jobs_fts(jobs_fts, rowid, title, body_text) VALUES ('delete', old.id, old.title, old.body_text);
-			INSERT INTO jobs_fts(rowid, title, body_text) VALUES (new.id, new.title, new.body_text);
-		END;
-	`)
-	return err
 }
 
 func upsertCompany(ctx context.Context, transaction *sql.Tx, name, now string) (any, error) {
