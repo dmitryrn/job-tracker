@@ -33,7 +33,7 @@ type job struct {
 	RedirectURL       string `json:"redirect_url"`
 	SalaryMin         *int64 `json:"salary_min"`
 	SalaryMax         *int64 `json:"salary_max"`
-	SalaryIsPredicted int    `json:"salary_is_predicted"`
+	SalaryIsPredicted any    `json:"salary_is_predicted"`
 	ContractTime      string `json:"contract_time"`
 	ContractType      string `json:"contract_type"`
 	Company           struct {
@@ -130,7 +130,7 @@ func toModel(job job) models.Job {
 	metadata, _ := json.Marshal(map[string]any{
 		"category":            job.Category,
 		"location_area":       job.Location.Area,
-		"salary_is_predicted": job.SalaryIsPredicted == 1,
+		"salary_is_predicted": salaryIsPredicted(job.SalaryIsPredicted),
 		"contract_type":       job.ContractType,
 	})
 	return models.Job{
@@ -147,6 +147,17 @@ func toModel(job job) models.Job {
 		SalaryMax:      job.SalaryMax,
 		PostedAt:       parseTime(job.Created),
 		MetadataJSON:   string(metadata),
+	}
+}
+
+func salaryIsPredicted(value any) bool {
+	switch value := value.(type) {
+	case float64:
+		return value == 1
+	case string:
+		return value == "1"
+	default:
+		return false
 	}
 }
 
