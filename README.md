@@ -13,7 +13,7 @@ does not supply defaults:
 HTTP_ADDRESS=:8080
 DATABASE_PATH=jobs.db
 ADZUNA_COUNTRY=de
-ADZUNA_QUERY=software engineer
+JOB_QUERY=software engineer
 ADZUNA_MAX_DAYS_OLD=30
 ADZUNA_MAX_PAGES=5
 ADZUNA_RESULTS_PER_PAGE=50
@@ -40,12 +40,11 @@ Adzuna-supported code such as `de`, `fr`, `gb`, or `pl`, rather than `rs`.
 go run ./cmd/server
 ```
 
-The server requests the configured number of result pages, filters for the
-configured workplace preference, and upserts jobs and their advertised company
-names into SQLite. Set `ADZUNA_WORKPLACE` to `any`, `remote`, or
-`remote-hybrid`.
+The server requests the configured number of Adzuna result pages, filters for
+the configured workplace preference, and also searches Remotive using
+`JOB_QUERY`. Both sources are upserted into SQLite with their advertised
+company names. Set `ADZUNA_WORKPLACE` to `any`, `remote`, or `remote-hybrid`.
 
-Adzuna provides a description snippet, not a complete job description. The
-database keeps its redirect URL so an interesting role can be opened at its
-source; full job bodies will come from supported employer job boards added
-later.
+Adzuna provides a description snippet, not a complete job description.
+Remotive provides full HTML job descriptions. The database keeps every source
+URL so an interesting role can be opened at its source.

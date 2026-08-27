@@ -10,6 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"nice/internal/clients/adzuna"
+	"nice/internal/clients/remotive"
 	"nice/internal/config"
 	"nice/internal/migrations"
 	"nice/internal/repositories"
@@ -24,6 +25,7 @@ func main() {
 			config.Load,
 			openDatabase,
 			adzuna.NewClient,
+			remotive.NewClient,
 			repositories.NewSQLite,
 			services.NewJobSync,
 			server.New,

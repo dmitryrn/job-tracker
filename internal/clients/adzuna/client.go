@@ -18,6 +18,7 @@ const baseURL = "https://api.adzuna.com/v1/api"
 
 type Client struct {
 	config config.AdzunaConfig
+	query  string
 	http   *http.Client
 }
 
@@ -52,6 +53,7 @@ type job struct {
 func NewClient(cfg config.Config) *Client {
 	return &Client{
 		config: cfg.Adzuna,
+		query:  cfg.JobQuery,
 		http:   &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -84,7 +86,7 @@ func (c *Client) fetchPage(ctx context.Context, page int) ([]job, error) {
 	params := requestURL.Query()
 	params.Set("app_id", c.config.AppID)
 	params.Set("app_key", c.config.APIKey)
-	params.Set("what", c.config.Query)
+	params.Set("what", c.query)
 	params.Set("max_days_old", fmt.Sprint(c.config.MaxDaysOld))
 	params.Set("results_per_page", fmt.Sprint(c.config.ResultsPerPage))
 	params.Set("content-type", "application/json")

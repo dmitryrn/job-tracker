@@ -17,6 +17,7 @@ const (
 type Config struct {
 	HTTPAddress string
 	Database    DatabaseConfig
+	JobQuery    string
 	Adzuna      AdzunaConfig
 	Sync        SyncConfig
 }
@@ -29,7 +30,6 @@ type AdzunaConfig struct {
 	AppID          string
 	APIKey         string
 	Country        string
-	Query          string
 	MaxDaysOld     int
 	MaxPages       int
 	ResultsPerPage int
@@ -64,7 +64,7 @@ func Load() (Config, error) {
 		"ADZUNA_APP_ID",
 		"ADZUNA_API_KEY",
 		"ADZUNA_COUNTRY",
-		"ADZUNA_QUERY",
+		"JOB_QUERY",
 	} {
 		if requiredString(values, key) == "" {
 			return Config{}, fmt.Errorf("%s is required", key)
@@ -97,11 +97,11 @@ func Load() (Config, error) {
 		Database: DatabaseConfig{
 			Path: requiredString(values, "DATABASE_PATH"),
 		},
+		JobQuery: requiredString(values, "JOB_QUERY"),
 		Adzuna: AdzunaConfig{
 			AppID:          requiredString(values, "ADZUNA_APP_ID"),
 			APIKey:         requiredString(values, "ADZUNA_API_KEY"),
 			Country:        requiredString(values, "ADZUNA_COUNTRY"),
-			Query:          requiredString(values, "ADZUNA_QUERY"),
 			MaxDaysOld:     maxDaysOld,
 			MaxPages:       maxPages,
 			ResultsPerPage: resultsPerPage,

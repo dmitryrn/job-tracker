@@ -36,6 +36,10 @@ function formattedValue(value: unknown) {
     // Plain text values should be shown exactly as stored.
   }
 
+  if (/<[a-z][\s\S]*>/i.test(value)) {
+    return new DOMParser().parseFromString(value, "text/html").body.innerText;
+  }
+
   return value;
 }
 
