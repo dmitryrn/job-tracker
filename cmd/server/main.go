@@ -28,6 +28,7 @@ func main() {
 			remotive.NewClient,
 			repositories.NewSQLite,
 			services.NewJobSync,
+			services.NewJobBrowse,
 			server.New,
 		),
 		fx.Invoke(registerLifecycle),

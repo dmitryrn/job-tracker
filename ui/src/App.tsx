@@ -53,15 +53,20 @@ export default function App() {
   const [rows, setRows] = useState<Rows>({ columns: [], values: [] });
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<Sort>();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedValue, setSelectedValue] = useState<{ column: string; value: unknown }>();
   const [view, setView] = useState<View>("jobs");
   const valueDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
+    if (view !== "explorer" || database) {
+      return;
+    }
     let active = true;
     let opened: Database | undefined;
+    setLoading(true);
+    setError("");
 
     async function loadDatabase() {
       try {
@@ -81,6 +86,7 @@ export default function App() {
         setDatabase(opened);
         setTables(discovered);
         setSelectedTable(discovered[0]);
+        opened = undefined;
       } catch (reason) {
         if (active) {
           setError(reason instanceof Error ? reason.message : "Could not open the database");
@@ -97,7 +103,7 @@ export default function App() {
       active = false;
       opened?.close();
     };
-  }, []);
+  }, [database, view]);
 
   useEffect(() => {
     if (!database || !selectedTable) {
@@ -133,11 +139,7 @@ export default function App() {
     );
   }
 
-  if (loading) {
-    return <main className="state">Downloading and opening the SQLite database...</main>;
-  }
-
-  if (!database || error && !selectedTable) {
+  if (view === "explorer" && !loading && (!database || error && !selectedTable)) {
     return <main className="state error">{error || "The database could not be opened."}</main>;
   }
 
@@ -150,7 +152,7 @@ export default function App() {
           <button className={view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("explorer")}>DB browser</button>
         </nav>
       </header>
-      {view === "explorer" && (
+      {view === "explorer" && database && (
         <aside className="sidebar">
         <p className="eyebrow">Schema</p>
         <nav aria-label="Database tables">
@@ -169,7 +171,9 @@ export default function App() {
 
       <section className="workspace">
         {view !== "explorer" ? (
-          <BrowseView database={database} mode={view} onModeChange={setView} />
+          <BrowseView mode={view} onModeChange={setView} />
+        ) : loading || !database ? (
+          <p className="state browse-state">Downloading and opening the SQLite database...</p>
         ) : (
         <>
         <header>

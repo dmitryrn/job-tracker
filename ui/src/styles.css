@@ -44,6 +44,11 @@ button { cursor: pointer; }
 .browse-search input { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; min-width: 0; padding: 11px 12px; }
 .browse-search select { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; min-width: 0; padding: 10px 12px; }
 .browse-search button { background: #263d56; border: 0; border-radius: 4px; color: #fff; padding: 10px 13px; }
+.search-fields { border: 0; display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; margin: 0; padding: 0; }
+.search-fields legend { color: #4b6075; font-size: 13px; font-weight: 700; padding: 0 8px 0 0; }
+.search-fields label { color: #4b6075; font-size: 12px; font-weight: 400; }
+.search-fields input { margin: 0 4px 0 0; }
+.browse-loading { color: #65758a; font-size: 13px; margin: 0 0 12px; }
 .job-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .job-card { background: #fff; border: 1px solid #dedcd5; border-radius: 7px; display: flex; flex-direction: column; min-height: 280px; overflow: hidden; }
 .job-card-button { background: transparent; border: 0; color: inherit; flex: 1; padding: 18px 18px 14px; text-align: left; }
@@ -74,7 +79,11 @@ button { cursor: pointer; }
 .job-dialog-meta { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 24px 0; }
 .job-dialog-meta span { background: #f1f3f2; border-radius: 3px; color: #4b6075; font-size: 12px; padding: 6px 8px; }
 .job-description { color: #304860; font-size: 14px; line-height: 1.65; margin: 18px 24px 24px; white-space: pre-wrap; }
-.primary-action { display: inline-block; margin: 0 24px 24px; }
+.job-dialog-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 14px; margin: 0 24px 24px; }
+.primary-action { display: inline-block; }
+.danger-action { background: transparent; border: 1px solid #bd4d38; border-radius: 4px; color: #a43d2d; padding: 8px 10px; }
+.danger-action:hover { background: #fff0ed; }
+.danger-action:disabled { cursor: wait; opacity: .65; }
 header { align-items: end; border-bottom: 1px solid #d6d5d0; display: flex; justify-content: space-between; padding-bottom: 22px; }
 h1 { font-family: Georgia, serif; font-size: clamp(31px, 4vw, 48px); font-weight: 400; line-height: 1; margin: 0; }
 .limit { font-size: 13px; margin: 0; max-width: 250px; text-align: right; }
@@ -128,7 +137,7 @@ tr:hover td { background: #fffbed; }
   .job-dialog-header { padding: 17px 16px; }
   .job-dialog-meta { padding: 14px 16px 0; }
   .job-description { margin: 16px; }
-  .primary-action { margin: 0 16px 18px; }
+  .job-dialog-actions { margin: 0 16px 18px; }
   .value-dialog-header { padding: 15px 16px; }
   .value-dialog pre { font-size: 13px; padding: 16px; }
 }

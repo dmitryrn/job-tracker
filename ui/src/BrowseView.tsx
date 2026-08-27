@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import type { Database } from "sql.js";
-import { queryBrowseCompanies, queryBrowseJobs, queryBrowseProviders, type BrowseCompany, type BrowseJob } from "./database";
+import { deleteJob, fetchCompanies, fetchJobs, fetchProviders, type BrowseCompany, type BrowseJob } from "./api";
 
 export type BrowseMode = "jobs" | "companies";
 
 type BrowseViewProps = {
-  database: Database;
   mode: BrowseMode;
   onModeChange: (mode: BrowseMode) => void;
 };
+
+const searchFieldOptions = [
+  { value: "title", label: "Title" },
+  { value: "company", label: "Company" },
+  { value: "location", label: "Location" },
+  { value: "body", label: "Description" },
+];
 
 function formatDate(value: string) {
   if (!value) {
@@ -79,29 +84,50 @@ function CompanyCard({ company }: { company: BrowseCompany }) {
   );
 }
 
-export default function BrowseView({ database, mode, onModeChange }: BrowseViewProps) {
+export default function BrowseView({ mode, onModeChange }: BrowseViewProps) {
   const [search, setSearch] = useState("");
   const [provider, setProvider] = useState("");
+  const [searchFields, setSearchFields] = useState(searchFieldOptions.map(({ value }) => value));
   const [providers, setProviders] = useState<string[]>([]);
   const [jobs, setJobs] = useState<BrowseJob[]>([]);
   const [companies, setCompanies] = useState<BrowseCompany[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [selectedJob, setSelectedJob] = useState<BrowseJob>();
   const jobDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    try {
-      setProviders(queryBrowseProviders(database));
-      if (mode === "jobs") {
-        setJobs(queryBrowseJobs(database, search, provider));
-      } else {
-        setCompanies(queryBrowseCompanies(database, search));
+    const controller = new AbortController();
+    async function load() {
+      setLoading(true);
+      try {
+        if (mode === "jobs") {
+          const [jobResult, providerResult] = await Promise.all([
+            fetchJobs(search, provider, searchFields, controller.signal),
+            fetchProviders(controller.signal),
+          ]);
+          setJobs(jobResult.jobs);
+          setProviders(providerResult.providers);
+        } else {
+          const result = await fetchCompanies(search, controller.signal);
+          setCompanies(result.companies);
+        }
+        setError("");
+      } catch (reason) {
+        if (reason instanceof DOMException && reason.name === "AbortError") {
+          return;
+        }
+        setError(reason instanceof Error ? reason.message : "Could not load browse data");
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
-      setError("");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not load browse data");
     }
-  }, [database, mode, provider, search]);
+    void load();
+    return () => controller.abort();
+  }, [mode, provider, search, searchFields]);
 
   useEffect(() => {
     const dialog = jobDialog.current;
@@ -109,6 +135,27 @@ export default function BrowseView({ database, mode, onModeChange }: BrowseViewP
       dialog.showModal();
     }
   }, [selectedJob]);
+
+  function toggleSearchField(field: string, checked: boolean) {
+    setSearchFields((current) => checked ? [...current, field] : current.filter((value) => value !== field));
+  }
+
+  async function removeSelectedJob() {
+    if (!selectedJob || !window.confirm(`Delete ${selectedJob.title} from the database?`)) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteJob(selectedJob.id);
+      setJobs((current) => current.filter((job) => job.id !== selectedJob.id));
+      setSelectedJob(undefined);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not delete job");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <section className="browse-page">
@@ -146,10 +193,22 @@ export default function BrowseView({ database, mode, onModeChange }: BrowseViewP
             </select>
           </>
         )}
+        {mode === "jobs" && (
+          <fieldset className="search-fields">
+            <legend>Search in</legend>
+            {searchFieldOptions.map(({ value, label }) => (
+              <label key={value}>
+                <input type="checkbox" checked={searchFields.includes(value)} onChange={(event) => toggleSearchField(value, event.target.checked)} />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+        )}
         {search && <button type="button" onClick={() => setSearch("")}>Clear</button>}
       </form>
 
       {error && <p className="query-error">{error}</p>}
+      {loading && <p className="browse-loading">Loading...</p>}
       {mode === "jobs" ? (
         <div className="job-grid">
           {jobs.map((job) => <JobCard key={job.id} job={job} onOpen={() => setSelectedJob(job)} />)}
@@ -159,8 +218,8 @@ export default function BrowseView({ database, mode, onModeChange }: BrowseViewP
           {companies.map((company) => <CompanyCard key={company.id} company={company} />)}
         </div>
       )}
-      {!error && mode === "jobs" && jobs.length === 0 && <p className="empty browse-empty">No roles match this search.</p>}
-      {!error && mode === "companies" && companies.length === 0 && <p className="empty browse-empty">No companies match this search.</p>}
+      {!loading && !error && mode === "jobs" && jobs.length === 0 && <p className="empty browse-empty">No roles match this search.</p>}
+      {!loading && !error && mode === "companies" && companies.length === 0 && <p className="empty browse-empty">No companies match this search.</p>}
 
       {selectedJob && (
         <dialog
@@ -188,7 +247,10 @@ export default function BrowseView({ database, mode, onModeChange }: BrowseViewP
             <span>{formatSalary(selectedJob)}</span>
           </div>
           <p className="job-description">{plainText(selectedJob.bodyText)}</p>
-          <a className="primary-action" href={selectedJob.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
+            <div className="job-dialog-actions">
+              <a className="primary-action" href={selectedJob.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
+              <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeSelectedJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
+            </div>
         </dialog>
       )}
     </section>

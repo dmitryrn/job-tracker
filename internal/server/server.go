@@ -2,13 +2,17 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	"nice/internal/config"
+	"nice/internal/models"
+	"nice/internal/services"
 )
 
 type Server struct {
@@ -16,22 +20,116 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.Database.Path))
+	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
+	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
+	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))
+	mux.HandleFunc("GET /api/companies", companiesHandler(browse, logger))
+	mux.HandleFunc("OPTIONS /api/{path...}", optionsHandler)
 
 	return &Server{
 		http: &http.Server{
 			Addr:    cfg.HTTPAddress,
-			Handler: mux,
+			Handler: cors(mux),
 		},
 		logger: logger,
 	}
 }
 
+func jobsHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		jobs, err := browse.Jobs(request.Context(), models.JobSearch{
+			Search:   request.URL.Query().Get("search"),
+			Provider: request.URL.Query().Get("provider"),
+			Fields:   request.URL.Query()["fields"],
+		})
+		if err != nil {
+			if errors.Is(err, services.ErrInvalidSearchField) {
+				logger.Warn("invalid job search fields", zap.Error(err))
+				writeError(writer, http.StatusBadRequest, services.ErrInvalidSearchField.Error())
+				return
+			}
+			logger.Error("list jobs failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load jobs")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"jobs": jobs})
+	}
+}
+
+func deleteJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		deleted, err := browse.DeleteJob(request.Context(), id)
+		if err != nil {
+			logger.Error("delete job failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not delete job")
+			return
+		}
+		if !deleted {
+			writeError(writer, http.StatusNotFound, "job not found")
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func providersHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		providers, err := browse.Providers(request.Context())
+		if err != nil {
+			logger.Error("list providers failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load providers")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"providers": providers})
+	}
+}
+
+func companiesHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		companies, err := browse.Companies(request.Context(), request.URL.Query().Get("search"))
+		if err != nil {
+			logger.Error("list companies failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load companies")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"companies": companies})
+	}
+}
+
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Access-Control-Allow-Origin", "*")
+		writer.Header().Set("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS")
+		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func optionsHandler(writer http.ResponseWriter, _ *http.Request) {
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func writeJSON(writer http.ResponseWriter, status int, value any) {
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(status)
+	_ = json.NewEncoder(writer).Encode(value)
+}
+
+func writeError(writer http.ResponseWriter, status int, message string) {
+	writeJSON(writer, status, map[string]string{"error": message})
+}
+
 func databaseHandler(path string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Access-Control-Allow-Origin", "*")
 		writer.Header().Set("Content-Disposition", `attachment; filename="jobs.db"`)
 		writer.Header().Set("Content-Type", "application/vnd.sqlite3")
 		http.ServeFile(writer, request, path)
