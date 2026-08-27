@@ -37,7 +37,8 @@ type AdzunaConfig struct {
 }
 
 type SyncConfig struct {
-	Interval time.Duration
+	AdzunaInterval   time.Duration
+	RemotiveInterval time.Duration
 }
 
 func Load() (Config, error) {
@@ -58,17 +59,29 @@ func Load() (Config, error) {
 		}
 		values[key] = value
 	}
-	for _, key := range []string{
-		"HTTP_ADDRESS",
-		"DATABASE_PATH",
-		"ADZUNA_APP_ID",
-		"ADZUNA_API_KEY",
-		"ADZUNA_COUNTRY",
-		"JOB_QUERY",
-	} {
-		if requiredString(values, key) == "" {
-			return Config{}, fmt.Errorf("%s is required", key)
-		}
+	httpAddress, err := requiredString(values, "HTTP_ADDRESS")
+	if err != nil {
+		return Config{}, err
+	}
+	databasePath, err := requiredString(values, "DATABASE_PATH")
+	if err != nil {
+		return Config{}, err
+	}
+	adzunaAppID, err := requiredString(values, "ADZUNA_APP_ID")
+	if err != nil {
+		return Config{}, err
+	}
+	adzunaAPIKey, err := requiredString(values, "ADZUNA_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	adzunaCountry, err := requiredString(values, "ADZUNA_COUNTRY")
+	if err != nil {
+		return Config{}, err
+	}
+	jobQuery, err := requiredString(values, "JOB_QUERY")
+	if err != nil {
+		return Config{}, err
 	}
 
 	maxDaysOld, err := requiredPositiveInt(values, "ADZUNA_MAX_DAYS_OLD")
@@ -83,7 +96,11 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	interval, err := requiredDuration(values, "SYNC_INTERVAL")
+	adzunaInterval, err := requiredDuration(values, "ADZUNA_SYNC_INTERVAL")
+	if err != nil {
+		return Config{}, err
+	}
+	remotiveInterval, err := requiredDuration(values, "REMOTIVE_SYNC_INTERVAL")
 	if err != nil {
 		return Config{}, err
 	}
@@ -93,22 +110,23 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		HTTPAddress: requiredString(values, "HTTP_ADDRESS"),
+		HTTPAddress: httpAddress,
 		Database: DatabaseConfig{
-			Path: requiredString(values, "DATABASE_PATH"),
+			Path: databasePath,
 		},
-		JobQuery: requiredString(values, "JOB_QUERY"),
+		JobQuery: jobQuery,
 		Adzuna: AdzunaConfig{
-			AppID:          requiredString(values, "ADZUNA_APP_ID"),
-			APIKey:         requiredString(values, "ADZUNA_API_KEY"),
-			Country:        requiredString(values, "ADZUNA_COUNTRY"),
+			AppID:          adzunaAppID,
+			APIKey:         adzunaAPIKey,
+			Country:        adzunaCountry,
 			MaxDaysOld:     maxDaysOld,
 			MaxPages:       maxPages,
 			ResultsPerPage: resultsPerPage,
 			Workplace:      workplace,
 		},
 		Sync: SyncConfig{
-			Interval: interval,
+			AdzunaInterval:   adzunaInterval,
+			RemotiveInterval: remotiveInterval,
 		},
 	}, nil
 }
@@ -143,14 +161,18 @@ func readEnvFile(path string) (map[string]string, error) {
 	return values, nil
 }
 
-func requiredString(values map[string]string, key string) string {
-	return strings.TrimSpace(values[key])
+func requiredString(values map[string]string, key string) (string, error) {
+	value := strings.TrimSpace(values[key])
+	if value == "" {
+		return "", fmt.Errorf("%s is required", key)
+	}
+	return value, nil
 }
 
 func requiredPositiveInt(values map[string]string, key string) (int, error) {
-	value := requiredString(values, key)
-	if value == "" {
-		return 0, fmt.Errorf("%s is required", key)
+	value, err := requiredString(values, key)
+	if err != nil {
+		return 0, err
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed < 1 {
@@ -160,9 +182,9 @@ func requiredPositiveInt(values map[string]string, key string) (int, error) {
 }
 
 func requiredDuration(values map[string]string, key string) (time.Duration, error) {
-	value := requiredString(values, key)
-	if value == "" {
-		return 0, fmt.Errorf("%s is required", key)
+	value, err := requiredString(values, key)
+	if err != nil {
+		return 0, err
 	}
 	parsed, err := time.ParseDuration(value)
 	if err != nil || parsed <= 0 {
@@ -172,7 +194,10 @@ func requiredDuration(values map[string]string, key string) (time.Duration, erro
 }
 
 func requiredWorkplace(values map[string]string) (string, error) {
-	workplace := requiredString(values, "ADZUNA_WORKPLACE")
+	workplace, err := requiredString(values, "ADZUNA_WORKPLACE")
+	if err != nil {
+		return "", err
+	}
 	switch workplace {
 	case "any", "remote", "remote-hybrid":
 		return workplace, nil

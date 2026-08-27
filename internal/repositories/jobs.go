@@ -14,6 +14,8 @@ import (
 
 type JobRepository interface {
 	Upsert(context.Context, []models.Job) error
+	StartProviderRun(context.Context, string, time.Duration, time.Time) (bool, error)
+	CompleteProviderRun(context.Context, string, error, time.Time) error
 	List(context.Context, models.JobSearch) ([]models.BrowseJob, error)
 	Delete(context.Context, int64) (bool, error)
 	Providers(context.Context) ([]string, error)
@@ -69,6 +71,68 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 		}
 	}
 	return transaction.Commit()
+}
+
+func (repository *SQLite) StartProviderRun(ctx context.Context, provider string, interval time.Duration, now time.Time) (bool, error) {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer transaction.Rollback()
+
+	var lastRun string
+	err = transaction.QueryRowContext(ctx, `SELECT last_run_at FROM provider_runs WHERE provider = ?`, provider).Scan(&lastRun)
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	if err == nil {
+		lastRunAt, err := time.Parse(time.RFC3339Nano, lastRun)
+		if err != nil {
+			return false, fmt.Errorf("parse last run time for %s: %w", provider, err)
+		}
+		if now.Sub(lastRunAt) < interval {
+			return false, transaction.Commit()
+		}
+	}
+
+	if _, err := transaction.ExecContext(ctx, `
+		INSERT INTO provider_runs (provider, last_run_at, last_completed_at, status, last_error)
+		VALUES (?, ?, NULL, 'running', NULL)
+		ON CONFLICT(provider) DO UPDATE SET
+			last_run_at = excluded.last_run_at,
+			last_completed_at = NULL,
+			status = excluded.status,
+			last_error = NULL`, provider, now.UTC().Format(time.RFC3339Nano)); err != nil {
+		return false, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (repository *SQLite) CompleteProviderRun(ctx context.Context, provider string, runError error, completedAt time.Time) error {
+	status := "succeeded"
+	var lastError any
+	if runError != nil {
+		status = "failed"
+		lastError = runError.Error()
+	}
+	result, err := repository.db.ExecContext(ctx, `
+		UPDATE provider_runs
+		SET last_completed_at = ?, status = ?, last_error = ?
+		WHERE provider = ?`, completedAt.UTC().Format(time.RFC3339Nano), status, lastError, provider)
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated != 1 {
+		return fmt.Errorf("provider run %s was not started", provider)
+	}
+	return nil
 }
 
 func (repository *SQLite) List(ctx context.Context, search models.JobSearch) ([]models.BrowseJob, error) {

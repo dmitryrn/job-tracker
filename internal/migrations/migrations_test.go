@@ -21,7 +21,7 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, table := range []string{"companies", "jobs"} {
+	for _, table := range []string{"companies", "jobs", "provider_runs"} {
 		var count int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
 			t.Fatal(err)
