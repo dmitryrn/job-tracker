@@ -20,7 +20,6 @@ button { cursor: pointer; }
 .brand small { font-size: 12px; margin-top: 2px; }
 .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; margin: 0 0 9px; text-transform: uppercase; }
 .table-link { background: transparent; border: 0; border-radius: 6px; color: #d5dfed; display: flex; justify-content: space-between; margin: 2px 0; padding: 9px 10px; text-align: left; width: 100%; }
-.table-link small { color: #8496ae; }
 .table-link:hover, .table-link.active { background: #1f314a; color: #fff; }
 .table-link.active { box-shadow: inset 3px 0 #e5ac4c; }
 .workspace { background: #f6f4ef; color: #1a2638; padding: 34px clamp(18px, 4vw, 58px); }

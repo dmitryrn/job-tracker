@@ -149,7 +149,7 @@ export default function App() {
               key={table.name}
               onClick={() => selectTable(table)}
             >
-              <span>{table.name}</span><small>{table.columns.length}</small>
+              <span>{table.name}</span>
             </button>
           ))}
         </nav>
