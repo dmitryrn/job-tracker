@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"nice/internal/config"
@@ -15,6 +16,8 @@ import (
 )
 
 const baseURL = "https://remotive.com/api/remote-jobs"
+
+const softwareDevelopmentCategory = "Software Development"
 
 type Client struct {
 	query   string
@@ -56,6 +59,7 @@ func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
 	}
 	params := requestURL.Query()
 	params.Set("search", c.query)
+	params.Set("category", "software-development")
 	requestURL.RawQuery = params.Encode()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
@@ -82,6 +86,9 @@ func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
 	}
 	jobs := make([]models.Job, 0, len(result.Jobs))
 	for _, item := range result.Jobs {
+		if !strings.EqualFold(item.Category, softwareDevelopmentCategory) {
+			continue
+		}
 		jobs = append(jobs, toModel(item))
 	}
 	return jobs, nil
