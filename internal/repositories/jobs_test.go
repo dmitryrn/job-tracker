@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
 
 	"nice/internal/migrations"
@@ -14,57 +16,32 @@ import (
 
 func TestProviderRunHonorsIntervalAndRecordsFailure(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
-	if err := migrations.Apply(db); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, migrations.Apply(db))
 
 	repository := NewSQLite(db)
 	startedAt := time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
 	run, err := repository.StartProviderRun(context.Background(), "adzuna", time.Hour, startedAt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !run {
-		t.Fatal("first provider run was not started")
-	}
+	require.NoError(t, err)
+	require.True(t, run)
 
 	fetchErr := errors.New("upstream unavailable")
-	if err := repository.CompleteProviderRun(context.Background(), "adzuna", fetchErr, startedAt.Add(time.Second)); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, repository.CompleteProviderRun(context.Background(), "adzuna", fetchErr, startedAt.Add(time.Second)))
 
 	run, err = repository.StartProviderRun(context.Background(), "adzuna", time.Hour, startedAt.Add(59*time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if run {
-		t.Fatal("provider run started before its interval elapsed")
-	}
+	require.NoError(t, err)
+	assert.False(t, run)
 
 	var status, lastError string
-	if err := db.QueryRow(`SELECT status, last_error FROM provider_runs WHERE provider = 'adzuna'`).Scan(&status, &lastError); err != nil {
-		t.Fatal(err)
-	}
-	if status != "failed" || lastError != fetchErr.Error() {
-		t.Errorf("status/error = %q/%q, want failed/%q", status, lastError, fetchErr)
-	}
+	require.NoError(t, db.QueryRow(`SELECT status, last_error FROM provider_runs WHERE provider = 'adzuna'`).Scan(&status, &lastError))
+	assert.Equal(t, "failed", status)
+	assert.Equal(t, fetchErr.Error(), lastError)
 
 	run, err = repository.StartProviderRun(context.Background(), "adzuna", time.Hour, startedAt.Add(time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !run {
-		t.Fatal("provider run did not start after its interval elapsed")
-	}
+	require.NoError(t, err)
+	require.True(t, run)
 
-	if err := db.QueryRow(`SELECT status, last_completed_at, last_error FROM provider_runs WHERE provider = 'adzuna'`).Scan(&status, new(sql.NullString), new(sql.NullString)); err != nil {
-		t.Fatal(err)
-	}
-	if status != "running" {
-		t.Errorf("status = %q, want running", status)
-	}
+	require.NoError(t, db.QueryRow(`SELECT status, last_completed_at, last_error FROM provider_runs WHERE provider = 'adzuna'`).Scan(&status, new(sql.NullString), new(sql.NullString)))
+	assert.Equal(t, "running", status)
 }

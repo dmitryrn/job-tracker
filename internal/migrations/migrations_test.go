@@ -4,38 +4,26 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
 )
 
 func TestApplyCreatesInitialSchema(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
-	if err := Apply(db); err != nil {
-		t.Fatal(err)
-	}
-	if err := Apply(db); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, Apply(db))
+	require.NoError(t, Apply(db))
 
 	for _, table := range []string{"companies", "jobs", "provider_runs"} {
 		var count int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
-			t.Fatal(err)
-		}
-		if count != 1 {
-			t.Errorf("table %s was not created", table)
-		}
+		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count))
+		assert.Equal(t, 1, count, "table %s was not created", table)
 	}
 
 	var ftsTables int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables); err != nil {
-		t.Fatal(err)
-	}
-	if ftsTables != 0 {
-		t.Errorf("unexpected FTS tables: %d", ftsTables)
-	}
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))
+	assert.Zero(t, ftsTables)
 }

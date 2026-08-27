@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
 
@@ -20,77 +22,50 @@ import (
 
 func TestJobAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
-	if err := migrations.Apply(db); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, migrations.Apply(db))
 
 	repository := repositories.NewSQLite(db)
-	if err := repository.Upsert(context.Background(), []models.Job{
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
 		{Source: "remotive", SourceID: "body", SourceURL: "https://example.com/body", Title: "Designer", BodyText: "Searchable description", Company: "Studio North", Workplace: "remote", MetadataJSON: "{}"},
 		{Source: "adzuna", SourceID: "title", SourceURL: "https://example.com/title", Title: "Searchable title", BodyText: "Other text", Company: "Other Co", Workplace: "remote", MetadataJSON: "{}"},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	handler := New(config.Config{}, zap.NewNop(), services.NewJobBrowse(repository)).http.Handler
 
 	response := request(handler, http.MethodGet, "/api/jobs?search=searchable&fields=body")
-	if response.Code != http.StatusOK {
-		t.Fatalf("search status = %d, want %d", response.Code, http.StatusOK)
-	}
+	require.Equal(t, http.StatusOK, response.Code)
 	var jobs struct {
 		Jobs []models.BrowseJob `json:"jobs"`
 	}
-	if err := json.NewDecoder(response.Body).Decode(&jobs); err != nil {
-		t.Fatal(err)
-	}
-	if len(jobs.Jobs) != 1 || jobs.Jobs[0].Title != "Designer" {
-		t.Fatalf("body search jobs = %#v, want Designer only", jobs.Jobs)
-	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
+	require.Len(t, jobs.Jobs, 1)
+	assert.Equal(t, "Designer", jobs.Jobs[0].Title)
 
 	response = request(handler, http.MethodGet, "/api/providers")
-	if response.Code != http.StatusOK {
-		t.Fatalf("providers status = %d, want %d", response.Code, http.StatusOK)
-	}
+	require.Equal(t, http.StatusOK, response.Code)
 	var providers struct {
 		Providers []string `json:"providers"`
 	}
-	if err := json.NewDecoder(response.Body).Decode(&providers); err != nil {
-		t.Fatal(err)
-	}
-	if len(providers.Providers) != 2 || providers.Providers[0] != "adzuna" || providers.Providers[1] != "remotive" {
-		t.Fatalf("providers = %#v", providers.Providers)
-	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&providers))
+	assert.Equal(t, []string{"adzuna", "remotive"}, providers.Providers)
 
 	response = request(handler, http.MethodDelete, "/api/jobs/1")
-	if response.Code != http.StatusNoContent {
-		t.Fatalf("delete status = %d, want %d", response.Code, http.StatusNoContent)
-	}
+	assert.Equal(t, http.StatusNoContent, response.Code)
 	response = request(handler, http.MethodDelete, "/api/jobs/1")
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("missing delete status = %d, want %d", response.Code, http.StatusNotFound)
-	}
+	assert.Equal(t, http.StatusNotFound, response.Code)
 }
 
 func TestJobAPIRejectsUnknownSearchField(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
-	if err := migrations.Apply(db); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, migrations.Apply(db))
 	handler := New(config.Config{}, zap.NewNop(), services.NewJobBrowse(repositories.NewSQLite(db))).http.Handler
 
 	response := request(handler, http.MethodGet, "/api/jobs?fields=invalid")
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
-	}
+	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {

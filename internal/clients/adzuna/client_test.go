@@ -3,18 +3,15 @@ package adzuna
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSalaryIsPredictedAcceptsAdzunaStringValue(t *testing.T) {
 	var result response
-	if err := json.Unmarshal([]byte(`{"results":[{"salary_is_predicted":"1"},{"salary_is_predicted":0}]}`), &result); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(`{"results":[{"salary_is_predicted":"1"},{"salary_is_predicted":0}]}`), &result))
 
-	if !salaryIsPredicted(result.Results[0].SalaryIsPredicted) {
-		t.Error("string value 1 should be predicted")
-	}
-	if salaryIsPredicted(result.Results[1].SalaryIsPredicted) {
-		t.Error("numeric value 0 should not be predicted")
-	}
+	assert.True(t, salaryIsPredicted(result.Results[0].SalaryIsPredicted))
+	assert.False(t, salaryIsPredicted(result.Results[1].SalaryIsPredicted))
 }

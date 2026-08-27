@@ -14,3 +14,9 @@ directly. Use `systemctl --user` to inspect or restart either service and
 `journalctl --user -u jobs.service` to view backend logs. When no user session
 environment is present, set `XDG_RUNTIME_DIR=/run/user/1002` and
 `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1002/bus` for the `clanker` user.
+
+# Rules
+- don't hallucinate lib versions when adding
+- add spacing between code blocks as per clean code, for readability
+- handlers should log all errors, including service errors
+- run tests, build after making changes
