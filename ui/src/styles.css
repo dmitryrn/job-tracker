@@ -43,8 +43,17 @@ table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
 th { background: #e9edf0; border-bottom: 1px solid #cdd4d9; color: #304860; position: sticky; text-align: left; top: 0; white-space: nowrap; }
 th button { background: transparent; border: 0; color: inherit; font-weight: 700; padding: 10px 12px; text-align: left; }
 th button:hover { color: #a26d20; }
-td { border-bottom: 1px solid #edebe5; max-width: 340px; overflow: hidden; padding: 9px 12px; text-overflow: ellipsis; white-space: nowrap; }
+td { border-bottom: 1px solid #edebe5; max-width: 340px; overflow: hidden; padding: 0; text-overflow: ellipsis; white-space: nowrap; }
+.cell-value { background: transparent; border: 0; color: inherit; display: block; max-width: 340px; overflow: hidden; padding: 9px 12px; text-align: left; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+.cell-value:hover, .cell-value:focus-visible { background: #fff4d9; color: #62420e; outline: none; }
 tr:hover td { background: #fffbed; }
+.value-dialog { background: #fff; border: 1px solid #cbd2d7; border-radius: 8px; box-shadow: 0 18px 52px rgb(16 26 43 / 32%); color: #1a2638; margin: auto; max-height: min(720px, calc(100vh - 32px)); max-width: min(760px, calc(100vw - 32px)); padding: 0; width: 100%; }
+.value-dialog::backdrop { background: rgb(16 26 43 / 55%); }
+.value-dialog-header { align-items: start; background: #e9edf0; border-bottom: 1px solid #cdd4d9; display: flex; justify-content: space-between; padding: 18px 20px; }
+.value-dialog .eyebrow { color: #587087; margin-bottom: 4px; }
+.value-dialog h2 { font-size: 20px; margin: 0; }
+.dialog-close { background: #263d56; border: 0; border-radius: 4px; color: #fff; padding: 7px 10px; }
+.value-dialog pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; line-height: 1.55; margin: 0; max-height: min(580px, calc(100vh - 144px)); overflow: auto; padding: 20px; white-space: pre-wrap; word-break: break-word; }
 .empty { color: #68758a; padding: 28px; text-align: center; }
 .state { align-items: center; color: #d8e1ee; display: flex; justify-content: center; min-height: 100vh; }
 .state.error { color: #ff9e8c; padding: 24px; text-align: center; }
@@ -60,4 +69,6 @@ tr:hover td { background: #fffbed; }
   .limit { text-align: left; }
   .filter { grid-template-columns: 1fr auto; }
   .filter label { grid-column: 1 / -1; }
+  .value-dialog-header { padding: 15px 16px; }
+  .value-dialog pre { font-size: 13px; padding: 16px; }
 }

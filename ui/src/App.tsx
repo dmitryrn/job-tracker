@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import initSqlJs, { type Database } from "sql.js";
 import sqlWasm from "sql.js/dist/sql-wasm.wasm?url";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
@@ -22,6 +22,23 @@ function displayValue(value: unknown) {
   return String(value);
 }
 
+function formattedValue(value: unknown) {
+  if (typeof value !== "string") {
+    return displayValue(value);
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed !== null && typeof parsed === "object") {
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // Plain text values should be shown exactly as stored.
+  }
+
+  return value;
+}
+
 export default function App() {
   const [database, setDatabase] = useState<Database>();
   const [tables, setTables] = useState<Table[]>([]);
@@ -31,6 +48,8 @@ export default function App() {
   const [sort, setSort] = useState<Sort>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedValue, setSelectedValue] = useState<{ column: string; value: unknown }>();
+  const valueDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -84,6 +103,13 @@ export default function App() {
       setError(reason instanceof Error ? reason.message : "The filter could not be run");
     }
   }, [database, selectedTable, filter, sort]);
+
+  useEffect(() => {
+    const dialog = valueDialog.current;
+    if (selectedValue && dialog && !dialog.open) {
+      dialog.showModal();
+    }
+  }, [selectedValue]);
 
   function selectTable(table: Table) {
     setSelectedTable(table);
@@ -173,13 +199,51 @@ export default function App() {
             <tbody>
               {rows.values.map((row, index) => (
                 <tr key={index}>
-                  {row.map((value, valueIndex) => <td key={rows.columns[valueIndex]} title={displayValue(value)}>{displayValue(value)}</td>)}
+                  {row.map((value, valueIndex) => {
+                    const column = rows.columns[valueIndex];
+                    return (
+                      <td key={column}>
+                        <button
+                          className="cell-value"
+                          onClick={() => setSelectedValue({ column, value })}
+                          title={`Open ${column}`}
+                        >
+                          {displayValue(value)}
+                        </button>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
           </table>
           {!error && rows.values.length === 0 && <p className="empty">No rows match this filter.</p>}
         </div>
+
+        {selectedValue && (
+          <dialog
+            aria-labelledby="value-dialog-title"
+            className="value-dialog"
+            onCancel={() => setSelectedValue(undefined)}
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                setSelectedValue(undefined);
+              }
+            }}
+            ref={valueDialog}
+          >
+            <div className="value-dialog-header">
+              <div>
+                <p className="eyebrow">Field value</p>
+                <h2 id="value-dialog-title">{selectedValue.column}</h2>
+              </div>
+              <button aria-label="Close field value" className="dialog-close" onClick={() => setSelectedValue(undefined)}>
+                Close
+              </button>
+            </div>
+            <pre>{formattedValue(selectedValue.value)}</pre>
+          </dialog>
+        )}
       </section>
     </main>
   );
