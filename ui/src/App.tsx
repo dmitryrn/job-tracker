@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import initSqlJs, { type Database } from "sql.js";
 import sqlWasm from "sql.js/dist/sql-wasm.wasm?url";
+import BrowseView, { type BrowseMode } from "./BrowseView";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
 import "./styles.css";
+
+type View = BrowseMode | "explorer";
 
 function databaseURL() {
   const configured = import.meta.env.VITE_DATABASE_URL;
@@ -53,6 +56,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedValue, setSelectedValue] = useState<{ column: string; value: unknown }>();
+  const [view, setView] = useState<View>("jobs");
   const valueDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -138,9 +142,16 @@ export default function App() {
   }
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
-        <div className="brand"><span>J</span><div><strong>Jobs</strong><small>SQLite explorer</small></div></div>
+    <main className={view === "explorer" ? "shell" : "shell browse-layout"}>
+      <header className="app-header">
+        <div className="brand"><span>J</span><div><strong>Jobs</strong><small>Remote work, better sorted</small></div></div>
+        <nav className="app-nav" aria-label="Application navigation">
+          <button className={view === "explorer" ? "app-nav-link" : "app-nav-link active"} onClick={() => setView("jobs")}>UI browser</button>
+          <button className={view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("explorer")}>DB browser</button>
+        </nav>
+      </header>
+      {view === "explorer" && (
+        <aside className="sidebar">
         <p className="eyebrow">Schema</p>
         <nav aria-label="Database tables">
           {tables.map((table) => (
@@ -153,9 +164,14 @@ export default function App() {
             </button>
           ))}
         </nav>
-      </aside>
+        </aside>
+      )}
 
       <section className="workspace">
+        {view !== "explorer" ? (
+          <BrowseView database={database} mode={view} onModeChange={setView} />
+        ) : (
+        <>
         <header>
           <div>
             <p className="eyebrow">{selectedTable?.kind}</p>
@@ -246,7 +262,9 @@ export default function App() {
               </button>
             </div>
             <pre>{formattedValue(selectedValue.value)}</pre>
-          </dialog>
+         </dialog>
+        )}
+        </>
         )}
       </section>
     </main>
