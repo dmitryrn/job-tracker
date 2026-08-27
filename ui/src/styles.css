@@ -1,0 +1,63 @@
+:root {
+  color: #eaf0fa;
+  background: #101a2b;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+
+.shell { display: grid; grid-template-columns: 238px minmax(0, 1fr); min-height: 100vh; }
+.sidebar { background: #101a2b; border-right: 1px solid #2e4059; padding: 26px 16px; }
+.brand { align-items: center; display: flex; gap: 10px; margin: 0 6px 34px; }
+.brand > span { align-items: center; background: #e5ac4c; border-radius: 7px; color: #101a2b; display: flex; font-family: Georgia, serif; font-size: 24px; font-weight: bold; height: 36px; justify-content: center; width: 36px; }
+.brand strong, .brand small { display: block; }
+.brand strong { font-size: 18px; }
+.brand small, .eyebrow, .limit { color: #9eafc7; }
+.brand small { font-size: 12px; margin-top: 2px; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; margin: 0 0 9px; text-transform: uppercase; }
+.table-link { background: transparent; border: 0; border-radius: 6px; color: #d5dfed; display: flex; justify-content: space-between; margin: 2px 0; padding: 9px 10px; text-align: left; width: 100%; }
+.table-link small { color: #8496ae; }
+.table-link:hover, .table-link.active { background: #1f314a; color: #fff; }
+.table-link.active { box-shadow: inset 3px 0 #e5ac4c; }
+.workspace { background: #f6f4ef; color: #1a2638; padding: 34px clamp(18px, 4vw, 58px); }
+header { align-items: end; border-bottom: 1px solid #d6d5d0; display: flex; justify-content: space-between; padding-bottom: 22px; }
+h1 { font-family: Georgia, serif; font-size: clamp(31px, 4vw, 48px); font-weight: 400; line-height: 1; margin: 0; }
+.limit { font-size: 13px; margin: 0; max-width: 250px; text-align: right; }
+.columns { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0; }
+.column-card { background: #fff; border: 1px solid #dedcd5; border-radius: 5px; min-width: 128px; padding: 9px 11px; }
+.column-card strong, .column-card span, .column-card small { display: block; }
+.column-card strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.column-card span { color: #496178; font-family: ui-monospace, monospace; font-size: 11px; margin-top: 5px; }
+.column-card small { color: #a26d20; font-size: 10px; margin-top: 4px; text-transform: uppercase; }
+.filter { align-items: center; display: grid; gap: 8px; grid-template-columns: auto minmax(180px, 1fr) auto; margin: 26px 0 12px; }
+.filter label { color: #4b6075; font-size: 13px; font-weight: 700; }
+.filter input { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; min-width: 0; padding: 9px 10px; }
+.filter button { background: #263d56; border: 0; border-radius: 4px; color: #fff; padding: 9px 13px; }
+.query-error { background: #fff0ed; border-left: 3px solid #bd4d38; color: #8a3426; font-family: ui-monospace, monospace; font-size: 13px; margin: 0 0 12px; padding: 10px; white-space: pre-wrap; }
+.grid-wrap { background: #fff; border: 1px solid #d6d5d0; overflow: auto; }
+table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+th { background: #e9edf0; border-bottom: 1px solid #cdd4d9; color: #304860; position: sticky; text-align: left; top: 0; white-space: nowrap; }
+th button { background: transparent; border: 0; color: inherit; font-weight: 700; padding: 10px 12px; text-align: left; }
+th button:hover { color: #a26d20; }
+td { border-bottom: 1px solid #edebe5; max-width: 340px; overflow: hidden; padding: 9px 12px; text-overflow: ellipsis; white-space: nowrap; }
+tr:hover td { background: #fffbed; }
+.empty { color: #68758a; padding: 28px; text-align: center; }
+.state { align-items: center; color: #d8e1ee; display: flex; justify-content: center; min-height: 100vh; }
+.state.error { color: #ff9e8c; padding: 24px; text-align: center; }
+
+@media (max-width: 700px) {
+  .shell { display: block; }
+  .sidebar { border-bottom: 1px solid #2e4059; border-right: 0; padding: 18px; }
+  .brand { margin-bottom: 16px; }
+  .sidebar nav { display: flex; gap: 6px; overflow-x: auto; }
+  .table-link { flex: 0 0 auto; width: auto; }
+  .workspace { padding: 25px 16px; }
+  header { align-items: start; flex-direction: column; gap: 12px; }
+  .limit { text-align: left; }
+  .filter { grid-template-columns: 1fr auto; }
+  .filter label { grid-column: 1 / -1; }
+}

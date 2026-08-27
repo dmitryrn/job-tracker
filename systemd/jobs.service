@@ -1,0 +1,14 @@
+[Unit]
+Description=Jobs discovery service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/clanker/projects/nice
+ExecStart=/usr/bin/go run ./cmd/server
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

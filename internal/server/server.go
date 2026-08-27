@@ -16,11 +16,23 @@ type Server struct {
 }
 
 func New(cfg config.Config) *Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/database", databaseHandler(cfg.Database.Path))
+
 	return &Server{
 		http: &http.Server{
 			Addr:    cfg.HTTPAddress,
-			Handler: http.NotFoundHandler(),
+			Handler: mux,
 		},
+	}
+}
+
+func databaseHandler(path string) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Access-Control-Allow-Origin", "*")
+		writer.Header().Set("Content-Disposition", `attachment; filename="jobs.db"`)
+		writer.Header().Set("Content-Type", "application/vnd.sqlite3")
+		http.ServeFile(writer, request, path)
 	}
 }
 

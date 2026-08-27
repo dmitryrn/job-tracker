@@ -1,0 +1,14 @@
+[Unit]
+Description=Jobs database explorer UI
+After=network-online.target jobs.service
+Wants=network-online.target jobs.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/clanker/projects/nice/ui
+ExecStart=/usr/bin/python3 -m http.server 4000 --bind 10.8.0.4 --directory dist
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
