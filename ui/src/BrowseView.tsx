@@ -15,13 +15,20 @@ const searchFieldOptions = [
   { value: "body", label: "Description" },
 ];
 
-function formatDate(value: string) {
+export function formatDate(value: string, now = new Date()) {
   if (!value) {
     return "Recently posted";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "Recently posted";
+  }
+  const daysAgo = Math.floor((now.getTime() - date.getTime()) / (24 * 60 * 60 * 1000));
+  if (daysAgo <= 0) {
+    return "Today";
+  }
+  if (daysAgo <= 30) {
+    return `${daysAgo}d ago`;
   }
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(date);
 }

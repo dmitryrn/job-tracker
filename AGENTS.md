@@ -20,7 +20,9 @@ starting the UI also starts the backend and waits for its startup ordering.
 `~/.config/systemd/user/jobs-ui.service` are symlinks to
 `systemd/jobs.service` and `systemd/jobs-ui.service` in this repository.
 Edit those tracked files, then run `systemctl --user daemon-reload` after
-changing a unit definition.
+changing a unit definition. Read recent service logs with
+`journalctl --user-unit=jobs.service -n 30 --no-pager` or
+`journalctl --user-unit=jobs-ui.service -n 30 --no-pager`.
 
 # Rules
 - don't hallucinate lib versions when adding
