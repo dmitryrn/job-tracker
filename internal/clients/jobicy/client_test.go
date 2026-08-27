@@ -15,12 +15,18 @@ import (
 
 func TestFetchMapsJobicyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Query().Get("get") == "industries" {
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"industries":[{"industryName":"Software Engineering","industrySlug":"engineering"}]}`))
+			return
+		}
+
 		assert.Equal(t, "50", request.URL.Query().Get("count"))
 		assert.Equal(t, "europe", request.URL.Query().Get("geo"))
 		assert.Equal(t, "engineering", request.URL.Query().Get("industry"))
 		assert.Empty(t, request.URL.Query().Get("tag"))
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"jobs":[{"id":42,"url":"https://jobicy.com/jobs/42-example","jobTitle":"Software Engineer","companyName":"Example Co","companyLogo":"https://jobicy.com/logo.png","jobIndustry":["Software Engineering"],"jobType":["Full-Time","Contract"],"jobGeo":"Europe","jobLevel":"Senior","jobExcerpt":"Build useful things.","jobDescription":"<p>Build useful things.</p>","pubDate":"2026-08-27T10:00:00+02:00","salaryMin":80000,"salaryMax":100000,"salaryCurrency":"EUR","salaryPeriod":"yearly"}]}`))
+		_, _ = writer.Write([]byte(`{"jobs":[{"id":42,"url":"https://jobicy.com/jobs/42-example","jobTitle":"Software Engineer","companyName":"Example Co","companyLogo":"https://jobicy.com/logo.png","jobIndustry":["Software Engineering"],"jobType":["Full-Time","Contract"],"jobGeo":"Europe","jobLevel":"Senior","jobExcerpt":"Build useful things.","jobDescription":"<p>Build useful things.</p>","pubDate":"2026-08-27T10:00:00+02:00","salaryMin":80000,"salaryMax":100000,"salaryCurrency":"EUR","salaryPeriod":"yearly"},{"id":43,"jobTitle":"QA Tester","jobIndustry":["QA & Testing"]}]}`))
 	}))
 	defer server.Close()
 

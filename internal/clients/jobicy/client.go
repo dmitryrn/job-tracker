@@ -27,6 +27,15 @@ type response struct {
 	Jobs []job `json:"jobs"`
 }
 
+type industriesResponse struct {
+	Industries []industry `json:"industries"`
+}
+
+type industry struct {
+	Name string `json:"industryName"`
+	Slug string `json:"industrySlug"`
+}
+
 type job struct {
 	ID              int64    `json:"id"`
 	URL             string   `json:"url"`
@@ -55,6 +64,11 @@ func newClient(httpClient *http.Client, baseURL string, cfg config.JobicyConfig)
 }
 
 func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
+	industryName, err := c.industryName(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	requestURL, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, err
@@ -96,9 +110,64 @@ func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
 	}
 	jobs := make([]models.Job, 0, len(result.Jobs))
 	for _, item := range result.Jobs {
+		if industryName != "" && !matchesIndustry(item, industryName) {
+			continue
+		}
 		jobs = append(jobs, toModel(item))
 	}
 	return jobs, nil
+}
+
+func (c *Client) industryName(ctx context.Context) (string, error) {
+	if c.config.Industry == "" {
+		return "", nil
+	}
+
+	requestURL, err := url.Parse(c.baseURL)
+	if err != nil {
+		return "", err
+	}
+	params := requestURL.Query()
+	params.Set("get", "industries")
+	requestURL.RawQuery = params.Encode()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("Accept", "application/json")
+	httpResponse, err := c.http.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer httpResponse.Body.Close()
+	if httpResponse.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(io.LimitReader(httpResponse.Body, 4<<10))
+		if readErr != nil {
+			return "", fmt.Errorf("Jobicy returned %s", httpResponse.Status)
+		}
+		return "", fmt.Errorf("Jobicy returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
+	}
+
+	var result industriesResponse
+	if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	for _, industry := range result.Industries {
+		if industry.Slug == c.config.Industry {
+			return industry.Name, nil
+		}
+	}
+	return "", fmt.Errorf("Jobicy industry %q was not found", c.config.Industry)
+}
+
+func matchesIndustry(job job, industry string) bool {
+	for _, value := range job.Industry {
+		if value == industry {
+			return true
+		}
+	}
+	return false
 }
 
 func toModel(job job) models.Job {
