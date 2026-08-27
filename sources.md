@@ -29,6 +29,40 @@ the applicable API terms.
 - Terms note: attribute Remotive and link to its listing when displaying its
   jobs; poll no more than a few times per day.
 
+### Jobicy
+
+- Coverage: global remote jobs, including Europe, EMEA, APAC, and the Americas.
+- Authentication: none for the public API.
+- API documentation: <https://jobicy.com/jobs-rss-feed>
+- Endpoint: `https://jobicy.com/api/v2/remote-jobs`
+- Filters: `count`, `geo`, `industry`, and `tag`; retrieve the current location
+  and industry slugs from the API rather than hard-coding them.
+- Useful fields: ID, title, company, full HTML description, location
+  eligibility, employment type, seniority, publication date, salary, and
+  canonical listing URL.
+- Terms note: retain Jobicy attribution and its canonical URL when displaying
+  listings. Poll only a few times per day and no more than once an hour.
+
+### Jooble
+
+- Coverage: international aggregate job search, including non-remote roles.
+- Authentication: API key required.
+- API documentation: <https://jooble.org/api/about>
+- Endpoint: `https://jooble.org/api/{api_key}`
+- Useful fields: title, company, location, publication date, salary when
+  present, and listing URL.
+- Integration note: review the current API terms, pricing, and rate limits
+  before adopting it. This is a broad discovery source, not an employer-board
+  API.
+
+### German Federal Employment Agency Jobsuche API
+
+- Coverage: Germany-focused job discovery.
+- API documentation: <https://jobsuche.api.bund.dev/>
+- Integration note: evaluate its authentication, terms, query capabilities,
+  and returned fields before implementation. It is a relevant complement when
+  Germany is the primary market.
+
 ## Employer Job Boards
 
 These are not global search APIs. Use them after a discovery source identifies
