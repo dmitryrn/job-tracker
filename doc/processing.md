@@ -369,6 +369,33 @@ An assessment result must retain the job quote and the matched profile evidence.
 For example, a professional Go requirement can be `met` only when the profile
 contains professional Go evidence, rather than a vague adjacent technology.
 
+### Hybrid Semantic Matching
+
+Deterministic comparison is the authority for eligibility and confirmed
+matches. An optional LLM helper can improve recall without becoming an
+untraceable fit scorer:
+
+1. Run deterministic matching first, using canonical concepts, approved
+   aliases, dates, minimum years, and eligibility rules.
+2. Send only unresolved or partial requirements and relevant, evidence-backed
+   profile claims to the helper. Do not send the full CV or identity fields.
+3. Require structured suggestions containing a requirement ID, existing profile
+   evidence IDs, a `direct`, `related`, or `insufficient` relationship, and a
+   short reason. The helper must not return new facts, evidence, or a fit score.
+4. Verify every returned evidence ID and quote against the stored profile.
+5. Apply deterministic merge rules to produce the assessment result.
+
+Eligibility gates always remain deterministic. An LLM suggestion may surface
+evidence for review or turn an `unknown` into `partial`; it must not on its own
+turn a result into `met`, fail a gate, or infer a mismatch from absent evidence.
+Repeated, reviewed related matches can become explicit taxonomy rules.
+
+For example, when a job requires distributed-systems experience and a profile
+contains an evidence quote about asynchronous event processing and reliability
+tooling, the helper may propose that evidence as related. The assessment records
+`partial` and shows both source quotes unless an approved taxonomy rule supports
+an exact match.
+
 ### Screening Fit
 
 Screening fit is an initial, explainable heuristic. It is useful for sorting

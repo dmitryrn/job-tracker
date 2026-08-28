@@ -51,3 +51,18 @@ configuration. It never prints the key. It uses OpenRouter's free-model router,
 so the resolved model and output may vary between runs. Review every changed
 result before accepting it; saved results are evidence-backed review artifacts,
 not deterministic golden outputs.
+
+## Job Analyzer Tests
+
+`internal/services/job_analyzer_test.go` uses a fake completion client to test
+versioned metadata, HTML normalization, concept canonicalization, blank-input
+handling, and rejection of claims without posting quotes. It is deterministic
+and runs with `go test ./...`.
+
+`internal/services/job_analyzer_live_test.go` validates saved results in
+`jobs/results/` against their fixture, normalized input, schema, and hash. Its
+live refresh test is skipped unless explicitly enabled:
+
+```sh
+go test ./internal/services -run TestAnalyzeJobFixtures -args -update-job-results
+```

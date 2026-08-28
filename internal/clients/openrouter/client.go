@@ -49,7 +49,7 @@ type Client struct {
 }
 
 func NewClient(cfg config.Config) *Client {
-	return newClient(cfg.OpenRouter.APIKey, DefaultModel, &http.Client{Timeout: 60 * time.Second}, baseURL)
+	return newClient(cfg.OpenRouter.APIKey, DefaultModel, &http.Client{Timeout: 120 * time.Second}, baseURL)
 }
 
 func newClient(apiKey, model string, httpClient *http.Client, baseURL string) *Client {
@@ -95,8 +95,11 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 	var body struct {
 		Model   string `json:"model"`
 		Choices []struct {
-			Message struct {
+			FinishReason       string `json:"finish_reason"`
+			NativeFinishReason string `json:"native_finish_reason"`
+			Message            struct {
 				Content *string `json:"content"`
+				Refusal *string `json:"refusal"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
@@ -104,8 +107,22 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 	if err := decoder.Decode(&body); err != nil {
 		return ChatResponse{}, fmt.Errorf("decode OpenRouter response: %w", err)
 	}
-	if len(body.Choices) == 0 || body.Choices[0].Message.Content == nil {
+	if len(body.Choices) == 0 {
 		return ChatResponse{}, fmt.Errorf("OpenRouter returned no completion content")
 	}
-	return ChatResponse{Model: body.Model, Content: *body.Choices[0].Message.Content}, nil
+	choice := body.Choices[0]
+	if choice.Message.Content == nil || strings.TrimSpace(*choice.Message.Content) == "" {
+		reason := choice.NativeFinishReason
+		if reason == "" {
+			reason = choice.FinishReason
+		}
+		if choice.Message.Refusal != nil && strings.TrimSpace(*choice.Message.Refusal) != "" {
+			reason = "refusal"
+		}
+		if reason == "" {
+			return ChatResponse{}, fmt.Errorf("OpenRouter returned no completion content")
+		}
+		return ChatResponse{}, fmt.Errorf("OpenRouter returned no completion content (%s)", reason)
+	}
+	return ChatResponse{Model: body.Model, Content: *choice.Message.Content}, nil
 }
