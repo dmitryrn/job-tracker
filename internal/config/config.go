@@ -20,12 +20,17 @@ type Config struct {
 	HTTPAddress  string
 	DatabasePath string
 	Providers    ProviderConfig
+	OpenRouter   OpenRouterConfig
 }
 
 type ProviderConfig struct {
 	Adzuna   AdzunaConfig
 	Jobicy   JobicyConfig
 	Remotive RemotiveConfig
+}
+
+type OpenRouterConfig struct {
+	APIKey string
 }
 
 type AdzunaConfig struct {
@@ -119,6 +124,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	openRouterAPIKey, err := requiredString(tokens["OPENROUTER_API_KEY"], "OPENROUTER_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
 	adzunaInterval, err := time.ParseDuration(source.Providers.Adzuna.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.adzuna.sync_interval: %w", err)
@@ -162,6 +171,7 @@ func Load() (Config, error) {
 				SyncInterval: jobicyInterval,
 			},
 		},
+		OpenRouter: OpenRouterConfig{APIKey: openRouterAPIKey},
 	}, nil
 }
 

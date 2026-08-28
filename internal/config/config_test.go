@@ -123,5 +123,5 @@ sync_interval = %q
 func writeTestConfigContent(t *testing.T, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(configFile, []byte(content), 0o600))
-	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\n"), 0o600))
+	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\nOPENROUTER_API_KEY=test\n"), 0o600))
 }

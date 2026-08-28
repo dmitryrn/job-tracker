@@ -1,0 +1,162 @@
+{
+  "fixture": "product-frontend-us.txt",
+  "generatedAt": "2026-08-28T08:56:03Z",
+  "analysis": {
+    "analyzerVersion": "v1",
+    "promptVersion": "2026-08-28",
+    "inputSHA256": "c0fbb373022d15ab85ecbf6a5eeac9525f3072f2bf18f0909c1d66b4d532b12c",
+    "model": "liquid/lfm-2.5-2.6b:free",
+    "analyzedAt": "2026-08-28T08:56:03Z",
+    "profile": {
+      "name": "Jordan Lee",
+      "headline": "Product-focused Frontend Engineer",
+      "location": "Chicago, Illinois, United States",
+      "workAuthorization": [
+        {
+          "value": "Authorized to work in the United States without sponsorship",
+          "evidence": "Authorized to work in the United States without sponsorship."
+        }
+      ],
+      "experience": [
+        {
+          "company": "Daylight Health",
+          "title": "Frontend Engineer",
+          "startDate": "2023-01-01",
+          "endDate": "Present",
+          "evidence": [
+            "Frontend Engineer | Daylight Health | Remote, United States | 2023 - present",
+            "Owned the appointment-booking experience used by patients and care coordinators.",
+            "Built TypeScript and React features, maintained component-library documentation, and partnered with designers to improve keyboard navigation and screen-reader support.",
+            "Helped reduce booking abandonment by 18 percent through performance and usability work.",
+            "Used GraphQL and Cypress; I did not own backend services."
+          ]
+        },
+        {
+          "company": "Circle Market",
+          "title": "Web Developer",
+          "startDate": "2020-01-01",
+          "endDate": "2023-12-31",
+          "evidence": [
+            "Web Developer | Circle Market | Chicago, IL | 2020 - 2023",
+            "Implemented e-commerce pages using JavaScript, React, Next.js, CSS, and a Node.js BFF maintained by another team.",
+            "Added unit and end-to-end tests, joined weekly incident triage, and mentored two interns.",
+            "Worked hybrid, three days in the office."
+          ]
+        },
+        {
+          "company": "Maker House",
+          "title": "Junior Web Developer",
+          "startDate": "2018-09-01",
+          "endDate": "2020-06-30",
+          "evidence": [
+            "Junior Web Developer | Maker House | Chicago, IL | 2018 - 2020",
+            "Created marketing sites and internal dashboards with HTML, CSS, JavaScript, and WordPress.",
+            "Collaborated directly with small-business customers."
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "name": "React",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "TypeScript",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "JavaScript",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "Next.js",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "HTML",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "CSS",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "Accessibility (WCAG)",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "GraphQL",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "Cypress",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "Jest",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "Figma",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        },
+        {
+          "name": "Git",
+          "evidence": [
+            "React, TypeScript, JavaScript, Next.js, HTML, CSS, accessibility (WCAG), GraphQL, Cypress, Jest, Figma, Git"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "employmentType",
+          "value": "Full-time",
+          "evidence": "Seeking full-time employment, ideally remote in the United States; open to a hybrid role in Chicago."
+        },
+        {
+          "kind": "locationPreference",
+          "value": "Remote in the United States; open to a hybrid role in Chicago",
+          "evidence": "Seeking full-time employment, ideally remote in the United States; open to a hybrid role in Chicago."
+        },
+        {
+          "kind": "onCallAvailability",
+          "value": "Not interested in regular on-call rotation",
+          "evidence": "I prefer not to take a regular on-call rotation."
+        },
+        {
+          "kind": "salary",
+          "value": "USD 135,000+",
+          "evidence": "Salary goal is USD 135,000+, although I will consider lower compensation for a strong mission fit."
+        },
+        {
+          "kind": "interests",
+          "value": "product engineering, education technology, and civic technology",
+          "evidence": "Interested in product engineering, education technology, and civic technology."
+        }
+      ],
+      "unknowns": []
+    }
+  }
+}

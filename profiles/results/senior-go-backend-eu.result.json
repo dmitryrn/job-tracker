@@ -1,0 +1,65 @@
+{
+  "fixture": "senior-go-backend-eu.txt",
+  "generatedAt": "2026-08-28T08:56:25Z",
+  "analysis": {
+    "analyzerVersion": "v1",
+    "promptVersion": "2026-08-28",
+    "inputSHA256": "854b5a1d621b74a489a68a88bf9e0d2d889aea7abd4838bce663f30401ba87da",
+    "model": "dots-studio/dots-3-note-preview:free",
+    "analyzedAt": "2026-08-28T08:56:25Z",
+    "profile": {
+      "name": "Riley Morgan",
+      "headline": "Senior Backend Engineer",
+      "location": "Berlin, Germany",
+      "workAuthorization": [
+        {
+          "value": "Eligible to work in Germany and other EU member states",
+          "evidence": "Eligible to work in Germany and other EU member states."
+        }
+      ],
+      "experience": [
+        {
+          "company": "RelayFox GmbH",
+          "title": "Senior Backend Engineer",
+          "startDate": "May 2022",
+          "endDate": "",
+          "evidence": [
+            "- Lead a team of four engineers responsible for tenant provisioning, billing events, and internal developer APIs for a multi-tenant SaaS platform.",
+            "- Designed and operated Go services using PostgreSQL, Kafka, Redis, Docker, and Kubernetes. Reduced duplicate billing events by adding idempotency controls and a reconciliation workflow.",
+            "- Participated in a paid, follow-the-sun on-call rotation. Wrote runbooks, dashboards, and alerts using Prometheus and Grafana.",
+            "- Worked with product and support teams on enterprise customer escalations."
+          ]
+        },
+        {
+          "company": "Northstar Systems",
+          "title": "Software Engineer",
+          "startDate": "July 2018",
+          "endDate": "April 2022",
+          "evidence": [
+            "- Built REST and gRPC APIs in Go for a logistics planning product used by customers in Germany, France, and the Netherlands.",
+            "- Migrated scheduled imports from a monolith to event-driven workers and improved delivery monitoring.",
+            "- Maintained Terraform modules and AWS infrastructure with the platform team."
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "name": "Skills from CV",
+          "evidence": [
+            "Strong: Go, PostgreSQL, distributed systems, REST APIs, Kafka, Docker, Linux",
+            "Working knowledge: Kubernetes, Terraform, AWS, gRPC, TypeScript",
+            "Used briefly: Python, React"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "preferences",
+          "value": "Permanent senior backend or platform role; remote within European time zones or hybrid in Berlin; open to sustainable on-call; no relocation outside Germany; target compensation EUR 100,000 or more per year.",
+          "evidence": "Source text: 'Looking for a permanent senior backend or platform role. Prefer remote work within European time zones or hybrid work in Berlin. Open to on-call when the rotation is sustainable. Not willing to relocate outside Germany. Target total compensation: EUR 100,000 or more per year.'"
+        }
+      ],
+      "unknowns": []
+    }
+  }
+}

@@ -1,0 +1,196 @@
+{
+  "fixture": "source-devops-engineer.md",
+  "generatedAt": "2026-08-28T08:56:52Z",
+  "analysis": {
+    "analyzerVersion": "v1",
+    "promptVersion": "2026-08-28",
+    "inputSHA256": "520a28041d83fad7575aabcf9d732f5d5785e4392937e4e31d93725d8dd47423",
+    "model": "dots-studio/dots-3-note-preview:free",
+    "analyzedAt": "2026-08-28T08:56:52Z",
+    "profile": {
+      "name": "Chris Anderson",
+      "headline": "Senior DevOps Engineer | Site Reliability Engineer",
+      "location": "Denver, CO",
+      "workAuthorization": [
+        {
+          "value": "None",
+          "evidence": "Security Clearance: None"
+        }
+      ],
+      "experience": [
+        {
+          "company": "CloudScale Technologies",
+          "title": "Senior DevOps Engineer",
+          "startDate": "2020-03",
+          "endDate": "Present",
+          "evidence": [
+            "Senior DevOps Engineer | CloudScale Technologies | Denver, CO",
+            "March 2020 - Present"
+          ]
+        },
+        {
+          "company": "StartupDev Inc.",
+          "title": "DevOps Engineer",
+          "startDate": "2017-06",
+          "endDate": "2020-02",
+          "evidence": [
+            "DevOps Engineer | StartupDev Inc. | Boulder, CO",
+            "June 2017 - February 2020"
+          ]
+        },
+        {
+          "company": "TechCorp",
+          "title": "Systems Administrator",
+          "startDate": "2016-01",
+          "endDate": "2017-05",
+          "evidence": [
+            "Systems Administrator | TechCorp | Denver, CO",
+            "January 2016 - May 2017"
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "name": "Cloud Platforms",
+          "evidence": [
+            "AWS (EC2, ECS, EKS, Lambda, S3, RDS, CloudFormation)",
+            "Google Cloud Platform (GKE, Cloud Run)",
+            "Azure"
+          ]
+        },
+        {
+          "name": "Container \u0026 Orchestration",
+          "evidence": [
+            "Docker",
+            "Kubernetes",
+            "Helm",
+            "Docker Compose",
+            "containerd"
+          ]
+        },
+        {
+          "name": "Infrastructure as Code",
+          "evidence": [
+            "Terraform",
+            "CloudFormation",
+            "Ansible",
+            "Pulumi"
+          ]
+        },
+        {
+          "name": "CI/CD",
+          "evidence": [
+            "Jenkins",
+            "GitLab CI/CD",
+            "GitHub Actions",
+            "CircleCI",
+            "ArgoCD",
+            "Spinnaker"
+          ]
+        },
+        {
+          "name": "Monitoring \u0026 Logging",
+          "evidence": [
+            "Prometheus",
+            "Grafana",
+            "ELK Stack (Elasticsearch, Logstash, Kibana)",
+            "Datadog",
+            "New Relic",
+            "PagerDuty"
+          ]
+        },
+        {
+          "name": "Scripting \u0026 Programming",
+          "evidence": [
+            "Python",
+            "Bash",
+            "Go",
+            "PowerShell",
+            "YAML"
+          ]
+        },
+        {
+          "name": "Version Control",
+          "evidence": [
+            "Git",
+            "GitHub",
+            "GitLab",
+            "Bitbucket"
+          ]
+        },
+        {
+          "name": "Databases",
+          "evidence": [
+            "PostgreSQL",
+            "MySQL",
+            "MongoDB",
+            "Redis",
+            "DynamoDB"
+          ]
+        },
+        {
+          "name": "Web Servers \u0026 Load Balancers",
+          "evidence": [
+            "Nginx",
+            "Apache",
+            "HAProxy",
+            "AWS ELB/ALB"
+          ]
+        },
+        {
+          "name": "Security",
+          "evidence": [
+            "Vault",
+            "AWS IAM",
+            "SSL/TLS",
+            "Security Scanning (Snyk, Trivy)",
+            "Secrets Management"
+          ]
+        },
+        {
+          "name": "Networking",
+          "evidence": [
+            "VPC",
+            "DNS",
+            "VPN",
+            "Load Balancing",
+            "CDN (CloudFront, CloudFlare)"
+          ]
+        },
+        {
+          "name": "Operating Systems",
+          "evidence": [
+            "Linux (Ubuntu, CentOS, Amazon Linux)",
+            "Windows Server"
+          ]
+        },
+        {
+          "name": "Methodologies",
+          "evidence": [
+            "Agile",
+            "DevOps",
+            "Site Reliability Engineering (SRE)",
+            "GitOps"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "location",
+          "value": "Open to remote or Denver-area positions",
+          "evidence": "Availability: Open to remote or Denver-area positions"
+        }
+      ],
+      "unknowns": [
+        "work_authorization",
+        "salary_expectations",
+        "relocation_willingness",
+        "notice_period",
+        "preferred_contract_type",
+        "preferred_work_environment",
+        "travel_requirements",
+        "on_call_availability"
+      ]
+    }
+  }
+}

@@ -33,3 +33,21 @@ verified candidate data:
 
 Use these files only as model input. Do not use their names, contact details,
 or employers as production candidate data.
+
+## Analyzer Snapshots
+
+The live CV analyzer test writes one JSON result beside each input under
+`profiles/results/`. Each result records the input SHA-256, analyzer version,
+prompt version, resolved model, analysis timestamp, and extracted draft. The
+analyzer uses OpenRouter's free-model router, which selects a compatible free
+model for each request.
+
+Normal Go tests do not call an LLM. To intentionally refresh snapshots after a
+prompt, schema, or model change, run:
+
+```sh
+go test ./internal/services -run TestAnalyzeCVFixtures -args -update-cv-results
+```
+
+The test reads the configured OpenRouter key through the application config.
+It does not print the key, CV text, prompt, or model response.

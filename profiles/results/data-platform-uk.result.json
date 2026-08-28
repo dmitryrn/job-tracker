@@ -1,0 +1,111 @@
+{
+  "fixture": "data-platform-uk.txt",
+  "generatedAt": "2026-08-28T08:55:41Z",
+  "analysis": {
+    "analyzerVersion": "v1",
+    "promptVersion": "2026-08-28",
+    "inputSHA256": "bd54967a267bde6a8b0cb8aff2982f5bf596b11482818dfe6711c3830a0ec8b8",
+    "model": "dots-studio/dots-3-note-preview:free",
+    "analyzedAt": "2026-08-28T08:55:41Z",
+    "profile": {
+      "name": "Samira Patel",
+      "headline": "Data Platform Engineer",
+      "location": "Manchester, United Kingdom",
+      "workAuthorization": [
+        {
+          "value": "Indefinite leave to remain in the UK",
+          "evidence": "I have indefinite leave to remain in the UK."
+        }
+      ],
+      "experience": [
+        {
+          "company": "BrightLedger Ltd",
+          "title": "Data Platform Engineer",
+          "startDate": "January 2021",
+          "endDate": "present",
+          "evidence": [
+            "Developed Python services and batch pipelines that process financial reporting data. Deployed them to AWS using Terraform and GitHub Actions.",
+            "Modelled warehouse data in Snowflake and introduced dbt tests for critical revenue reports.",
+            "Built a small internal API in FastAPI for metadata and data-quality results.",
+            "Worked with information-security colleagues on access reviews and audit evidence. On-call support was occasional during month-end releases.",
+            "Led technical delivery for two projects, but have not had direct reports."
+          ]
+        },
+        {
+          "company": "Greenfield Analytics",
+          "title": "Software Engineer",
+          "startDate": "September 2017",
+          "endDate": "December 2020",
+          "evidence": [
+            "Created reporting integrations in Python and SQL for public-sector customers. Used Airflow, PostgreSQL, Docker, and Linux. Pair-programmed with graduate engineers and regularly demonstrated work to client analysts."
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "name": "Tools / Technical Skills",
+          "evidence": [
+            "Python (7 years)",
+            "SQL (8 years)",
+            "PostgreSQL",
+            "Snowflake",
+            "dbt",
+            "Airflow",
+            "AWS",
+            "Terraform",
+            "Docker",
+            "GitHub Actions",
+            "FastAPI",
+            "pandas",
+            "Linux"
+          ]
+        },
+        {
+          "name": "Go (Read code, completed online course; no professional usage)",
+          "evidence": [
+            "I have read Go code and completed an online course, but have not used Go professionally."
+          ]
+        },
+        {
+          "name": "Kubernetes (No professional experience)",
+          "evidence": [
+            "I have no professional Kubernetes experience."
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "work_authorisation",
+          "value": "Indefinite leave to remain in the UK",
+          "evidence": "I have indefinite leave to remain in the UK."
+        },
+        {
+          "kind": "location",
+          "value": "Remote within the UK preferred; can travel to Manchester once or twice a month",
+          "evidence": "Remote within the UK is preferred; I can travel to Manchester once or twice a month."
+        },
+        {
+          "kind": "relocation",
+          "value": "Not looking to relocate",
+          "evidence": "I am not looking to relocate"
+        },
+        {
+          "kind": "employment_type",
+          "value": "Permanent roles only (not contract-only)",
+          "evidence": "I am not looking to ... take contract-only roles."
+        },
+        {
+          "kind": "role_level_and_type",
+          "value": "Permanent senior individual-contributor data platform, analytics engineering, or backend-data roles",
+          "evidence": "I am interested in permanent senior individual-contributor data platform, analytics engineering, or backend-data roles."
+        },
+        {
+          "kind": "salary",
+          "value": "Minimum base salary: GBP 75,000 annually",
+          "evidence": "Minimum base salary: GBP 75,000 annually."
+        }
+      ],
+      "unknowns": []
+    }
+  }
+}

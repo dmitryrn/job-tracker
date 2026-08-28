@@ -1,0 +1,350 @@
+{
+  "fixture": "source-fullstack-developer.md",
+  "generatedAt": "2026-08-28T09:08:36Z",
+  "analysis": {
+    "analyzerVersion": "v1",
+    "promptVersion": "2026-08-28",
+    "inputSHA256": "70f9fd75dd938cea04d3d92166240345784f066a108b75b1acb2cb447a9e1fda",
+    "model": "z-ai/glm-5.2:free",
+    "analyzedAt": "2026-08-28T09:08:36Z",
+    "profile": {
+      "name": "Priya Nair",
+      "headline": "Full Stack Developer",
+      "location": "Chicago, IL",
+      "workAuthorization": [],
+      "experience": [
+        {
+          "company": "GrowthLoop",
+          "title": "Full Stack Developer",
+          "startDate": "May 2022",
+          "endDate": "Present",
+          "evidence": [
+            "Full Stack Developer | GrowthLoop | Chicago, IL"
+          ]
+        },
+        {
+          "company": "ShipCart (YC W21)",
+          "title": "Full Stack Engineer",
+          "startDate": "January 2021",
+          "endDate": "April 2022",
+          "evidence": [
+            "Full Stack Engineer | ShipCart (YC W21) | Remote"
+          ]
+        },
+        {
+          "company": "Webbly Agency",
+          "title": "Junior Full Stack Developer",
+          "startDate": "July 2019",
+          "endDate": "December 2020",
+          "evidence": [
+            "Junior Full Stack Developer | Webbly Agency | Chicago, IL"
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "name": "React",
+          "evidence": [
+            "React"
+          ]
+        },
+        {
+          "name": "Next.js",
+          "evidence": [
+            "Next.js"
+          ]
+        },
+        {
+          "name": "TypeScript",
+          "evidence": [
+            "TypeScript"
+          ]
+        },
+        {
+          "name": "Redux Toolkit",
+          "evidence": [
+            "Redux Toolkit"
+          ]
+        },
+        {
+          "name": "React Query",
+          "evidence": [
+            "React Query"
+          ]
+        },
+        {
+          "name": "Tailwind CSS",
+          "evidence": [
+            "Tailwind CSS"
+          ]
+        },
+        {
+          "name": "Storybook",
+          "evidence": [
+            "Storybook"
+          ]
+        },
+        {
+          "name": "Webpack",
+          "evidence": [
+            "Webpack"
+          ]
+        },
+        {
+          "name": "Vite",
+          "evidence": [
+            "Vite"
+          ]
+        },
+        {
+          "name": "Node.js",
+          "evidence": [
+            "Node.js"
+          ]
+        },
+        {
+          "name": "Express",
+          "evidence": [
+            "Express"
+          ]
+        },
+        {
+          "name": "NestJS",
+          "evidence": [
+            "NestJS"
+          ]
+        },
+        {
+          "name": "Python",
+          "evidence": [
+            "Python"
+          ]
+        },
+        {
+          "name": "FastAPI",
+          "evidence": [
+            "FastAPI"
+          ]
+        },
+        {
+          "name": "Django",
+          "evidence": [
+            "Django"
+          ]
+        },
+        {
+          "name": "REST APIs",
+          "evidence": [
+            "REST APIs"
+          ]
+        },
+        {
+          "name": "GraphQL",
+          "evidence": [
+            "GraphQL"
+          ]
+        },
+        {
+          "name": "WebSockets",
+          "evidence": [
+            "WebSockets"
+          ]
+        },
+        {
+          "name": "PostgreSQL",
+          "evidence": [
+            "PostgreSQL"
+          ]
+        },
+        {
+          "name": "MySQL",
+          "evidence": [
+            "MySQL"
+          ]
+        },
+        {
+          "name": "MongoDB",
+          "evidence": [
+            "MongoDB"
+          ]
+        },
+        {
+          "name": "Redis",
+          "evidence": [
+            "Redis"
+          ]
+        },
+        {
+          "name": "Prisma ORM",
+          "evidence": [
+            "Prisma ORM"
+          ]
+        },
+        {
+          "name": "Sequelize",
+          "evidence": [
+            "Sequelize"
+          ]
+        },
+        {
+          "name": "AWS (EC2, RDS, S3, CloudFront, Lambda)",
+          "evidence": [
+            "AWS (EC2, RDS, S3, CloudFront, Lambda)"
+          ]
+        },
+        {
+          "name": "Docker",
+          "evidence": [
+            "Docker"
+          ]
+        },
+        {
+          "name": "GitHub Actions",
+          "evidence": [
+            "GitHub Actions"
+          ]
+        },
+        {
+          "name": "Nginx",
+          "evidence": [
+            "Nginx"
+          ]
+        },
+        {
+          "name": "Vercel",
+          "evidence": [
+            "Vercel"
+          ]
+        },
+        {
+          "name": "Railway",
+          "evidence": [
+            "Railway"
+          ]
+        },
+        {
+          "name": "Jest",
+          "evidence": [
+            "Jest"
+          ]
+        },
+        {
+          "name": "React Testing Library",
+          "evidence": [
+            "React Testing Library"
+          ]
+        },
+        {
+          "name": "Cypress",
+          "evidence": [
+            "Cypress"
+          ]
+        },
+        {
+          "name": "Playwright",
+          "evidence": [
+            "Playwright"
+          ]
+        },
+        {
+          "name": "Supertest",
+          "evidence": [
+            "Supertest"
+          ]
+        },
+        {
+          "name": "Git",
+          "evidence": [
+            "Git"
+          ]
+        },
+        {
+          "name": "Figma (handoff)",
+          "evidence": [
+            "Figma (handoff)"
+          ]
+        },
+        {
+          "name": "Postman",
+          "evidence": [
+            "Postman"
+          ]
+        },
+        {
+          "name": "Jira",
+          "evidence": [
+            "Jira"
+          ]
+        },
+        {
+          "name": "Linear",
+          "evidence": [
+            "Linear"
+          ]
+        },
+        {
+          "name": "Notion",
+          "evidence": [
+            "Notion"
+          ]
+        },
+        {
+          "name": "PHP",
+          "evidence": [
+            "PHP"
+          ]
+        },
+        {
+          "name": "Laravel",
+          "evidence": [
+            "Laravel"
+          ]
+        },
+        {
+          "name": "Stripe",
+          "evidence": [
+            "Stripe"
+          ]
+        },
+        {
+          "name": "Twilio",
+          "evidence": [
+            "Twilio"
+          ]
+        },
+        {
+          "name": "Google Maps",
+          "evidence": [
+            "Google Maps"
+          ]
+        },
+        {
+          "name": "Plaid API",
+          "evidence": [
+            "Plaid API"
+          ]
+        },
+        {
+          "name": "NextAuth.js",
+          "evidence": [
+            "NextAuth.js"
+          ]
+        },
+        {
+          "name": "Contentful",
+          "evidence": [
+            "Contentful"
+          ]
+        },
+        {
+          "name": "Strapi",
+          "evidence": [
+            "Strapi"
+          ]
+        }
+      ],
+      "constraints": [],
+      "unknowns": []
+    }
+  }
+}
