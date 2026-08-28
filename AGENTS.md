@@ -28,5 +28,5 @@ changing a unit definition. Read recent service logs with
 - don't hallucinate lib versions when adding
 - add spacing between code blocks as per clean code, for readability
 - handlers should log all errors, including service errors
-- run tests, build after making changes
+- run tests, build after making code changes
 - when restarting a service, make sure it works, check logs, etc
