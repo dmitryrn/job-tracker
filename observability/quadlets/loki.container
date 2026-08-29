@@ -1,0 +1,17 @@
+[Unit]
+Description=Local Loki log store
+
+[Container]
+Image=docker.io/grafana/loki@sha256:a7280d594e8d49e9d123a06a4baeea95f3a7d1d4e8a7ff134b4f3d2c8d9a8e7d
+ContainerName=loki
+Network=observability.network
+PublishPort=127.0.0.1:3100:3100
+Volume=/home/clanker/projects/nice/observability/loki.yaml:/etc/loki/config.yaml:ro
+Volume=loki-data.volume:/loki:U
+Exec=-config.file=/etc/loki/config.yaml
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

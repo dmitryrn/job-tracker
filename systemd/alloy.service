@@ -1,0 +1,12 @@
+[Unit]
+Description=Jobs journal collector
+Requires=loki.service
+After=loki.service
+
+[Service]
+ExecStart=/usr/bin/sg adm -c "/home/clanker/.local/bin/alloy run --disable-reporting --storage.path=/home/clanker/.local/share/alloy /home/clanker/projects/nice/observability/alloy.alloy"
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

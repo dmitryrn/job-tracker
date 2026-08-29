@@ -1,0 +1,13 @@
+loki.write "local" {
+  endpoint {
+    url = "http://127.0.0.1:3100/loki/api/v1/push"
+  }
+}
+
+loki.source.journal "jobs" {
+  forward_to = [loki.write.local.receiver]
+  path       = "/run/log/journal/049f7da948384f0f9527a1f13fa595c7"
+  matches    = "_SYSTEMD_USER_UNIT=jobs.service"
+  labels     = {service = "jobs"}
+  max_age    = "24h"
+}

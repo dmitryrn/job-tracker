@@ -1,0 +1,27 @@
+[Unit]
+Description=Grafana observability UI
+Requires=loki.service
+After=loki.service
+
+[Container]
+Image=docker.io/grafana/grafana@sha256:de942b207d876d0e0cb7365b284e3230c7b9fa9f2737079b70371bdfb6898c7f
+ContainerName=grafana
+Network=observability.network
+PublishPort=10.8.0.4:3000:3000
+Secret=grafana_admin_password,target=grafana_admin_password,uid=472,gid=0,mode=0400
+Environment=GF_SECURITY_ADMIN_USER=admin
+Environment=GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
+Environment=GF_USERS_ALLOW_SIGN_UP=false
+Environment=GF_AUTH_ANONYMOUS_ENABLED=false
+Environment=GF_ANALYTICS_REPORTING_ENABLED=false
+Environment=GF_ANALYTICS_CHECK_FOR_UPDATES=false
+Environment=GF_PLUGINS_PREINSTALL_DISABLED=true
+Environment=GF_SERVER_ROOT_URL=http://10.8.0.4:3000/
+Volume=/home/clanker/projects/nice/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+Volume=grafana-data.volume:/var/lib/grafana:U
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
