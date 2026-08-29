@@ -14,6 +14,7 @@ import (
 )
 
 const noOpMatchContent = "Match analysis has not been implemented yet."
+const jobMatchRetryInterval = 30 * time.Second
 
 var ErrMatchJobNotFound = errors.New("job not found")
 
@@ -53,7 +54,7 @@ func (processor *JobMatchProcessor) Register(lifecycle fx.Lifecycle) {
 			ctx, cancel := context.WithCancel(context.Background())
 			processor.cancel = cancel
 			processor.done = make(chan struct{})
-			processor.logger.Info("job match processor started", zap.Duration("idle_retry_interval", time.Minute))
+			processor.logger.Info("job match processor started", zap.Duration("idle_retry_interval", jobMatchRetryInterval))
 			go processor.run(ctx)
 			return nil
 		},
@@ -70,6 +71,7 @@ func (processor *JobMatchProcessor) Register(lifecycle fx.Lifecycle) {
 			case <-done:
 				return nil
 			case <-ctx.Done():
+				processor.logger.Error("job match processor shutdown timed out", zap.Error(ctx.Err()))
 				return ctx.Err()
 			}
 		},
@@ -80,14 +82,11 @@ func (processor *JobMatchProcessor) run(ctx context.Context) {
 	defer close(processor.done)
 	for {
 		worked, err := processor.process(ctx)
-		if err != nil {
-			processor.logger.Error("process job match request failed", zap.Error(err))
-		}
 		if worked && err == nil {
 			continue
 		}
 
-		timer := time.NewTimer(time.Minute)
+		timer := time.NewTimer(jobMatchRetryInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -109,14 +108,17 @@ func (processor *JobMatchProcessor) Wake() {
 func (processor *JobMatchProcessor) process(ctx context.Context) (bool, error) {
 	profile, err := processor.repository.UserProfile(ctx)
 	if err != nil {
+		processor.logger.Error("load user profile for job matching failed", zap.Error(err))
 		return false, err
 	}
 	if profile == nil {
+		processor.logger.Warn("job match worker waiting for user profile")
 		return false, nil
 	}
 
 	queue, err := processor.repository.MatchQueue(ctx)
 	if err != nil {
+		processor.logger.Error("load job match queue failed", zap.Error(err))
 		return false, err
 	}
 	if len(queue) == 0 {
@@ -125,7 +127,16 @@ func (processor *JobMatchProcessor) process(ctx context.Context) (bool, error) {
 	return true, processor.processJob(ctx, queue[0], *profile)
 }
 
-func (processor *JobMatchProcessor) processJob(ctx context.Context, job models.BrowseJob, profile models.UserProfile) error {
+func (processor *JobMatchProcessor) processJob(ctx context.Context, job models.BrowseJob, profile models.UserProfile) (err error) {
+	processor.logger.Info("job match worker executing", zap.Int64("job_id", job.ID))
+	defer func() {
+		if err != nil {
+			processor.logger.Error("job match worker failed", zap.Int64("job_id", job.ID), zap.Error(err))
+			return
+		}
+		processor.logger.Info("job match worker finished successfully", zap.Int64("job_id", job.ID))
+	}()
+
 	exists, err := processor.repository.JobMatchExists(ctx, job.ID)
 	if err != nil {
 		return err

@@ -28,6 +28,8 @@ changing a unit definition. Read recent service logs with
 - don't hallucinate lib versions when adding
 - add spacing between code blocks as per clean code, for readability
 - handlers should log all errors, including service errors
+- worker execution paths should log all outcomes, including early returns, successes, and errors, with relevant IDs and context
+- tests should assert behavior, not log output
 - run tests, build after making code changes
 - verify Go builds with `go build -o /dev/null ./cmd/server` to avoid build artifacts
 - live analyzer fixtures may use available free OpenRouter models; authentication loads from `.env.tokens` at runtime

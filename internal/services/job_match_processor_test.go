@@ -53,6 +53,31 @@ func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
 	assert.Equal(t, 1, matcher.calls)
 }
 
+func TestJobMatchProcessorWaitsForProfile(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "example", SourceID: "job-1", SourceURL: "https://example.com/jobs/1", Title: "Backend Engineer", BodyText: "Build APIs.", Workplace: "remote", MetadataJSON: "{}",
+	}}))
+	found, err := repository.QueueJobMatch(context.Background(), 1, false)
+	require.NoError(t, err)
+	require.True(t, found)
+
+	matcher := &recordingProfileJobMatcher{content: "unused"}
+	processor := NewJobMatchProcessor(repository, matcher, zap.NewNop())
+	worked, err := processor.process(context.Background())
+	require.NoError(t, err)
+	require.False(t, worked)
+	assert.Zero(t, matcher.calls)
+	queue, err := repository.MatchQueue(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, queue, 1)
+}
+
 func TestJobMatchProcessorKeepsFailedRequestInQueue(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
