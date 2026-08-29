@@ -31,6 +31,10 @@ func main() {
 			repositories.NewSQLite,
 			services.NewJobSync,
 			services.NewJobBrowse,
+			services.NewUserProfileService,
+			services.NewNoOpProfileJobMatcher,
+			services.NewJobMatchProcessor,
+			services.NewJobMatches,
 			server.New,
 		),
 		fx.Invoke(registerLifecycle),
@@ -43,6 +47,7 @@ func registerLifecycle(
 	logger *zap.Logger,
 	server *server.Server,
 	sync *services.JobSync,
+	matchProcessor *services.JobMatchProcessor,
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStop: func(context.Context) error {
@@ -53,6 +58,7 @@ func registerLifecycle(
 	})
 	server.Register(lifecycle)
 	sync.Register(lifecycle)
+	matchProcessor.Register(lifecycle)
 }
 
 func newLogger() (*zap.Logger, error) {

@@ -84,6 +84,43 @@ button { cursor: pointer; }
 .danger-action { background: transparent; border: 1px solid #bd4d38; border-radius: 4px; color: #a43d2d; padding: 8px 10px; }
 .danger-action:hover { background: #fff0ed; }
 .danger-action:disabled { cursor: wait; opacity: .65; }
+.profile-page, .job-page { margin: 0 auto; max-width: 960px; }
+.profile-header, .job-page-header { align-items: end; border-bottom: 1px solid #d6d5d0; display: flex; gap: 24px; justify-content: space-between; padding-bottom: 22px; }
+.profile-header h1, .job-page-header h1 { max-width: 690px; }
+.profile-header > div > p:last-child, .job-page-header > div > p:last-child { color: #65758a; margin: 13px 0 0; }
+.profile-form { display: grid; gap: 26px; margin-top: 28px; }
+.profile-section { background: #fff; border: 1px solid #dedcd5; border-radius: 7px; padding: 22px; }
+.profile-section h2 { font-family: Georgia, serif; font-size: 23px; font-weight: 400; margin: 0; }
+.profile-section p { color: #65758a; font-size: 13px; line-height: 1.5; margin: 7px 0 0; }
+.profile-fields { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; }
+.profile-form label { color: #4b6075; display: grid; font-size: 12px; font-weight: 700; gap: 6px; }
+.profile-form input, .profile-form textarea, .profile-form select { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; min-width: 0; padding: 10px; width: 100%; }
+.profile-form textarea { line-height: 1.5; resize: vertical; }
+.profile-summary { margin-top: 16px; }
+.profile-section-heading { align-items: start; display: flex; gap: 18px; justify-content: space-between; }
+.secondary-action, .save-profile { background: #263d56; border: 0; border-radius: 4px; color: #fff; padding: 9px 12px; }
+.secondary-action:hover, .save-profile:hover { background: #1c3047; }
+.skill-editor { display: grid; gap: 12px; margin-top: 18px; }
+.skill-row { align-items: end; background: #f8f8f5; border: 1px solid #e4e1d9; display: grid; gap: 10px; grid-template-columns: minmax(120px, .9fr) minmax(110px, .6fr) minmax(180px, 1.8fr) auto; padding: 12px; }
+.remove-skill { background: transparent; border: 0; color: #a43d2d; font-size: 12px; padding: 10px 4px; }
+.remove-skill:hover { text-decoration: underline; }
+.profile-empty { background: #f8f8f5; border: 1px dashed #cbd2d7; margin-top: 18px !important; padding: 17px; }
+.profile-actions { align-items: center; display: flex; gap: 14px; justify-content: end; }
+.save-profile:disabled { cursor: wait; opacity: .65; }
+.profile-actions span { color: #65758a; font-size: 12px; }
+.back-link { background: transparent; border: 0; color: #a26d20; font-weight: 700; margin: 0 0 18px; padding: 0; }
+.back-link:hover { text-decoration: underline; }
+.job-page-header h1 { margin-top: 0; }
+.job-page-header > div > p:last-child { color: #496178; font-weight: 700; }
+.job-page-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+.job-page-meta span { background: #e9edf0; border-radius: 3px; color: #4b6075; font-size: 12px; padding: 6px 8px; }
+.detail-tabs { border-bottom: 1px solid #d6d5d0; display: flex; gap: 5px; margin-top: 26px; }
+.detail-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: #68758a; font-size: 13px; padding: 10px 12px; }
+.detail-tab:hover, .detail-tab.active { border-bottom-color: #e5ac4c; color: #1a2638; }
+.job-post, .match-panel { background: #fff; border: 1px solid #dedcd5; color: #304860; font-size: 14px; line-height: 1.65; margin: 22px 0; padding: 22px; white-space: pre-wrap; }
+.match-panel { white-space: normal; }
+.match-panel p:last-child { margin: 8px 0 0; }
+.job-page-actions { border-top: 1px solid #d6d5d0; margin-top: 28px; padding-top: 18px; }
 header { align-items: end; border-bottom: 1px solid #d6d5d0; display: flex; justify-content: space-between; padding-bottom: 22px; }
 h1 { font-family: Georgia, serif; font-size: clamp(31px, 4vw, 48px); font-weight: 400; line-height: 1; margin: 0; }
 .limit { font-size: 13px; margin: 0; max-width: 250px; text-align: right; }
@@ -138,6 +175,11 @@ tr:hover td { background: #fffbed; }
   .job-dialog-meta { padding: 14px 16px 0; }
   .job-description { margin: 16px; }
   .job-dialog-actions { margin: 0 16px 18px; }
+  .profile-header, .job-page-header { align-items: start; flex-direction: column; }
+  .profile-fields { grid-template-columns: 1fr; }
+  .skill-row { grid-template-columns: 1fr; }
+  .profile-section-heading { flex-direction: column; }
+  .profile-actions { align-items: end; flex-direction: column; }
   .value-dialog-header { padding: 15px 16px; }
   .value-dialog pre { font-size: 13px; padding: 16px; }
 }

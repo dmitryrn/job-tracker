@@ -43,3 +43,9 @@ type BrowseCompany struct {
 	JobCount   int64  `json:"jobCount"`
 	LastSeenAt string `json:"lastSeenAt"`
 }
+
+type JobMatchRecord struct {
+	JobID     int64  `json:"jobId"`
+	Content   string `json:"content"`
+	CreatedAt string `json:"createdAt"`
+}

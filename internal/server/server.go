@@ -20,13 +20,16 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, profile *services.UserProfileService, matches *services.JobMatches) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
 	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))
 	mux.HandleFunc("GET /api/companies", companiesHandler(browse, logger))
+	mux.HandleFunc("GET /api/profile", profileHandler(profile, logger))
+	mux.HandleFunc("PUT /api/profile", saveProfileHandler(profile, logger))
 	mux.HandleFunc("OPTIONS /api/{path...}", optionsHandler)
 
 	return &Server{
@@ -35,6 +38,36 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse) *Ser
 			Handler: cors(mux),
 		},
 		logger: logger,
+	}
+}
+
+func profileHandler(profile *services.UserProfileService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		userProfile, err := profile.Profile(request.Context())
+		if err != nil {
+			logger.Error("load user profile failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load profile")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"profile": userProfile})
+	}
+}
+
+func saveProfileHandler(profile *services.UserProfileService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var userProfile models.UserProfile
+		if err := json.NewDecoder(request.Body).Decode(&userProfile); err != nil {
+			logger.Warn("invalid user profile", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "profile must be valid JSON")
+			return
+		}
+		savedProfile, err := profile.Save(request.Context(), userProfile)
+		if err != nil {
+			logger.Error("save user profile failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not save profile")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"profile": savedProfile})
 	}
 }
 
@@ -81,6 +114,24 @@ func deleteJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 	}
 }
 
+func jobMatchHandler(matches *services.JobMatches, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		match, err := matches.Match(request.Context(), id)
+		if err != nil {
+			logger.Error("load job match failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load job match")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"match": match})
+	}
+}
+
 func providersHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		providers, err := browse.Providers(request.Context())
@@ -108,7 +159,7 @@ func companiesHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Access-Control-Allow-Origin", "*")
-		writer.Header().Set("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS")
+		writer.Header().Set("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
 		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		next.ServeHTTP(writer, request)
 	})

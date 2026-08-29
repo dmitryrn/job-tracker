@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,6 +21,12 @@ type JobRepository interface {
 	Delete(context.Context, int64) (bool, error)
 	Providers(context.Context) ([]string, error)
 	Companies(context.Context, string) ([]models.BrowseCompany, error)
+	UserProfile(context.Context) (*models.UserProfile, error)
+	SaveUserProfile(context.Context, models.UserProfile) (models.UserProfile, error)
+	JobsWithoutMatches(context.Context, int) ([]models.BrowseJob, error)
+	JobMatchExists(context.Context, int64) (bool, error)
+	CreateJobMatch(context.Context, int64, string) error
+	JobMatch(context.Context, int64) (*models.JobMatchRecord, error)
 }
 
 var sqlBuilder = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
@@ -247,6 +254,119 @@ func (repository *SQLite) Companies(ctx context.Context, search string) ([]model
 		return nil, fmt.Errorf("iterate companies: %w", err)
 	}
 	return companies, nil
+}
+
+func (repository *SQLite) UserProfile(ctx context.Context) (*models.UserProfile, error) {
+	var profile models.UserProfile
+	var skills string
+	err := repository.db.QueryRowContext(ctx, `
+		SELECT id, name, headline, location, work_authorization, summary, skills_json, updated_at
+		FROM user_profiles WHERE id = 1`,
+	).Scan(&profile.ID, &profile.Name, &profile.Headline, &profile.Location, &profile.WorkAuthorization, &profile.Summary, &skills, &profile.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get user profile: %w", err)
+	}
+	if err := json.Unmarshal([]byte(skills), &profile.Skills); err != nil {
+		return nil, fmt.Errorf("decode user profile skills: %w", err)
+	}
+	return &profile, nil
+}
+
+func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.UserProfile) (models.UserProfile, error) {
+	skills, err := json.Marshal(profile.Skills)
+	if err != nil {
+		return models.UserProfile{}, fmt.Errorf("encode user profile skills: %w", err)
+	}
+	profile.ID = 1
+	profile.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	_, err = repository.db.ExecContext(ctx, `
+		INSERT INTO user_profiles (id, name, headline, location, work_authorization, summary, skills_json, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			headline = excluded.headline,
+			location = excluded.location,
+			work_authorization = excluded.work_authorization,
+			summary = excluded.summary,
+			skills_json = excluded.skills_json,
+			updated_at = excluded.updated_at`,
+		profile.ID, profile.Name, profile.Headline, profile.Location, profile.WorkAuthorization, profile.Summary, string(skills), profile.UpdatedAt,
+	)
+	if err != nil {
+		return models.UserProfile{}, fmt.Errorf("save user profile: %w", err)
+	}
+	return profile, nil
+}
+
+func (repository *SQLite) JobsWithoutMatches(ctx context.Context, limit int) ([]models.BrowseJob, error) {
+	if limit < 1 {
+		return []models.BrowseJob{}, nil
+	}
+	rows, err := repository.db.QueryContext(ctx, `
+		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
+			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
+			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text
+		FROM jobs
+		LEFT JOIN companies ON companies.id = jobs.company_id
+		LEFT JOIN job_matches ON job_matches.job_id = jobs.id
+		WHERE job_matches.job_id IS NULL
+		ORDER BY jobs.posted_at DESC, jobs.id DESC
+		LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query jobs without matches: %w", err)
+	}
+	defer rows.Close()
+
+	jobs := make([]models.BrowseJob, 0)
+	for rows.Next() {
+		var job models.BrowseJob
+		if err := rows.Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company,
+			&job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
+			&job.PostedAt, &job.BodyText); err != nil {
+			return nil, fmt.Errorf("scan job without match: %w", err)
+		}
+		jobs = append(jobs, job)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate jobs without matches: %w", err)
+	}
+	return jobs, nil
+}
+
+func (repository *SQLite) JobMatchExists(ctx context.Context, jobID int64) (bool, error) {
+	var exists bool
+	if err := repository.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM job_matches WHERE job_id = ?)`, jobID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check job match: %w", err)
+	}
+	return exists, nil
+}
+
+func (repository *SQLite) CreateJobMatch(ctx context.Context, jobID int64, content string) error {
+	_, err := repository.db.ExecContext(ctx, `
+		INSERT INTO job_matches (job_id, content, created_at) VALUES (?, ?, ?)`,
+		jobID, content, time.Now().UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("create job match: %w", err)
+	}
+	return nil
+}
+
+func (repository *SQLite) JobMatch(ctx context.Context, jobID int64) (*models.JobMatchRecord, error) {
+	var match models.JobMatchRecord
+	err := repository.db.QueryRowContext(ctx, `
+		SELECT job_id, content, created_at FROM job_matches WHERE job_id = ?`, jobID,
+	).Scan(&match.JobID, &match.Content, &match.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get job match: %w", err)
+	}
+	return &match, nil
 }
 
 func upsertCompany(ctx context.Context, transaction *sql.Tx, name, now string) (any, error) {

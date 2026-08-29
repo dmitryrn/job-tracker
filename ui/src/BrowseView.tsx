@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { deleteJob, fetchCompanies, fetchJobs, fetchProviders, type BrowseCompany, type BrowseJob } from "./api";
+import { useEffect, useState } from "react";
+import { fetchCompanies, fetchJobs, fetchProviders, type BrowseCompany, type BrowseJob } from "./api";
 
 export type BrowseMode = "jobs" | "companies";
 
 type BrowseViewProps = {
   mode: BrowseMode;
   onModeChange: (mode: BrowseMode) => void;
+  onOpenJob: (job: BrowseJob) => void;
 };
 
 const searchFieldOptions = [
@@ -91,7 +92,7 @@ function CompanyCard({ company }: { company: BrowseCompany }) {
   );
 }
 
-export default function BrowseView({ mode, onModeChange }: BrowseViewProps) {
+export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseViewProps) {
   const [search, setSearch] = useState("");
   const [provider, setProvider] = useState("");
   const [searchFields, setSearchFields] = useState(searchFieldOptions.map(({ value }) => value));
@@ -100,9 +101,6 @@ export default function BrowseView({ mode, onModeChange }: BrowseViewProps) {
   const [companies, setCompanies] = useState<BrowseCompany[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<BrowseJob>();
-  const jobDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -136,32 +134,8 @@ export default function BrowseView({ mode, onModeChange }: BrowseViewProps) {
     return () => controller.abort();
   }, [mode, provider, search, searchFields]);
 
-  useEffect(() => {
-    const dialog = jobDialog.current;
-    if (selectedJob && dialog && !dialog.open) {
-      dialog.showModal();
-    }
-  }, [selectedJob]);
-
   function toggleSearchField(field: string, checked: boolean) {
     setSearchFields((current) => checked ? [...current, field] : current.filter((value) => value !== field));
-  }
-
-  async function removeSelectedJob() {
-    if (!selectedJob || !window.confirm(`Delete ${selectedJob.title} from the database?`)) {
-      return;
-    }
-    setDeleting(true);
-    try {
-      await deleteJob(selectedJob.id);
-      setJobs((current) => current.filter((job) => job.id !== selectedJob.id));
-      setSelectedJob(undefined);
-      setError("");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not delete job");
-    } finally {
-      setDeleting(false);
-    }
   }
 
   return (
@@ -218,7 +192,7 @@ export default function BrowseView({ mode, onModeChange }: BrowseViewProps) {
       {loading && <p className="browse-loading">Loading...</p>}
       {mode === "jobs" ? (
         <div className="job-grid">
-          {jobs.map((job) => <JobCard key={job.id} job={job} onOpen={() => setSelectedJob(job)} />)}
+          {jobs.map((job) => <JobCard key={job.id} job={job} onOpen={() => onOpenJob(job)} />)}
         </div>
       ) : (
         <div className="company-grid">
@@ -227,39 +201,6 @@ export default function BrowseView({ mode, onModeChange }: BrowseViewProps) {
       )}
       {!loading && !error && mode === "jobs" && jobs.length === 0 && <p className="empty browse-empty">No roles match this search.</p>}
       {!loading && !error && mode === "companies" && companies.length === 0 && <p className="empty browse-empty">No companies match this search.</p>}
-
-      {selectedJob && (
-        <dialog
-          aria-labelledby="job-dialog-title"
-          className="job-dialog"
-          onCancel={() => setSelectedJob(undefined)}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setSelectedJob(undefined);
-            }
-          }}
-          ref={jobDialog}
-        >
-          <div className="job-dialog-header">
-            <div>
-              <p className="eyebrow">{selectedJob.source} / {formatDate(selectedJob.postedAt)}</p>
-              <h2 id="job-dialog-title">{selectedJob.title}</h2>
-              <p>{selectedJob.company || "Company not listed"}</p>
-            </div>
-            <button type="button" className="dialog-close" onClick={() => setSelectedJob(undefined)}>Close</button>
-          </div>
-          <div className="job-dialog-meta">
-            <span>{selectedJob.location || "Location flexible"}</span>
-            <span>{selectedJob.employmentType || "Role type not listed"}</span>
-            <span>{formatSalary(selectedJob)}</span>
-          </div>
-          <p className="job-description">{plainText(selectedJob.bodyText)}</p>
-            <div className="job-dialog-actions">
-              <a className="primary-action" href={selectedJob.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
-              <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeSelectedJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
-            </div>
-        </dialog>
-      )}
     </section>
   );
 }

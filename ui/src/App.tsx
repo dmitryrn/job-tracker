@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import initSqlJs, { type Database } from "sql.js";
 import sqlWasm from "sql.js/dist/sql-wasm.wasm?url";
 import BrowseView, { type BrowseMode } from "./BrowseView";
+import JobDetailView from "./JobDetailView";
+import ProfileView from "./ProfileView";
+import type { BrowseJob } from "./api";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
 import "./styles.css";
 
-type View = BrowseMode | "explorer";
+type View = BrowseMode | "explorer" | "profile" | "job";
 
 function databaseURL() {
   const configured = import.meta.env.VITE_DATABASE_URL;
@@ -57,6 +60,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [selectedValue, setSelectedValue] = useState<{ column: string; value: unknown }>();
   const [view, setView] = useState<View>("jobs");
+  const [selectedJob, setSelectedJob] = useState<BrowseJob>();
   const valueDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -148,8 +152,9 @@ export default function App() {
       <header className="app-header">
         <div className="brand"><span>J</span><div><strong>Jobs</strong><small>Remote work, better sorted</small></div></div>
         <nav className="app-nav" aria-label="Application navigation">
-          <button className={view === "explorer" ? "app-nav-link" : "app-nav-link active"} onClick={() => setView("jobs")}>UI browser</button>
-          <button className={view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("explorer")}>DB browser</button>
+            <button className={view === "jobs" || view === "companies" || view === "job" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("jobs")}>Jobs</button>
+            <button className={view === "profile" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("profile")}>Profile</button>
+            <button className={view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("explorer")}>DB browser</button>
         </nav>
       </header>
       {view === "explorer" && database && (
@@ -170,8 +175,12 @@ export default function App() {
       )}
 
       <section className="workspace">
-        {view !== "explorer" ? (
-          <BrowseView mode={view} onModeChange={setView} />
+        {view === "jobs" || view === "companies" ? (
+          <BrowseView mode={view} onModeChange={setView} onOpenJob={(job) => { setSelectedJob(job); setView("job"); }} />
+        ) : view === "profile" ? (
+          <ProfileView />
+        ) : view === "job" && selectedJob ? (
+          <JobDetailView job={selectedJob} onBack={() => setView("jobs")} onDeleted={() => { setSelectedJob(undefined); setView("jobs"); }} />
         ) : loading || !database ? (
           <p className="state browse-state">Downloading and opening the SQLite database...</p>
         ) : (

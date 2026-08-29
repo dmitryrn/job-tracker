@@ -1,5 +1,22 @@
 package models
 
+type UserProfile struct {
+	ID                int64              `json:"id"`
+	Name              string             `json:"name"`
+	Headline          string             `json:"headline"`
+	Location          string             `json:"location"`
+	WorkAuthorization string             `json:"workAuthorization"`
+	Summary           string             `json:"summary"`
+	Skills            []UserProfileSkill `json:"skills"`
+	UpdatedAt         string             `json:"updatedAt"`
+}
+
+type UserProfileSkill struct {
+	Name  string `json:"name"`
+	Level string `json:"level"`
+	Notes string `json:"notes"`
+}
+
 type CVProfileDraft struct {
 	Name              string              `json:"name"`
 	Headline          string              `json:"headline"`
