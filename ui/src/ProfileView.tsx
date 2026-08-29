@@ -3,7 +3,6 @@ import { fetchProfile, saveProfile, type UserProfile } from "./api";
 
 const emptyProfile: UserProfile = {
   id: 1,
-  name: "",
   headline: "",
   location: "",
   workAuthorization: "",
@@ -83,7 +82,6 @@ export default function ProfileView() {
           <section className="profile-section">
             <h2>Basics</h2>
             <div className="profile-fields">
-              <label>Name<input value={profile.name} onChange={(event) => updateField("name", event.target.value)} /></label>
               <label>Professional headline<input value={profile.headline} onChange={(event) => updateField("headline", event.target.value)} placeholder="Senior backend engineer" /></label>
               <label>Location<input value={profile.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Berlin, Germany" /></label>
               <label>Work authorization<input value={profile.workAuthorization} onChange={(event) => updateField("workAuthorization", event.target.value)} placeholder="Eligible to work in the EU" /></label>

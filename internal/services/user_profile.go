@@ -21,7 +21,6 @@ func (service *UserProfileService) Profile(ctx context.Context) (*models.UserPro
 }
 
 func (service *UserProfileService) Save(ctx context.Context, profile models.UserProfile) (models.UserProfile, error) {
-	profile.Name = strings.TrimSpace(profile.Name)
 	profile.Headline = strings.TrimSpace(profile.Headline)
 	profile.Location = strings.TrimSpace(profile.Location)
 	profile.WorkAuthorization = strings.TrimSpace(profile.WorkAuthorization)

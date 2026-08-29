@@ -31,6 +31,10 @@ func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) ([]m
 	return browse.repository.List(ctx, search)
 }
 
+func (browse *JobBrowse) Job(ctx context.Context, id int64) (*models.BrowseJob, error) {
+	return browse.repository.Job(ctx, id)
+}
+
 func (browse *JobBrowse) DeleteJob(ctx context.Context, id int64) (bool, error) {
 	return browse.repository.Delete(ctx, id)
 }

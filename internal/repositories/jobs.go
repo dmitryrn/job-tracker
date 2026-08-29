@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ type JobRepository interface {
 	StartProviderRun(context.Context, string, time.Duration, time.Time) (bool, error)
 	CompleteProviderRun(context.Context, string, error, time.Time) error
 	List(context.Context, models.JobSearch) ([]models.BrowseJob, error)
+	Job(context.Context, int64) (*models.BrowseJob, error)
 	Delete(context.Context, int64) (bool, error)
 	Providers(context.Context) ([]string, error)
 	Companies(context.Context, string) ([]models.BrowseCompany, error)
@@ -27,6 +29,11 @@ type JobRepository interface {
 	JobMatchExists(context.Context, int64) (bool, error)
 	CreateJobMatch(context.Context, int64, string) error
 	JobMatch(context.Context, int64) (*models.JobMatchRecord, error)
+	MatchQueue(context.Context) ([]models.BrowseJob, error)
+	QueueJobMatch(context.Context, int64, bool) (bool, error)
+	ReplaceMatchQueue(context.Context, []int64) (bool, error)
+	RemoveMatchRequest(context.Context, int64) error
+	CompleteMatchRequest(context.Context, int64, string) error
 }
 
 var sqlBuilder = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
@@ -184,18 +191,38 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) ([]
 	return jobs, nil
 }
 
+func (repository *SQLite) Job(ctx context.Context, id int64) (*models.BrowseJob, error) {
+	return repository.job(ctx, repository.db, id)
+}
+
 func (repository *SQLite) Delete(ctx context.Context, id int64) (bool, error) {
-	statement, args, err := sqlBuilder.Delete("jobs").Where(squirrel.Eq{"id": id}).ToSql()
+	transaction, err := repository.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, fmt.Errorf("build delete job query: %w", err)
+		return false, fmt.Errorf("begin delete job transaction: %w", err)
 	}
-	result, err := repository.db.ExecContext(ctx, statement, args...)
+	defer transaction.Rollback()
+
+	queue, err := readMatchQueue(ctx, transaction)
+	if err != nil {
+		return false, err
+	}
+	if updatedQueue, removed := removeAllMatchRequests(queue, id); removed {
+		queue = updatedQueue
+		if err := writeMatchQueue(ctx, transaction, queue); err != nil {
+			return false, err
+		}
+	}
+
+	result, err := transaction.ExecContext(ctx, `DELETE FROM jobs WHERE id = ?`, id)
 	if err != nil {
 		return false, fmt.Errorf("delete job: %w", err)
 	}
 	deleted, err := result.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("count deleted jobs: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return false, fmt.Errorf("commit delete job: %w", err)
 	}
 	return deleted > 0, nil
 }
@@ -260,9 +287,9 @@ func (repository *SQLite) UserProfile(ctx context.Context) (*models.UserProfile,
 	var profile models.UserProfile
 	var skills string
 	err := repository.db.QueryRowContext(ctx, `
-		SELECT id, name, headline, location, work_authorization, summary, skills_json, updated_at
+		SELECT id, headline, location, work_authorization, summary, skills_json, updated_at
 		FROM user_profiles WHERE id = 1`,
-	).Scan(&profile.ID, &profile.Name, &profile.Headline, &profile.Location, &profile.WorkAuthorization, &profile.Summary, &skills, &profile.UpdatedAt)
+	).Scan(&profile.ID, &profile.Headline, &profile.Location, &profile.WorkAuthorization, &profile.Summary, &skills, &profile.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -283,17 +310,16 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 	profile.ID = 1
 	profile.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	_, err = repository.db.ExecContext(ctx, `
-		INSERT INTO user_profiles (id, name, headline, location, work_authorization, summary, skills_json, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO user_profiles (id, headline, location, work_authorization, summary, skills_json, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			name = excluded.name,
 			headline = excluded.headline,
 			location = excluded.location,
 			work_authorization = excluded.work_authorization,
 			summary = excluded.summary,
 			skills_json = excluded.skills_json,
 			updated_at = excluded.updated_at`,
-		profile.ID, profile.Name, profile.Headline, profile.Location, profile.WorkAuthorization, profile.Summary, string(skills), profile.UpdatedAt,
+		profile.ID, profile.Headline, profile.Location, profile.WorkAuthorization, profile.Summary, string(skills), profile.UpdatedAt,
 	)
 	if err != nil {
 		return models.UserProfile{}, fmt.Errorf("save user profile: %w", err)
@@ -367,6 +393,200 @@ func (repository *SQLite) JobMatch(ctx context.Context, jobID int64) (*models.Jo
 		return nil, fmt.Errorf("get job match: %w", err)
 	}
 	return &match, nil
+}
+
+func (repository *SQLite) MatchQueue(ctx context.Context) ([]models.BrowseJob, error) {
+	queue, err := readMatchQueue(ctx, repository.db)
+	if err != nil {
+		return nil, err
+	}
+	jobs := make([]models.BrowseJob, 0, len(queue))
+	for _, jobID := range queue {
+		job, err := repository.job(ctx, repository.db, jobID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, *job)
+	}
+	return jobs, nil
+}
+
+func (repository *SQLite) QueueJobMatch(ctx context.Context, jobID int64, redo bool) (bool, error) {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin queue match request: %w", err)
+	}
+	defer transaction.Rollback()
+
+	if _, err := repository.job(ctx, transaction, jobID); errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	if redo {
+		if _, err := transaction.ExecContext(ctx, `DELETE FROM job_matches WHERE job_id = ?`, jobID); err != nil {
+			return false, fmt.Errorf("delete job match for redo: %w", err)
+		}
+	}
+	queue, err := readMatchQueue(ctx, transaction)
+	if err != nil {
+		return false, err
+	}
+	queue = append([]int64{jobID}, queue...)
+	if err := writeMatchQueue(ctx, transaction, queue); err != nil {
+		return false, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return false, fmt.Errorf("commit queue match request: %w", err)
+	}
+	return true, nil
+}
+
+func (repository *SQLite) ReplaceMatchQueue(ctx context.Context, jobIDs []int64) (bool, error) {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin replace match queue: %w", err)
+	}
+	defer transaction.Rollback()
+	for _, jobID := range jobIDs {
+		if _, err := repository.job(ctx, transaction, jobID); errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+	}
+	if err := writeMatchQueue(ctx, transaction, jobIDs); err != nil {
+		return false, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return false, fmt.Errorf("commit replace match queue: %w", err)
+	}
+	return true, nil
+}
+
+func (repository *SQLite) RemoveMatchRequest(ctx context.Context, jobID int64) error {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin remove match request: %w", err)
+	}
+	defer transaction.Rollback()
+	queue, err := readMatchQueue(ctx, transaction)
+	if err != nil {
+		return err
+	}
+	if updatedQueue, removed := removeFirstMatchRequest(queue, jobID); removed {
+		queue = updatedQueue
+		if err := writeMatchQueue(ctx, transaction, queue); err != nil {
+			return err
+		}
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit remove match request: %w", err)
+	}
+	return nil
+}
+
+func (repository *SQLite) CompleteMatchRequest(ctx context.Context, jobID int64, content string) error {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin complete match request: %w", err)
+	}
+	defer transaction.Rollback()
+	queue, err := readMatchQueue(ctx, transaction)
+	if err != nil {
+		return err
+	}
+	updatedQueue, removed := removeFirstMatchRequest(queue, jobID)
+	if !removed {
+		return transaction.Commit()
+	}
+	queue = updatedQueue
+	if _, err := transaction.ExecContext(ctx, `
+		INSERT INTO job_matches (job_id, content, created_at) VALUES (?, ?, ?)
+		ON CONFLICT(job_id) DO UPDATE SET content = excluded.content, created_at = excluded.created_at`,
+		jobID, content, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return fmt.Errorf("save completed job match: %w", err)
+	}
+	if err := writeMatchQueue(ctx, transaction, queue); err != nil {
+		return err
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit completed match request: %w", err)
+	}
+	return nil
+}
+
+type queryRower interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+type matchQueueQuerier interface {
+	queryRower
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func (repository *SQLite) job(ctx context.Context, query queryRower, jobID int64) (*models.BrowseJob, error) {
+	var job models.BrowseJob
+	err := query.QueryRowContext(ctx, `
+		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
+			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
+			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text
+		FROM jobs LEFT JOIN companies ON companies.id = jobs.company_id WHERE jobs.id = ?`, jobID,
+	).Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company, &job.Location,
+		&job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax, &job.PostedAt, &job.BodyText)
+	if err != nil {
+		return nil, fmt.Errorf("get queued job: %w", err)
+	}
+	return &job, nil
+}
+
+func readMatchQueue(ctx context.Context, query queryRower) ([]int64, error) {
+	var raw string
+	if err := query.QueryRowContext(ctx, `SELECT job_ids_json FROM job_match_queue WHERE id = 1`).Scan(&raw); err != nil {
+		return nil, fmt.Errorf("read job match queue: %w", err)
+	}
+	queue := make([]int64, 0)
+	if err := json.Unmarshal([]byte(raw), &queue); err != nil {
+		return nil, fmt.Errorf("decode job match queue: %w", err)
+	}
+	return queue, nil
+}
+
+func writeMatchQueue(ctx context.Context, query matchQueueQuerier, queue []int64) error {
+	encoded, err := json.Marshal(queue)
+	if err != nil {
+		return fmt.Errorf("encode job match queue: %w", err)
+	}
+	if _, err := query.ExecContext(ctx, `UPDATE job_match_queue SET job_ids_json = ? WHERE id = 1`, string(encoded)); err != nil {
+		return fmt.Errorf("write job match queue: %w", err)
+	}
+	return nil
+}
+
+func removeFirstMatchRequest(queue []int64, jobID int64) ([]int64, bool) {
+	for index, queuedJobID := range queue {
+		if queuedJobID == jobID {
+			copy(queue[index:], queue[index+1:])
+			return queue[:len(queue)-1], true
+		}
+	}
+	return queue, false
+}
+
+func removeAllMatchRequests(queue []int64, jobID int64) ([]int64, bool) {
+	filtered := queue[:0]
+	removed := false
+	for _, queuedJobID := range queue {
+		if queuedJobID == jobID {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, queuedJobID)
+	}
+	return filtered, removed
 }
 
 func upsertCompany(ctx context.Context, transaction *sql.Tx, name, now string) (any, error) {

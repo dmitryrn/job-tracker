@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 )
 
 const noOpMatchContent = "Match analysis has not been implemented yet."
+
+var ErrMatchJobNotFound = errors.New("job not found")
 
 type ProfileJobMatcher interface {
 	Match(context.Context, models.BrowseJob, models.UserProfile) (string, error)
@@ -34,11 +37,12 @@ type JobMatchProcessor struct {
 	logger     *zap.Logger
 	cancel     context.CancelFunc
 	done       chan struct{}
+	wake       chan struct{}
 	mutex      sync.Mutex
 }
 
 func NewJobMatchProcessor(repository repositories.JobRepository, matcher ProfileJobMatcher, logger *zap.Logger) *JobMatchProcessor {
-	return &JobMatchProcessor{repository: repository, matcher: matcher, logger: logger}
+	return &JobMatchProcessor{repository: repository, matcher: matcher, logger: logger, wake: make(chan struct{}, 1)}
 }
 
 func (processor *JobMatchProcessor) Register(lifecycle fx.Lifecycle) {
@@ -49,7 +53,7 @@ func (processor *JobMatchProcessor) Register(lifecycle fx.Lifecycle) {
 			ctx, cancel := context.WithCancel(context.Background())
 			processor.cancel = cancel
 			processor.done = make(chan struct{})
-			processor.logger.Info("job match processor started", zap.Duration("check_interval", time.Minute))
+			processor.logger.Info("job match processor started", zap.Duration("idle_retry_interval", time.Minute))
 			go processor.run(ctx)
 			return nil
 		},
@@ -74,38 +78,51 @@ func (processor *JobMatchProcessor) Register(lifecycle fx.Lifecycle) {
 
 func (processor *JobMatchProcessor) run(ctx context.Context) {
 	defer close(processor.done)
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
 	for {
-		processor.process(ctx)
+		worked, err := processor.process(ctx)
+		if err != nil {
+			processor.logger.Error("process job match request failed", zap.Error(err))
+		}
+		if worked && err == nil {
+			continue
+		}
+
+		timer := time.NewTimer(time.Minute)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-processor.wake:
+			timer.Stop()
+		case <-timer.C:
 		}
 	}
 }
 
-func (processor *JobMatchProcessor) process(ctx context.Context) {
+func (processor *JobMatchProcessor) Wake() {
+	select {
+	case processor.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (processor *JobMatchProcessor) process(ctx context.Context) (bool, error) {
 	profile, err := processor.repository.UserProfile(ctx)
 	if err != nil {
-		processor.logger.Error("load user profile for matching failed", zap.Error(err))
-		return
+		return false, err
 	}
 	if profile == nil {
-		return
+		return false, nil
 	}
 
-	jobs, err := processor.repository.JobsWithoutMatches(ctx, 20)
+	queue, err := processor.repository.MatchQueue(ctx)
 	if err != nil {
-		processor.logger.Error("load jobs awaiting matches failed", zap.Error(err))
-		return
+		return false, err
 	}
-	for _, job := range jobs {
-		if err := processor.processJob(ctx, job, *profile); err != nil {
-			processor.logger.Error("create job match failed", zap.Int64("job_id", job.ID), zap.Error(err))
-		}
+	if len(queue) == 0 {
+		return false, nil
 	}
+	return true, processor.processJob(ctx, queue[0], *profile)
 }
 
 func (processor *JobMatchProcessor) processJob(ctx context.Context, job models.BrowseJob, profile models.UserProfile) error {
@@ -114,14 +131,14 @@ func (processor *JobMatchProcessor) processJob(ctx context.Context, job models.B
 		return err
 	}
 	if exists {
-		return nil
+		return processor.repository.RemoveMatchRequest(ctx, job.ID)
 	}
 
 	content, err := processor.matcher.Match(ctx, job, profile)
 	if err != nil {
 		return err
 	}
-	return processor.repository.CreateJobMatch(ctx, job.ID, content)
+	return processor.repository.CompleteMatchRequest(ctx, job.ID, content)
 }
 
 type JobMatches struct {
@@ -134,4 +151,41 @@ func NewJobMatches(repository repositories.JobRepository) *JobMatches {
 
 func (matches *JobMatches) Match(ctx context.Context, jobID int64) (*models.JobMatchRecord, error) {
 	return matches.repository.JobMatch(ctx, jobID)
+}
+
+type JobMatchRequests struct {
+	repository repositories.JobRepository
+	processor  *JobMatchProcessor
+}
+
+func NewJobMatchRequests(repository repositories.JobRepository, processor *JobMatchProcessor) *JobMatchRequests {
+	return &JobMatchRequests{repository: repository, processor: processor}
+}
+
+func (requests *JobMatchRequests) Queue(ctx context.Context, jobID int64, redo bool) error {
+	found, err := requests.repository.QueueJobMatch(ctx, jobID, redo)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrMatchJobNotFound
+	}
+	requests.processor.Wake()
+	return nil
+}
+
+func (requests *JobMatchRequests) List(ctx context.Context) ([]models.BrowseJob, error) {
+	return requests.repository.MatchQueue(ctx)
+}
+
+func (requests *JobMatchRequests) Reorder(ctx context.Context, jobIDs []int64) error {
+	found, err := requests.repository.ReplaceMatchQueue(ctx, jobIDs)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrMatchJobNotFound
+	}
+	requests.processor.Wake()
+	return nil
 }

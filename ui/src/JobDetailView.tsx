@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { deleteJob, fetchJobMatch, type BrowseJob, type JobMatch } from "./api";
+import { deleteJob, fetchJobMatch, queueJobMatch, type BrowseJob, type JobMatch } from "./api";
 
 type JobDetailViewProps = {
   job: BrowseJob;
+  tab: "post" | "match";
+  onTabChange: (tab: "post" | "match") => void;
   onBack: () => void;
   onDeleted: () => void;
 };
@@ -25,11 +27,12 @@ function formatSalary(job: BrowseJob) {
   return formatter.format(job.salaryMin ?? job.salaryMax ?? 0);
 }
 
-export default function JobDetailView({ job, onBack, onDeleted }: JobDetailViewProps) {
-  const [tab, setTab] = useState<"post" | "match">("post");
+export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted }: JobDetailViewProps) {
   const [match, setMatch] = useState<JobMatch | null>();
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [queueing, setQueueing] = useState(false);
+  const [queued, setQueued] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -39,6 +42,7 @@ export default function JobDetailView({ job, onBack, onDeleted }: JobDetailViewP
         if (!controller.signal.aborted) {
           setMatch(result.match);
           setError("");
+          setQueued(false);
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
@@ -64,6 +68,20 @@ export default function JobDetailView({ job, onBack, onDeleted }: JobDetailViewP
     }
   }
 
+  async function requestMatch(redo: boolean) {
+    setQueueing(true);
+    try {
+      await queueJobMatch(job.id, redo);
+      setMatch(null);
+      setQueued(true);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not queue match");
+    } finally {
+      setQueueing(false);
+    }
+  }
+
   return (
     <section className="job-page">
       <button type="button" className="back-link" onClick={onBack}>Back to jobs</button>
@@ -77,14 +95,15 @@ export default function JobDetailView({ job, onBack, onDeleted }: JobDetailViewP
       </header>
       <div className="job-page-meta"><span>{job.location || "Location flexible"}</span><span>{job.employmentType || "Role type not listed"}</span><span>{formatSalary(job)}</span></div>
       <nav className="detail-tabs" aria-label="Job details">
-        <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => setTab("post")}>Job post</button>
-        <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => setTab("match")}>Match</button>
+        <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("post")}>Job post</button>
+        <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>
       </nav>
       {error && <p className="query-error">{error}</p>}
       {tab === "post" ? <p className="job-post">{plainText(job.bodyText)}</p> : (
         <section className="match-panel">
           <p className="eyebrow">Current match</p>
-          {match === undefined ? <p>Loading match...</p> : match === null ? <p>This job is waiting for the background matcher. Save your profile first if you have not already.</p> : <p>{match.content}</p>}
+          {match === undefined ? <p>Loading match...</p> : match === null ? <p>{queued ? "Match request queued." : "No match yet."}</p> : <p>{match.content}</p>}
+          {match !== undefined && <button type="button" className="secondary-action" disabled={queueing} onClick={() => void requestMatch(match !== null)}>{queueing ? "Queueing..." : match === null ? "Create match" : "Redo match"}</button>}
         </section>
       )}
       <div className="job-page-actions"><button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button></div>

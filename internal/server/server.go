@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -20,12 +21,17 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, profile *services.UserProfileService, matches *services.JobMatches) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
+	mux.HandleFunc("GET /api/jobs/{id}", jobHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
+	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
+	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
+	mux.HandleFunc("GET /api/match-queue", matchQueueHandler(requests, logger))
+	mux.HandleFunc("PUT /api/match-queue", reorderMatchQueueHandler(requests, logger))
 	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))
 	mux.HandleFunc("GET /api/companies", companiesHandler(browse, logger))
 	mux.HandleFunc("GET /api/profile", profileHandler(profile, logger))
@@ -92,6 +98,28 @@ func jobsHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFun
 	}
 }
 
+func jobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		job, err := browse.Job(request.Context(), id)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(writer, http.StatusNotFound, "job not found")
+			return
+		}
+		if err != nil {
+			logger.Error("load job failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load job")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"job": job})
+	}
+}
+
 func deleteJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
@@ -132,6 +160,68 @@ func jobMatchHandler(matches *services.JobMatches, logger *zap.Logger) http.Hand
 	}
 }
 
+func queueJobMatchHandler(requests *services.JobMatchRequests, logger *zap.Logger, redo bool) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		if err := requests.Queue(request.Context(), id, redo); err != nil {
+			if errors.Is(err, services.ErrMatchJobNotFound) {
+				writeError(writer, http.StatusNotFound, "job not found")
+				return
+			}
+			logger.Error("queue job match failed", zap.Int64("id", id), zap.Bool("redo", redo), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not queue job match")
+			return
+		}
+		writeJSON(writer, http.StatusAccepted, map[string]bool{"queued": true})
+	}
+}
+
+func matchQueueHandler(requests *services.JobMatchRequests, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		queue, err := requests.List(request.Context())
+		if err != nil {
+			logger.Error("load job match queue failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load job match queue")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"jobs": queue})
+	}
+}
+
+func reorderMatchQueueHandler(requests *services.JobMatchRequests, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var body struct {
+			JobIDs []int64 `json:"jobIds"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			logger.Warn("invalid job match queue", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "jobIds must be valid JSON")
+			return
+		}
+		for _, id := range body.JobIDs {
+			if id < 1 {
+				writeError(writer, http.StatusBadRequest, "job IDs must be positive integers")
+				return
+			}
+		}
+		if err := requests.Reorder(request.Context(), body.JobIDs); err != nil {
+			if errors.Is(err, services.ErrMatchJobNotFound) {
+				writeError(writer, http.StatusNotFound, "a queued job was not found")
+				return
+			}
+			logger.Error("reorder job match queue failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not reorder job match queue")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]bool{"queued": true})
+	}
+}
+
 func providersHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		providers, err := browse.Providers(request.Context())
@@ -159,7 +249,7 @@ func companiesHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Access-Control-Allow-Origin", "*")
-		writer.Header().Set("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
+		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		next.ServeHTTP(writer, request)
 	})

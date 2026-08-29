@@ -35,6 +35,7 @@ func main() {
 			services.NewNoOpProfileJobMatcher,
 			services.NewJobMatchProcessor,
 			services.NewJobMatches,
+			services.NewJobMatchRequests,
 			server.New,
 		),
 		fx.Invoke(registerLifecycle),

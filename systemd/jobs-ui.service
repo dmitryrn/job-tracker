@@ -6,7 +6,8 @@ Wants=network-online.target jobs.service
 [Service]
 Type=simple
 WorkingDirectory=/home/clanker/projects/nice/ui
-ExecStart=/usr/bin/python3 -m http.server 4000 --bind 10.8.0.4 --directory dist
+Environment=PATH=/home/clanker/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/clanker/.nvm/versions/node/v24.19.0/bin/npm run preview -- --host 10.8.0.4 --port 4000
 Restart=on-failure
 RestartSec=5s
 

@@ -3,12 +3,37 @@ import initSqlJs, { type Database } from "sql.js";
 import sqlWasm from "sql.js/dist/sql-wasm.wasm?url";
 import BrowseView, { type BrowseMode } from "./BrowseView";
 import JobDetailView from "./JobDetailView";
+import MatchQueueView from "./MatchQueueView";
 import ProfileView from "./ProfileView";
-import type { BrowseJob } from "./api";
+import { fetchJob, type BrowseJob } from "./api";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
 import "./styles.css";
 
-type View = BrowseMode | "explorer" | "profile" | "job";
+type View = BrowseMode | "explorer" | "profile" | "match-queue";
+
+type Route = {
+  view: View;
+  jobID?: number;
+  tab?: "post" | "match";
+};
+
+function readRoute(): Route {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  if (parts[0] === "jobs" && /^\d+$/.test(parts[1] ?? "")) {
+    return { view: "jobs", jobID: Number(parts[1]), tab: parts[2] === "match" ? "match" : "post" };
+  }
+  if (parts[0] === "companies" || parts[0] === "profile" || parts[0] === "match-queue" || parts[0] === "database") {
+    return { view: parts[0] === "database" ? "explorer" : parts[0] };
+  }
+  return { view: "jobs" };
+}
+
+function routePath(route: Route) {
+  if (route.jobID) {
+    return `/jobs/${route.jobID}${route.tab === "match" ? "/match" : ""}`;
+  }
+  return route.view === "explorer" ? "/database" : `/${route.view}`;
+}
 
 function databaseURL() {
   const configured = import.meta.env.VITE_DATABASE_URL;
@@ -59,12 +84,34 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedValue, setSelectedValue] = useState<{ column: string; value: unknown }>();
-  const [view, setView] = useState<View>("jobs");
+  const [route, setRoute] = useState<Route>(readRoute);
   const [selectedJob, setSelectedJob] = useState<BrowseJob>();
+  const [jobLoading, setJobLoading] = useState(false);
+  const [jobError, setJobError] = useState("");
   const valueDialog = useRef<HTMLDialogElement>(null);
 
+  function navigate(nextRoute: Route) {
+    const path = routePath(nextRoute);
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, "", path);
+    }
+    setRoute(nextRoute);
+  }
+
   useEffect(() => {
-    if (view !== "explorer" || database) {
+    function onPopState() {
+      setRoute(readRoute());
+    }
+    window.addEventListener("popstate", onPopState);
+    if (window.location.pathname === "/") {
+      window.history.replaceState({}, "", "/jobs");
+      setRoute({ view: "jobs" });
+    }
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (route.view !== "explorer" || database) {
       return;
     }
     let active = true;
@@ -107,7 +154,37 @@ export default function App() {
       active = false;
       opened?.close();
     };
-  }, [database, view]);
+  }, [database, route.view]);
+
+  useEffect(() => {
+    if (!route.jobID) {
+      setSelectedJob(undefined);
+      setJobError("");
+      return;
+    }
+    const controller = new AbortController();
+    async function loadJob() {
+      setJobLoading(true);
+      try {
+        const result = await fetchJob(route.jobID!, controller.signal);
+        if (!controller.signal.aborted) {
+          setSelectedJob(result.job);
+          setJobError("");
+        }
+      } catch (reason) {
+        if (!controller.signal.aborted) {
+          setSelectedJob(undefined);
+          setJobError(reason instanceof Error ? reason.message : "Could not load job");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setJobLoading(false);
+        }
+      }
+    }
+    void loadJob();
+    return () => controller.abort();
+  }, [route.jobID]);
 
   useEffect(() => {
     if (!database || !selectedTable) {
@@ -143,21 +220,22 @@ export default function App() {
     );
   }
 
-  if (view === "explorer" && !loading && (!database || error && !selectedTable)) {
+  if (route.view === "explorer" && !loading && (!database || error && !selectedTable)) {
     return <main className="state error">{error || "The database could not be opened."}</main>;
   }
 
   return (
-    <main className={view === "explorer" ? "shell" : "shell browse-layout"}>
+    <main className={route.view === "explorer" ? "shell" : "shell browse-layout"}>
       <header className="app-header">
         <div className="brand"><span>J</span><div><strong>Jobs</strong><small>Remote work, better sorted</small></div></div>
         <nav className="app-nav" aria-label="Application navigation">
-            <button className={view === "jobs" || view === "companies" || view === "job" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("jobs")}>Jobs</button>
-            <button className={view === "profile" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("profile")}>Profile</button>
-            <button className={view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => setView("explorer")}>DB browser</button>
+          <button className={route.view === "jobs" || route.view === "companies" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "jobs" })}>Jobs</button>
+          <button className={route.view === "match-queue" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "match-queue" })}>Match queue</button>
+          <button className={route.view === "profile" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "profile" })}>Profile</button>
+          <button className={route.view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "explorer" })}>DB browser</button>
         </nav>
       </header>
-      {view === "explorer" && database && (
+      {route.view === "explorer" && database && (
         <aside className="sidebar">
         <p className="eyebrow">Schema</p>
         <nav aria-label="Database tables">
@@ -175,12 +253,14 @@ export default function App() {
       )}
 
       <section className="workspace">
-        {view === "jobs" || view === "companies" ? (
-          <BrowseView mode={view} onModeChange={setView} onOpenJob={(job) => { setSelectedJob(job); setView("job"); }} />
-        ) : view === "profile" ? (
+        {route.jobID ? (
+          jobLoading ? <p className="state browse-state">Loading job...</p> : selectedJob ? <JobDetailView job={selectedJob} tab={route.tab ?? "post"} onTabChange={(tab) => navigate({ ...route, tab })} onBack={() => navigate({ view: "jobs" })} onDeleted={() => navigate({ view: "jobs" })} /> : <p className="state error">{jobError || "Job not found."}</p>
+        ) : route.view === "jobs" || route.view === "companies" ? (
+          <BrowseView mode={route.view} onModeChange={(view) => navigate({ view })} onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "post" })} />
+        ) : route.view === "match-queue" ? (
+          <MatchQueueView onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "post" })} />
+        ) : route.view === "profile" ? (
           <ProfileView />
-        ) : view === "job" && selectedJob ? (
-          <JobDetailView job={selectedJob} onBack={() => setView("jobs")} onDeleted={() => { setSelectedJob(undefined); setView("jobs"); }} />
         ) : loading || !database ? (
           <p className="state browse-state">Downloading and opening the SQLite database...</p>
         ) : (

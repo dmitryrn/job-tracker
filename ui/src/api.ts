@@ -28,7 +28,6 @@ export type UserProfileSkill = {
 
 export type UserProfile = {
   id: number;
-  name: string;
   headline: string;
   location: string;
   workAuthorization: string;
@@ -96,6 +95,26 @@ export function saveProfile(profile: UserProfile) {
 
 export function fetchJobMatch(id: number, signal: AbortSignal) {
   return request<{ match: JobMatch | null }>(`jobs/${id}/match`, { signal });
+}
+
+export function fetchJob(id: number, signal: AbortSignal) {
+  return request<{ job: BrowseJob }>(`jobs/${id}`, { signal });
+}
+
+export function queueJobMatch(id: number, redo: boolean) {
+  return request<{ queued: boolean }>(`jobs/${id}/match${redo ? "/redo" : ""}`, { method: "POST" });
+}
+
+export function fetchMatchQueue(signal: AbortSignal) {
+  return request<{ jobs: BrowseJob[] }>("match-queue", { signal });
+}
+
+export function reorderMatchQueue(jobIds: number[]) {
+  return request<{ queued: boolean }>("match-queue", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jobIds }),
+  });
 }
 
 export async function deleteJob(id: number) {
