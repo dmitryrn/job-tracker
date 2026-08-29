@@ -393,17 +393,7 @@ func validQuote(quote, source string) bool {
 }
 
 func canonicalJobConcept(concept string) string {
-	concept = strings.ToLower(strings.TrimSpace(concept))
-	concept = strings.ReplaceAll(concept, "-", "_")
-	concept = strings.ReplaceAll(concept, " ", "_")
-	switch concept {
-	case "golang":
-		return "go"
-	case "type_script":
-		return "typescript"
-	default:
-		return concept
-	}
+	return canonicalConcept(concept)
 }
 
 func canonicalJobRequirementID(id string) string {

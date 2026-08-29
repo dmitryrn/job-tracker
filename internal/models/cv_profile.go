@@ -17,6 +17,7 @@ type ProfileEvidence struct {
 }
 
 type ProfileExperience struct {
+	ID        string   `json:"id"`
 	Company   string   `json:"company"`
 	Title     string   `json:"title"`
 	StartDate string   `json:"startDate"`
@@ -25,8 +26,10 @@ type ProfileExperience struct {
 }
 
 type ProfileSkill struct {
-	Name     string   `json:"name"`
-	Evidence []string `json:"evidence"`
+	Name          string   `json:"name"`
+	Concept       string   `json:"concept"`
+	ExperienceIDs []string `json:"experienceIds"`
+	Evidence      []string `json:"evidence"`
 }
 
 type ProfileConstraint struct {

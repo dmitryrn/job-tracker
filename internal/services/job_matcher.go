@@ -4,7 +4,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
 	"nice/internal/models"
 )
@@ -179,7 +178,7 @@ func knownBooleanValue(value string) bool {
 func matchRequirement(requirement models.JobRequirement, profile models.CVProfileDraft, asOf time.Time) RequirementMatch {
 	match := RequirementMatch{
 		RequirementID: requirement.ID,
-		Concept:       canonicalMatchConcept(requirement.Concept),
+		Concept:       canonicalConcept(requirement.Concept),
 		Kind:          requirement.Kind,
 		Result:        "unknown",
 		Basis:         "deterministic",
@@ -227,7 +226,11 @@ func matchRequirement(requirement models.JobRequirement, profile models.CVProfil
 func skillsForConcept(skills []models.ProfileSkill, concept string) []models.ProfileSkill {
 	matched := make([]models.ProfileSkill, 0)
 	for _, skill := range skills {
-		if canonicalMatchConcept(skill.Name) == concept {
+		skillConcept := skill.Concept
+		if skillConcept == "" {
+			skillConcept = skill.Name
+		}
+		if canonicalConcept(skillConcept) == concept {
 			matched = append(matched, skill)
 		}
 	}
@@ -249,21 +252,26 @@ func skillEvidence(skills []models.ProfileSkill) []string {
 }
 
 func experienceYears(skills []models.ProfileSkill, experience []models.ProfileExperience, asOf time.Time) *float64 {
-	skillQuotes := make(map[string]bool)
-	for _, skill := range skills {
-		for _, quote := range skill.Evidence {
-			skillQuotes[quote] = true
-		}
-	}
-
-	intervals := make([]monthInterval, 0)
+	experienceByID := make(map[string]models.ProfileExperience, len(experience))
 	for _, role := range experience {
-		if !experienceSupportsSkill(role, skillQuotes) {
-			continue
-		}
-		interval, ok := parseExperienceInterval(role.StartDate, role.EndDate, asOf)
-		if ok {
-			intervals = append(intervals, interval)
+		experienceByID[role.ID] = role
+	}
+	seenExperienceIDs := make(map[string]bool)
+	intervals := make([]monthInterval, 0)
+	for _, skill := range skills {
+		for _, experienceID := range skill.ExperienceIDs {
+			if seenExperienceIDs[experienceID] {
+				continue
+			}
+			role, ok := experienceByID[experienceID]
+			if !ok {
+				continue
+			}
+			seenExperienceIDs[experienceID] = true
+			interval, ok := parseExperienceInterval(role.StartDate, role.EndDate, asOf)
+			if ok {
+				intervals = append(intervals, interval)
+			}
 		}
 	}
 	if len(intervals) == 0 {
@@ -289,15 +297,6 @@ func experienceYears(skills []models.ProfileSkill, experience []models.ProfileEx
 	}
 	years := float64(months) / 12
 	return &years
-}
-
-func experienceSupportsSkill(role models.ProfileExperience, skillQuotes map[string]bool) bool {
-	for _, quote := range role.Evidence {
-		if skillQuotes[quote] {
-			return true
-		}
-	}
-	return false
 }
 
 type monthInterval struct {
@@ -343,35 +342,6 @@ func parseExperienceDate(value string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
-}
-
-func canonicalMatchConcept(concept string) string {
-	concept = strings.ToLower(strings.TrimSpace(concept))
-	switch concept {
-	case "golang":
-		return "go"
-	case "type script", "type-script":
-		return "typescript"
-	case "c++":
-		return "cpp"
-	case "c#":
-		return "csharp"
-	}
-
-	var normalized strings.Builder
-	previousSeparator := false
-	for _, character := range concept {
-		if unicode.IsLetter(character) || unicode.IsDigit(character) {
-			normalized.WriteRune(character)
-			previousSeparator = false
-			continue
-		}
-		if !previousSeparator && normalized.Len() > 0 {
-			normalized.WriteByte('_')
-			previousSeparator = true
-		}
-	}
-	return strings.Trim(normalized.String(), "_")
 }
 
 func buildJobMatch(checks []EligibilityCheck, requirements []RequirementMatch) JobMatch {

@@ -22,11 +22,11 @@ func TestJobMatcherMatchesExactSkillWithEstablishedExperienceDuration(t *testing
 		},
 		Profile: models.CVProfileDraft{
 			Experience: []models.ProfileExperience{{
-				Title: "Backend Engineer", StartDate: "May 2021", EndDate: "Present",
+				ID: "experience-1", Title: "Backend Engineer", StartDate: "May 2021", EndDate: "Present",
 				Evidence: []string{"Designed and operated Go services."},
 			}},
 			Skills: []models.ProfileSkill{{
-				Name: "Go", Evidence: []string{"Designed and operated Go services."},
+				Name: "Go", Concept: "go", ExperienceIDs: []string{"experience-1"}, Evidence: []string{"Designed and operated Go services."},
 			}},
 		},
 	})
@@ -61,6 +61,33 @@ func TestJobMatcherTreatsUnestablishedDurationAsPartial(t *testing.T) {
 	assert.Equal(t, "exact_concept_unverified_duration", match.Requirements[0].Basis)
 	assert.Nil(t, match.Requirements[0].ExperienceYears)
 	assert.Equal(t, "plausible", match.ScreeningFit)
+}
+
+func TestJobMatcherDoesNotCountUnlinkedExperience(t *testing.T) {
+	minimumYears := 5
+	match := NewJobMatcher().Match(JobMatchInput{
+		AsOf: time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
+		Job: models.JobAnalysisDraft{
+			Requirements: []models.JobRequirement{{
+				ID: "professional-go-experience", Kind: "must_have", Concept: "go", MinimumYears: &minimumYears,
+				Quote: "Must have 5 years of professional Go experience.",
+			}},
+		},
+		Profile: models.CVProfileDraft{
+			Experience: []models.ProfileExperience{{
+				ID: "experience-1", Title: "Backend Engineer", StartDate: "May 2010", EndDate: "Present",
+				Evidence: []string{"Built TypeScript applications."},
+			}},
+			Skills: []models.ProfileSkill{{
+				Name: "Go", Concept: "go", Evidence: []string{"Built Go APIs."},
+			}},
+		},
+	})
+
+	require.Len(t, match.Requirements, 1)
+	assert.Equal(t, "partial", match.Requirements[0].Result)
+	assert.Equal(t, "exact_concept_unverified_duration", match.Requirements[0].Basis)
+	assert.Nil(t, match.Requirements[0].ExperienceYears)
 }
 
 func TestJobMatcherKeepsMissingSkillEvidenceUnknown(t *testing.T) {
