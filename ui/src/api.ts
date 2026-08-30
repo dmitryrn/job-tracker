@@ -42,6 +42,11 @@ export type JobMatch = {
   createdAt: string;
 };
 
+export type JobMatchSummary = {
+  job: BrowseJob;
+  createdAt: string;
+};
+
 function apiURL(path: string) {
   const configured = import.meta.env.VITE_API_URL;
   const base = configured || `${window.location.protocol}//${window.location.hostname}:4001/api`;
@@ -95,6 +100,10 @@ export function saveProfile(profile: UserProfile) {
 
 export function fetchJobMatch(id: number, signal: AbortSignal) {
   return request<{ match: JobMatch | null }>(`jobs/${id}/match`, { signal });
+}
+
+export function fetchJobMatches(signal: AbortSignal) {
+  return request<{ matches: JobMatchSummary[] }>("matches", { signal });
 }
 
 export function fetchJob(id: number, signal: AbortSignal) {

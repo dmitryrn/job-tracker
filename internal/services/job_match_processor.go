@@ -164,6 +164,10 @@ func (matches *JobMatches) Match(ctx context.Context, jobID int64) (*models.JobM
 	return matches.repository.JobMatch(ctx, jobID)
 }
 
+func (matches *JobMatches) List(ctx context.Context) ([]models.JobMatchSummary, error) {
+	return matches.repository.JobMatches(ctx)
+}
+
 type JobMatchRequests struct {
 	repository repositories.JobRepository
 	processor  *JobMatchProcessor

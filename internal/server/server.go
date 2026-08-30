@@ -30,6 +30,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, prof
 	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
+	mux.HandleFunc("GET /api/matches", jobMatchesHandler(matches, logger))
 	mux.HandleFunc("GET /api/match-queue", matchQueueHandler(requests, logger))
 	mux.HandleFunc("PUT /api/match-queue", reorderMatchQueueHandler(requests, logger))
 	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))
@@ -157,6 +158,18 @@ func jobMatchHandler(matches *services.JobMatches, logger *zap.Logger) http.Hand
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]any{"match": match})
+	}
+}
+
+func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		listed, err := matches.List(request.Context())
+		if err != nil {
+			logger.Error("list job matches failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load job matches")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"matches": listed})
 	}
 }
 

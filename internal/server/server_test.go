@@ -107,6 +107,18 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, int64(1), matchResponse.Match.JobID)
 	assert.Equal(t, "No-op match", matchResponse.Match.Content)
 	assert.NotEmpty(t, matchResponse.Match.CreatedAt)
+	require.NoError(t, repository.CreateJobMatch(context.Background(), 2, "Second match"))
+	_, err = db.Exec(`UPDATE job_matches SET created_at = CASE job_id WHEN 1 THEN '2026-08-27T12:00:00Z' WHEN 2 THEN '2026-08-28T12:00:00Z' END`)
+	require.NoError(t, err)
+	response = request(handler, http.MethodGet, "/api/matches")
+	require.Equal(t, http.StatusOK, response.Code)
+	var matchesResponse struct {
+		Matches []models.JobMatchSummary `json:"matches"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	require.Len(t, matchesResponse.Matches, 2)
+	assert.Equal(t, int64(2), matchesResponse.Matches[0].Job.ID)
+	assert.Equal(t, "2026-08-28T12:00:00Z", matchesResponse.Matches[0].CreatedAt)
 
 	response = request(handler, http.MethodGet, "/api/jobs/1")
 	require.Equal(t, http.StatusOK, response.Code)

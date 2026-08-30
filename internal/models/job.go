@@ -49,3 +49,8 @@ type JobMatchRecord struct {
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
 }
+
+type JobMatchSummary struct {
+	Job       BrowseJob `json:"job"`
+	CreatedAt string    `json:"createdAt"`
+}

@@ -29,6 +29,7 @@ type JobRepository interface {
 	JobMatchExists(context.Context, int64) (bool, error)
 	CreateJobMatch(context.Context, int64, string) error
 	JobMatch(context.Context, int64) (*models.JobMatchRecord, error)
+	JobMatches(context.Context) ([]models.JobMatchSummary, error)
 	MatchQueue(context.Context) ([]models.BrowseJob, error)
 	QueueJobMatch(context.Context, int64, bool) (bool, error)
 	ReplaceMatchQueue(context.Context, []int64) (bool, error)
@@ -393,6 +394,37 @@ func (repository *SQLite) JobMatch(ctx context.Context, jobID int64) (*models.Jo
 		return nil, fmt.Errorf("get job match: %w", err)
 	}
 	return &match, nil
+}
+
+func (repository *SQLite) JobMatches(ctx context.Context) ([]models.JobMatchSummary, error) {
+	rows, err := repository.db.QueryContext(ctx, `
+		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
+			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
+			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text, job_matches.created_at
+		FROM job_matches
+		JOIN jobs ON jobs.id = job_matches.job_id
+		LEFT JOIN companies ON companies.id = jobs.company_id
+		ORDER BY job_matches.created_at DESC, job_matches.job_id DESC
+		LIMIT 100`)
+	if err != nil {
+		return nil, fmt.Errorf("query job matches: %w", err)
+	}
+	defer rows.Close()
+
+	matches := make([]models.JobMatchSummary, 0)
+	for rows.Next() {
+		var match models.JobMatchSummary
+		if err := rows.Scan(&match.Job.ID, &match.Job.Source, &match.Job.SourceURL, &match.Job.Title, &match.Job.Company,
+			&match.Job.Location, &match.Job.Workplace, &match.Job.EmploymentType, &match.Job.SalaryMin, &match.Job.SalaryMax,
+			&match.Job.PostedAt, &match.Job.BodyText, &match.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan job match: %w", err)
+		}
+		matches = append(matches, match)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate job matches: %w", err)
+	}
+	return matches, nil
 }
 
 func (repository *SQLite) MatchQueue(ctx context.Context) ([]models.BrowseJob, error) {
