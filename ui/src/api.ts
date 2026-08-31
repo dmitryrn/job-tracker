@@ -43,8 +43,26 @@ export type JobMatch = {
 };
 
 export type JobMatchSummary = {
-  job: BrowseJob;
-  createdAt: string;
+	job: BrowseJob;
+	createdAt: string;
+};
+
+export type JobAnalysis = {
+  jobId: number;
+  analyzerVersion: string;
+  promptVersion: string;
+  inputSHA256: string;
+  model: string;
+  analyzedAt: string;
+  normalizedDescription: string;
+  analysis: {
+    role: { family: string; seniority: string; seniorityConfidence: string };
+    constraints: Array<{ kind: string; value: string; quote: string; confidence: string }>;
+    requirements: Array<{ id: string; kind: string; concept: string; minimumYears: number | null; screeningRisk: string; quote: string; confidence: string }>;
+    responsibilities: Array<{ concept: string; quote: string }>;
+    preferences: Array<{ concept: string; quote: string }>;
+    unknowns: string[];
+  };
 };
 
 function apiURL(path: string) {
@@ -99,7 +117,7 @@ export function saveProfile(profile: UserProfile) {
 }
 
 export function fetchJobMatch(id: number, signal: AbortSignal) {
-  return request<{ match: JobMatch | null }>(`jobs/${id}/match`, { signal });
+	return request<{ match: JobMatch | null; analysis: JobAnalysis | null }>(`jobs/${id}/match`, { signal });
 }
 
 export function fetchJobMatches(signal: AbortSignal) {

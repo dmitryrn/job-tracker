@@ -9,6 +9,17 @@ type JobAnalysisDraft struct {
 	Unknowns         []string         `json:"unknowns"`
 }
 
+type JobAnalysisRecord struct {
+	JobID                 int64            `json:"jobId"`
+	AnalyzerVersion       string           `json:"analyzerVersion"`
+	PromptVersion         string           `json:"promptVersion"`
+	InputSHA256           string           `json:"inputSHA256"`
+	Model                 string           `json:"model"`
+	AnalyzedAt            string           `json:"analyzedAt"`
+	NormalizedDescription string           `json:"normalizedDescription"`
+	Analysis              JobAnalysisDraft `json:"analysis"`
+}
+
 type JobRole struct {
 	Family              string `json:"family"`
 	Seniority           string `json:"seniority"`

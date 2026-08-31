@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	JobAnalyzerVersion = "v2"
-	JobPromptVersion   = "2026-08-28.1"
+	JobAnalyzerVersion   = "v2"
+	JobPromptVersion     = "2026-08-28.1"
+	JobAnalyzerModel     = "z-ai/glm-5.2:free"
+	jobAnalysisMaxTokens = 4000
 )
 
 var (
@@ -142,12 +144,13 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 
 	temperature := 0.0
 	request := openrouter.ChatRequest{
+		Model: JobAnalyzerModel,
 		Messages: []openrouter.Message{
 			{Role: "system", Content: jobExtractionInstructions},
 			{Role: "user", Content: "Analyze this job posting.\n\n<job>\n" + input + "\n</job>"},
 		},
 		ResponseFormat: jobResponseSchema,
-		MaxTokens:      2500,
+		MaxTokens:      jobAnalysisMaxTokens,
 		Temperature:    &temperature,
 		Provider:       openrouter.ProviderPreferences{RequireParameters: true},
 	}
@@ -164,16 +167,24 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 		return JobAnalysis{}, fmt.Errorf("validate job analysis from %s: %w", response.Model, err)
 	}
 
-	hash := sha256.Sum256([]byte(input))
 	return JobAnalysis{
 		AnalyzerVersion:       JobAnalyzerVersion,
 		PromptVersion:         JobPromptVersion,
-		InputSHA256:           hex.EncodeToString(hash[:]),
+		InputSHA256:           jobAnalysisInputSHA256FromInput(input),
 		Model:                 response.Model,
 		AnalyzedAt:            time.Now().UTC().Format(time.RFC3339),
 		NormalizedDescription: normalizedDescription,
 		Analysis:              draft,
 	}, nil
+}
+
+func jobAnalysisInputSHA256(job models.Job) string {
+	return jobAnalysisInputSHA256FromInput(canonicalJobInput(job, normalizeJobDescription(job.BodyText)))
+}
+
+func jobAnalysisInputSHA256FromInput(input string) string {
+	hash := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(hash[:])
 }
 
 const jobExtractionInstructions = `Extract an evidence-backed description of the job.

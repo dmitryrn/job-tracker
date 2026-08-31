@@ -11,6 +11,7 @@ import (
 
 	"nice/internal/clients/adzuna"
 	"nice/internal/clients/jobicy"
+	"nice/internal/clients/openrouter"
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
 	"nice/internal/migrations"
@@ -27,11 +28,15 @@ func main() {
 			openDatabase,
 			adzuna.NewClient,
 			jobicy.NewClient,
+			openrouter.NewClient,
 			remotive.NewClient,
+			newJobCompletionClient,
 			repositories.NewSQLite,
 			services.NewJobSync,
 			services.NewJobBrowse,
 			services.NewUserProfileService,
+			services.NewJobAnalyzer,
+			newJobAnalysisService,
 			services.NewNoOpProfileJobMatcher,
 			services.NewJobMatchProcessor,
 			services.NewJobMatches,
@@ -40,6 +45,14 @@ func main() {
 		),
 		fx.Invoke(registerLifecycle),
 	).Run()
+}
+
+func newJobCompletionClient(client *openrouter.Client) services.JobCompletionClient {
+	return client
+}
+
+func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisService {
+	return analyzer
 }
 
 func registerLifecycle(

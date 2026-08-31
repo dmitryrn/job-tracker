@@ -97,16 +97,31 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, "Go", profileResponse.Profile.Skills[0].Name)
 
 	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "No-op match"))
+	require.NoError(t, repository.SaveJobAnalysis(context.Background(), models.JobAnalysisRecord{
+		JobID:           1,
+		AnalyzerVersion: "v2",
+		PromptVersion:   "test",
+		InputSHA256:     "input",
+		Model:           "test-model",
+		AnalyzedAt:      "2026-08-31T12:00:00Z",
+		Analysis: models.JobAnalysisDraft{
+			Role:     models.JobRole{Family: "backend_engineering", Seniority: "senior", SeniorityConfidence: "high"},
+			Unknowns: []string{"Salary is not listed."},
+		},
+	}))
 	response = request(handler, http.MethodGet, "/api/jobs/1/match")
 	require.Equal(t, http.StatusOK, response.Code)
 	var matchResponse struct {
-		Match *models.JobMatchRecord `json:"match"`
+		Match    *models.JobMatchRecord    `json:"match"`
+		Analysis *models.JobAnalysisRecord `json:"analysis"`
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchResponse))
 	require.NotNil(t, matchResponse.Match)
 	assert.Equal(t, int64(1), matchResponse.Match.JobID)
 	assert.Equal(t, "No-op match", matchResponse.Match.Content)
 	assert.NotEmpty(t, matchResponse.Match.CreatedAt)
+	require.NotNil(t, matchResponse.Analysis)
+	assert.Equal(t, "backend_engineering", matchResponse.Analysis.Analysis.Role.Family)
 	require.NoError(t, repository.CreateJobMatch(context.Background(), 2, "Second match"))
 	_, err = db.Exec(`UPDATE job_matches SET created_at = CASE job_id WHEN 1 THEN '2026-08-27T12:00:00Z' WHEN 2 THEN '2026-08-28T12:00:00Z' END`)
 	require.NoError(t, err)
@@ -149,7 +164,7 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 }
 
 func newTestServer(repository repositories.JobRepository) *Server {
-	processor := services.NewJobMatchProcessor(repository, services.NewNoOpProfileJobMatcher(), zap.NewNop())
+	processor := services.NewJobMatchProcessor(repository, noOpJobAnalysisService{}, services.NewNoOpProfileJobMatcher(), zap.NewNop())
 	return New(
 		config.Config{},
 		zap.NewNop(),
@@ -158,6 +173,12 @@ func newTestServer(repository repositories.JobRepository) *Server {
 		services.NewJobMatches(repository),
 		services.NewJobMatchRequests(repository, processor),
 	)
+}
+
+type noOpJobAnalysisService struct{}
+
+func (noOpJobAnalysisService) Analyze(context.Context, models.Job) (services.JobAnalysis, error) {
+	return services.JobAnalysis{}, nil
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {

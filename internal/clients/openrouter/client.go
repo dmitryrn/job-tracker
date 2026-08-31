@@ -108,7 +108,7 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 		return ChatResponse{}, fmt.Errorf("decode OpenRouter response: %w", err)
 	}
 	if len(body.Choices) == 0 {
-		return ChatResponse{}, fmt.Errorf("OpenRouter returned no completion content")
+		return ChatResponse{}, noCompletionContentError(body.Model, "")
 	}
 	choice := body.Choices[0]
 	if choice.Message.Content == nil || strings.TrimSpace(*choice.Message.Content) == "" {
@@ -120,9 +120,20 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 			reason = "refusal"
 		}
 		if reason == "" {
-			return ChatResponse{}, fmt.Errorf("OpenRouter returned no completion content")
+			return ChatResponse{}, noCompletionContentError(body.Model, "")
 		}
-		return ChatResponse{}, fmt.Errorf("OpenRouter returned no completion content (%s)", reason)
+		return ChatResponse{}, noCompletionContentError(body.Model, reason)
 	}
 	return ChatResponse{Model: body.Model, Content: *choice.Message.Content}, nil
+}
+
+func noCompletionContentError(model, reason string) error {
+	message := "OpenRouter returned no completion content"
+	if reason != "" {
+		message += " (" + reason + ")"
+	}
+	if strings.TrimSpace(model) != "" {
+		message += " from " + model
+	}
+	return fmt.Errorf("%s", message)
 }

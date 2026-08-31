@@ -48,6 +48,8 @@ Experience with Kubernetes is a plus.`,
 	assert.Equal(t, "full_stack_software_engineer", analysis.Analysis.Role.Family)
 	assert.Contains(t, analysis.NormalizedDescription, "Must have 5 years of professional Golang experience.")
 	assert.Contains(t, client.request.Messages[1].Content, "Supplementary provider metadata:")
+	assert.Equal(t, JobAnalyzerModel, client.request.Model)
+	assert.Equal(t, jobAnalysisMaxTokens, client.request.MaxTokens)
 }
 
 func TestJobAnalyzerRejectsClaimsWithoutPostingQuotes(t *testing.T) {

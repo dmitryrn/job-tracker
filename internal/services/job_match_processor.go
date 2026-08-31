@@ -22,6 +22,10 @@ type ProfileJobMatcher interface {
 	Match(context.Context, models.BrowseJob, models.UserProfile) (string, error)
 }
 
+type JobAnalysisService interface {
+	Analyze(context.Context, models.Job) (JobAnalysis, error)
+}
+
 type noOpProfileJobMatcher struct{}
 
 func NewNoOpProfileJobMatcher() ProfileJobMatcher {
@@ -34,6 +38,7 @@ func (noOpProfileJobMatcher) Match(_ context.Context, _ models.BrowseJob, _ mode
 
 type JobMatchProcessor struct {
 	repository repositories.JobRepository
+	analyzer   JobAnalysisService
 	matcher    ProfileJobMatcher
 	logger     *zap.Logger
 	cancel     context.CancelFunc
@@ -42,8 +47,8 @@ type JobMatchProcessor struct {
 	mutex      sync.Mutex
 }
 
-func NewJobMatchProcessor(repository repositories.JobRepository, matcher ProfileJobMatcher, logger *zap.Logger) *JobMatchProcessor {
-	return &JobMatchProcessor{repository: repository, matcher: matcher, logger: logger, wake: make(chan struct{}, 1)}
+func NewJobMatchProcessor(repository repositories.JobRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, logger *zap.Logger) *JobMatchProcessor {
+	return &JobMatchProcessor{repository: repository, analyzer: analyzer, matcher: matcher, logger: logger, wake: make(chan struct{}, 1)}
 }
 
 func (processor *JobMatchProcessor) Register(lifecycle fx.Lifecycle) {
@@ -136,6 +141,9 @@ func (processor *JobMatchProcessor) processJob(ctx context.Context, job models.B
 		}
 		processor.logger.Info("job match worker finished successfully", zap.Int64("job_id", job.ID))
 	}()
+	if err := processor.ensureJobAnalysis(ctx, job.ID); err != nil {
+		return err
+	}
 
 	exists, err := processor.repository.JobMatchExists(ctx, job.ID)
 	if err != nil {
@@ -152,6 +160,56 @@ func (processor *JobMatchProcessor) processJob(ctx context.Context, job models.B
 	return processor.repository.CompleteMatchRequest(ctx, job.ID, content)
 }
 
+func (processor *JobMatchProcessor) ensureJobAnalysis(ctx context.Context, jobID int64) (err error) {
+	processor.logger.Info("job analysis worker executing", zap.Int64("job_id", jobID))
+	defer func() {
+		if err != nil {
+			processor.logger.Error("job analysis worker failed", zap.Int64("job_id", jobID), zap.Error(err))
+			return
+		}
+		processor.logger.Info("job analysis worker finished successfully", zap.Int64("job_id", jobID))
+	}()
+
+	job, err := processor.repository.AnalysisJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	if job == nil {
+		return ErrMatchJobNotFound
+	}
+
+	existing, err := processor.repository.JobAnalysis(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	if jobAnalysisCurrent(existing, *job) {
+		processor.logger.Info("job analysis worker reused current analysis", zap.Int64("job_id", jobID))
+		return nil
+	}
+
+	analysis, err := processor.analyzer.Analyze(ctx, *job)
+	if err != nil {
+		return err
+	}
+	return processor.repository.SaveJobAnalysis(ctx, models.JobAnalysisRecord{
+		JobID:                 jobID,
+		AnalyzerVersion:       analysis.AnalyzerVersion,
+		PromptVersion:         analysis.PromptVersion,
+		InputSHA256:           analysis.InputSHA256,
+		Model:                 analysis.Model,
+		AnalyzedAt:            analysis.AnalyzedAt,
+		NormalizedDescription: analysis.NormalizedDescription,
+		Analysis:              analysis.Analysis,
+	})
+}
+
+func jobAnalysisCurrent(analysis *models.JobAnalysisRecord, job models.Job) bool {
+	return analysis != nil &&
+		analysis.AnalyzerVersion == JobAnalyzerVersion &&
+		analysis.PromptVersion == JobPromptVersion &&
+		analysis.InputSHA256 == jobAnalysisInputSHA256(job)
+}
+
 type JobMatches struct {
 	repository repositories.JobRepository
 }
@@ -162,6 +220,10 @@ func NewJobMatches(repository repositories.JobRepository) *JobMatches {
 
 func (matches *JobMatches) Match(ctx context.Context, jobID int64) (*models.JobMatchRecord, error) {
 	return matches.repository.JobMatch(ctx, jobID)
+}
+
+func (matches *JobMatches) Analysis(ctx context.Context, jobID int64) (*models.JobAnalysisRecord, error) {
+	return matches.repository.JobAnalysis(ctx, jobID)
 }
 
 func (matches *JobMatches) List(ctx context.Context) ([]models.JobMatchSummary, error) {

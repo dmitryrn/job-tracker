@@ -52,3 +52,15 @@ func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
 	_, err := client.Complete(context.Background(), ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
 	assert.ErrorContains(t, err, "429 Too Many Requests")
 }
+
+func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"model":"provider/model","choices":[{"finish_reason":"length","message":{"content":null}}]}`))
+	}))
+	defer server.Close()
+
+	client := newClient("test-key", DefaultModel, server.Client(), server.URL)
+	_, err := client.Complete(context.Background(), ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
+	assert.EqualError(t, err, "OpenRouter returned no completion content (length) from provider/model")
+}

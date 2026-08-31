@@ -157,7 +157,13 @@ func jobMatchHandler(matches *services.JobMatches, logger *zap.Logger) http.Hand
 			writeError(writer, http.StatusInternalServerError, "could not load job match")
 			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"match": match})
+		analysis, err := matches.Analysis(request.Context(), id)
+		if err != nil {
+			logger.Error("load job analysis failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load job analysis")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"match": match, "analysis": analysis})
 	}
 }
 

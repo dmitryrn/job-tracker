@@ -25,6 +25,9 @@ type JobRepository interface {
 	Companies(context.Context, string) ([]models.BrowseCompany, error)
 	UserProfile(context.Context) (*models.UserProfile, error)
 	SaveUserProfile(context.Context, models.UserProfile) (models.UserProfile, error)
+	AnalysisJob(context.Context, int64) (*models.Job, error)
+	JobAnalysis(context.Context, int64) (*models.JobAnalysisRecord, error)
+	SaveJobAnalysis(context.Context, models.JobAnalysisRecord) error
 	JobsWithoutMatches(context.Context, int) ([]models.BrowseJob, error)
 	JobMatchExists(context.Context, int64) (bool, error)
 	CreateJobMatch(context.Context, int64, string) error
@@ -194,6 +197,26 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) ([]
 
 func (repository *SQLite) Job(ctx context.Context, id int64) (*models.BrowseJob, error) {
 	return repository.job(ctx, repository.db, id)
+}
+
+func (repository *SQLite) AnalysisJob(ctx context.Context, jobID int64) (*models.Job, error) {
+	var job models.Job
+	err := repository.db.QueryRowContext(ctx, `
+		SELECT jobs.source, jobs.source_job_id, jobs.source_url, jobs.title, jobs.body_text,
+			COALESCE(companies.name, ''), COALESCE(jobs.location, ''), jobs.workplace,
+			COALESCE(jobs.employment_type, ''), jobs.salary_min, jobs.salary_max,
+			COALESCE(jobs.posted_at, ''), jobs.metadata_json
+		FROM jobs LEFT JOIN companies ON companies.id = jobs.company_id WHERE jobs.id = ?`, jobID,
+	).Scan(&job.Source, &job.SourceID, &job.SourceURL, &job.Title, &job.BodyText,
+		&job.Company, &job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin,
+		&job.SalaryMax, &job.PostedAt, &job.MetadataJSON)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get job for analysis: %w", err)
+	}
+	return &job, nil
 }
 
 func (repository *SQLite) Delete(ctx context.Context, id int64) (bool, error) {
@@ -369,6 +392,54 @@ func (repository *SQLite) JobMatchExists(ctx context.Context, jobID int64) (bool
 		return false, fmt.Errorf("check job match: %w", err)
 	}
 	return exists, nil
+}
+
+func (repository *SQLite) JobAnalysis(ctx context.Context, jobID int64) (*models.JobAnalysisRecord, error) {
+	var analysis models.JobAnalysisRecord
+	var raw string
+	err := repository.db.QueryRowContext(ctx, `
+		SELECT job_id, analyzer_version, prompt_version, input_sha256, model, analyzed_at,
+			normalized_description, analysis_json
+		FROM job_analyses WHERE job_id = ?`, jobID,
+	).Scan(&analysis.JobID, &analysis.AnalyzerVersion, &analysis.PromptVersion, &analysis.InputSHA256,
+		&analysis.Model, &analysis.AnalyzedAt, &analysis.NormalizedDescription, &raw)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get job analysis: %w", err)
+	}
+	if err := json.Unmarshal([]byte(raw), &analysis.Analysis); err != nil {
+		return nil, fmt.Errorf("decode job analysis: %w", err)
+	}
+	return &analysis, nil
+}
+
+func (repository *SQLite) SaveJobAnalysis(ctx context.Context, analysis models.JobAnalysisRecord) error {
+	raw, err := json.Marshal(analysis.Analysis)
+	if err != nil {
+		return fmt.Errorf("encode job analysis: %w", err)
+	}
+	_, err = repository.db.ExecContext(ctx, `
+		INSERT INTO job_analyses (
+			job_id, analyzer_version, prompt_version, input_sha256, model, analyzed_at,
+			normalized_description, analysis_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(job_id) DO UPDATE SET
+			analyzer_version = excluded.analyzer_version,
+			prompt_version = excluded.prompt_version,
+			input_sha256 = excluded.input_sha256,
+			model = excluded.model,
+			analyzed_at = excluded.analyzed_at,
+			normalized_description = excluded.normalized_description,
+			analysis_json = excluded.analysis_json`,
+		analysis.JobID, analysis.AnalyzerVersion, analysis.PromptVersion, analysis.InputSHA256,
+		analysis.Model, analysis.AnalyzedAt, analysis.NormalizedDescription, string(raw),
+	)
+	if err != nil {
+		return fmt.Errorf("save job analysis: %w", err)
+	}
+	return nil
 }
 
 func (repository *SQLite) CreateJobMatch(ctx context.Context, jobID int64, content string) error {
