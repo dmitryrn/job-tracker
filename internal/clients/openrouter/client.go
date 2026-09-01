@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	baseURL      = "https://openrouter.ai/api/v1/chat/completions"
-	DefaultModel = "openrouter/free"
+	baseURL               = "https://openrouter.ai/api/v1/chat/completions"
+	DefaultModel          = "openrouter/free"
+	maxErrorResponseBytes = 64 << 10
 )
 
 type Message struct {
@@ -89,6 +90,13 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		body, err := io.ReadAll(io.LimitReader(response.Body, maxErrorResponseBytes))
+		if err != nil {
+			return ChatResponse{}, fmt.Errorf("read unsuccessful OpenRouter response: %w", err)
+		}
+		if body := strings.TrimSpace(string(body)); body != "" {
+			return ChatResponse{}, fmt.Errorf("OpenRouter returned %s: %s", response.Status, body)
+		}
 		return ChatResponse{}, fmt.Errorf("OpenRouter returned %s", response.Status)
 	}
 

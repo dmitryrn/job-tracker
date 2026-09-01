@@ -44,13 +44,16 @@ func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
 
 func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusTooManyRequests)
+		_, _ = writer.Write([]byte(`{"error":{"code":429,"message":"Daily free model quota exhausted"}}`))
 	}))
 	defer server.Close()
 
 	client := newClient("test-key", DefaultModel, server.Client(), server.URL)
 	_, err := client.Complete(context.Background(), ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
 	assert.ErrorContains(t, err, "429 Too Many Requests")
+	assert.ErrorContains(t, err, `{"error":{"code":429,"message":"Daily free model quota exhausted"}}`)
 }
 
 func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
