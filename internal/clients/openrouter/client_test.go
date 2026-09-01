@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
+func TestCompleteOmitsProviderPreferencesForNonOpenRouterEndpoint(t *testing.T) {
 	const model = "test-model"
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		assert.Equal(t, http.MethodPost, request.Method)
@@ -22,7 +22,7 @@ func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&body))
 		assert.Equal(t, model, body.Model)
 		assert.Equal(t, []Message{{Role: "user", Content: "Extract this CV"}}, body.Messages)
-		assert.True(t, body.Provider.RequireParameters)
+		assert.Nil(t, body.Provider)
 		require.NotNil(t, body.Temperature)
 		assert.Zero(t, *body.Temperature)
 		assert.Equal(t, "high", body.ReasoningEffort)
@@ -39,11 +39,21 @@ func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
 		Messages:        []Message{{Role: "user", Content: "Extract this CV"}},
 		Temperature:     &temperature,
 		ReasoningEffort: "high",
-		Provider:        ProviderPreferences{RequireParameters: true},
+		Provider:        &ProviderPreferences{RequireParameters: true},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "provider/model", response.Model)
 	assert.Equal(t, `{"name":"Riley"}`, response.Content)
+}
+
+func TestRequestForEndpointSendsProviderPreferencesToOpenRouter(t *testing.T) {
+	client := newClient("test-key", http.DefaultClient, "https://openrouter.ai/api/v1/chat/completions")
+	request := client.requestForEndpoint(ChatRequest{
+		Provider: &ProviderPreferences{RequireParameters: true},
+	})
+
+	require.NotNil(t, request.Provider)
+	assert.True(t, request.Provider.RequireParameters)
 }
 
 func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {

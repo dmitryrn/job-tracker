@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,13 +28,13 @@ type ProviderPreferences struct {
 }
 
 type ChatRequest struct {
-	Model           string              `json:"model"`
-	Messages        []Message           `json:"messages"`
-	ResponseFormat  json.RawMessage     `json:"response_format,omitempty"`
-	MaxTokens       int                 `json:"max_tokens,omitempty"`
-	Temperature     *float64            `json:"temperature,omitempty"`
-	ReasoningEffort string              `json:"reasoning_effort,omitempty"`
-	Provider        ProviderPreferences `json:"provider"`
+	Model           string               `json:"model"`
+	Messages        []Message            `json:"messages"`
+	ResponseFormat  json.RawMessage      `json:"response_format,omitempty"`
+	MaxTokens       int                  `json:"max_tokens,omitempty"`
+	Temperature     *float64             `json:"temperature,omitempty"`
+	ReasoningEffort string               `json:"reasoning_effort,omitempty"`
+	Provider        *ProviderPreferences `json:"provider,omitempty"`
 }
 
 type ChatResponse struct {
@@ -42,9 +43,10 @@ type ChatResponse struct {
 }
 
 type Client struct {
-	apiKey  string
-	http    *http.Client
-	baseURL string
+	apiKey                      string
+	http                        *http.Client
+	baseURL                     string
+	supportsProviderPreferences bool
 }
 
 func NewClient(cfg config.Config) *Client {
@@ -53,9 +55,10 @@ func NewClient(cfg config.Config) *Client {
 
 func newClient(apiKey string, httpClient *http.Client, baseURL string) *Client {
 	return &Client{
-		apiKey:  apiKey,
-		http:    httpClient,
-		baseURL: baseURL,
+		apiKey:                      apiKey,
+		http:                        httpClient,
+		baseURL:                     baseURL,
+		supportsProviderPreferences: isOpenRouterURL(baseURL),
 	}
 }
 
@@ -67,7 +70,7 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 		return ChatResponse{}, fmt.Errorf("LLM model is required")
 	}
 
-	payload, err := json.Marshal(input)
+	payload, err := json.Marshal(client.requestForEndpoint(input))
 	if err != nil {
 		return ChatResponse{}, fmt.Errorf("encode LLM request: %w", err)
 	}
@@ -127,6 +130,22 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 		return ChatResponse{}, noCompletionContentError(body.Model, reason)
 	}
 	return ChatResponse{Model: body.Model, Content: *choice.Message.Content}, nil
+}
+
+func (client *Client) requestForEndpoint(input ChatRequest) ChatRequest {
+	if !client.supportsProviderPreferences {
+		input.Provider = nil
+	}
+	return input
+}
+
+func isOpenRouterURL(baseURL string) bool {
+	endpoint, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	hostname := strings.ToLower(endpoint.Hostname())
+	return hostname == "openrouter.ai" || strings.HasSuffix(hostname, ".openrouter.ai")
 }
 
 func noCompletionContentError(model, reason string) error {

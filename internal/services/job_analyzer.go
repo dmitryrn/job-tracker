@@ -154,7 +154,7 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 		MaxTokens:       jobAnalysisMaxTokens,
 		Temperature:     &temperature,
 		ReasoningEffort: analyzer.reasoningEffort,
-		Provider:        openrouter.ProviderPreferences{RequireParameters: true},
+		Provider:        &openrouter.ProviderPreferences{RequireParameters: true},
 	}
 	response, err := analyzer.client.Complete(ctx, request)
 	if err != nil {

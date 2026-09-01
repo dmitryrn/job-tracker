@@ -127,7 +127,7 @@ func (analyzer *CVAnalyzer) Analyze(ctx context.Context, resume string) (CVAnaly
 		ResponseFormat: profileResponseSchema,
 		MaxTokens:      2000,
 		Temperature:    &temperature,
-		Provider:       openrouter.ProviderPreferences{RequireParameters: true},
+		Provider:       &openrouter.ProviderPreferences{RequireParameters: true},
 	}
 	response, err := analyzer.client.Complete(ctx, request)
 	if err != nil {

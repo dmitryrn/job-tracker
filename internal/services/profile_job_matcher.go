@@ -67,7 +67,7 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 		MaxTokens:       profileMatchMaxTokens,
 		Temperature:     &temperature,
 		ReasoningEffort: matcher.reasoningEffort,
-		Provider:        openrouter.ProviderPreferences{RequireParameters: true},
+		Provider:        &openrouter.ProviderPreferences{RequireParameters: true},
 	})
 	if err != nil {
 		return models.JobMatchAssessment{}, fmt.Errorf("match profile to job: %w", err)
