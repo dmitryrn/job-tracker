@@ -9,10 +9,10 @@ import (
 )
 
 type UserProfileService struct {
-	repository repositories.JobRepository
+	repository repositories.UserProfileRepository
 }
 
-func NewUserProfileService(repository repositories.JobRepository) *UserProfileService {
+func NewUserProfileService(repository repositories.UserProfileRepository) *UserProfileService {
 	return &UserProfileService{repository: repository}
 }
 

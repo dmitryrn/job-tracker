@@ -13,10 +13,10 @@ import (
 var ErrInvalidDiscoverySettings = errors.New("invalid discovery settings")
 
 type DiscoverySettingsService struct {
-	repository repositories.JobRepository
+	repository repositories.DiscoverySettingsRepository
 }
 
-func NewDiscoverySettingsService(repository repositories.JobRepository) *DiscoverySettingsService {
+func NewDiscoverySettingsService(repository repositories.DiscoverySettingsRepository) *DiscoverySettingsService {
 	return &DiscoverySettingsService{repository: repository}
 }
 

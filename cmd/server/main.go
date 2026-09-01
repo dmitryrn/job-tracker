@@ -32,6 +32,13 @@ func main() {
 			remotive.NewClient,
 			newJobCompletionClient,
 			repositories.NewSQLite,
+			repositories.NewJobRepository,
+			repositories.NewProviderRunRepository,
+			repositories.NewDiscoverySettingsRepository,
+			repositories.NewUserProfileRepository,
+			repositories.NewJobAnalysisRepository,
+			repositories.NewJobMatchRepository,
+			repositories.NewMatchQueueRepository,
 			services.NewJobSync,
 			services.NewJobBrowse,
 			services.NewDiscoverySettingsService,
@@ -39,7 +46,7 @@ func main() {
 			newJobAnalyzer,
 			newJobAnalysisService,
 			newProfileJobMatcher,
-			newJobMatchProcessor,
+			newJobMatchWorker,
 			services.NewJobMatches,
 			services.NewJobMatchRequests,
 			server.New,
@@ -64,8 +71,8 @@ func newProfileJobMatcher(client services.JobCompletionClient, cfg config.Config
 	return services.NewLLMProfileJobMatcher(client, cfg.LLM.ProfileMatcher.Model, cfg.LLM.ProfileMatcher.ReasoningEffort)
 }
 
-func newJobMatchProcessor(repository repositories.JobRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchProcessor {
-	return services.NewJobMatchProcessor(repository, analyzer, matcher, logger, cfg.JobMatch.RunInterval)
+func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {
+	return services.NewJobMatchWorker(jobs, analyses, matches, queue, profiles, analyzer, matcher, logger, cfg.JobMatch.RunInterval)
 }
 
 func registerLifecycle(
@@ -74,7 +81,7 @@ func registerLifecycle(
 	logger *zap.Logger,
 	server *server.Server,
 	sync *services.JobSync,
-	matchProcessor *services.JobMatchProcessor,
+	matchWorker *services.JobMatchWorker,
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStop: func(context.Context) error {
@@ -85,7 +92,7 @@ func registerLifecycle(
 	})
 	server.Register(lifecycle)
 	sync.Register(lifecycle)
-	matchProcessor.Register(lifecycle)
+	matchWorker.Register(lifecycle)
 }
 
 func newLogger() (*zap.Logger, error) {

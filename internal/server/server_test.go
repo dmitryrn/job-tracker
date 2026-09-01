@@ -260,16 +260,16 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Equal(t, []int64{1, 2}, []int64{queueResponse.Jobs[0].ID, queueResponse.Jobs[1].ID})
 }
 
-func newTestServer(repository repositories.JobRepository) *Server {
-	processor := services.NewJobMatchProcessor(repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
+func newTestServer(repository *repositories.SQLite) *Server {
+	worker := services.NewJobMatchWorker(repository, repository, repository, repository, repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
 	return New(
 		config.Config{},
 		zap.NewNop(),
 		services.NewJobBrowse(repository),
 		services.NewDiscoverySettingsService(repository),
 		services.NewUserProfileService(repository),
-		services.NewJobMatches(repository),
-		services.NewJobMatchRequests(repository, processor),
+		services.NewJobMatches(repository, repository),
+		services.NewJobMatchRequests(repository, worker),
 	)
 }
 

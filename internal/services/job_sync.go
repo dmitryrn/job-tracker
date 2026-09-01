@@ -20,7 +20,9 @@ type JobSync struct {
 	adzuna           *adzuna.Client
 	jobicy           *jobicy.Client
 	remotive         *remotive.Client
-	repository       repositories.JobRepository
+	jobs             repositories.JobRepository
+	providerRuns     repositories.ProviderRunRepository
+	settings         repositories.DiscoverySettingsRepository
 	adzunaInterval   time.Duration
 	jobicyInterval   time.Duration
 	remotiveInterval time.Duration
@@ -30,12 +32,14 @@ type JobSync struct {
 	mutex            sync.Mutex
 }
 
-func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, remotiveClient *remotive.Client, repository repositories.JobRepository, logger *zap.Logger) *JobSync {
+func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:           adzunaClient,
 		jobicy:           jobicyClient,
 		remotive:         remotiveClient,
-		repository:       repository,
+		jobs:             jobs,
+		providerRuns:     providerRuns,
+		settings:         settings,
 		adzunaInterval:   cfg.Providers.Adzuna.SyncInterval,
 		jobicyInterval:   cfg.Providers.Jobicy.SyncInterval,
 		remotiveInterval: cfg.Providers.Remotive.SyncInterval,
@@ -89,7 +93,7 @@ func (syncer *JobSync) run(ctx context.Context) {
 }
 
 func (syncer *JobSync) sync(ctx context.Context) {
-	settings, err := syncer.repository.DiscoverySettings(ctx)
+	settings, err := syncer.settings.DiscoverySettings(ctx)
 	if err != nil {
 		syncer.logger.Error("load discovery settings failed", zap.Error(err))
 		return
@@ -110,7 +114,7 @@ func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSea
 		syncer.completeProviderRun(ctx, "adzuna", err)
 		return
 	}
-	if err := syncer.repository.Upsert(ctx, jobs); err != nil {
+	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
 		syncer.logger.Error("persist Adzuna jobs failed", zap.Error(err))
 		syncer.completeProviderRun(ctx, "adzuna", err)
 		return
@@ -130,7 +134,7 @@ func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.Remotiv
 		syncer.completeProviderRun(ctx, "remotive", err)
 		return
 	}
-	if err := syncer.repository.Upsert(ctx, jobs); err != nil {
+	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
 		syncer.logger.Error("persist Remotive jobs failed", zap.Error(err))
 		syncer.completeProviderRun(ctx, "remotive", err)
 		return
@@ -150,7 +154,7 @@ func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySea
 		syncer.completeProviderRun(ctx, "jobicy", err)
 		return
 	}
-	if err := syncer.repository.Upsert(ctx, jobs); err != nil {
+	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
 		syncer.logger.Error("persist Jobicy jobs failed", zap.Error(err))
 		syncer.completeProviderRun(ctx, "jobicy", err)
 		return
@@ -160,7 +164,7 @@ func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySea
 }
 
 func (syncer *JobSync) startProviderRun(ctx context.Context, provider string, interval time.Duration) bool {
-	run, err := syncer.repository.StartProviderRun(ctx, provider, interval, time.Now())
+	run, err := syncer.providerRuns.StartProviderRun(ctx, provider, interval, time.Now())
 	if err != nil {
 		syncer.logger.Error("start provider sync failed", zap.String("provider", provider), zap.Error(err))
 		return false
@@ -172,7 +176,7 @@ func (syncer *JobSync) startProviderRun(ctx context.Context, provider string, in
 }
 
 func (syncer *JobSync) completeProviderRun(ctx context.Context, provider string, runError error) {
-	if err := syncer.repository.CompleteProviderRun(ctx, provider, runError, time.Now()); err != nil {
+	if err := syncer.providerRuns.CompleteProviderRun(ctx, provider, runError, time.Now()); err != nil {
 		syncer.logger.Error("complete provider sync failed", zap.String("provider", provider), zap.Error(err))
 	}
 }

@@ -14,35 +14,6 @@ import (
 	"nice/internal/models"
 )
 
-type JobRepository interface {
-	Upsert(context.Context, []models.Job) error
-	StartProviderRun(context.Context, string, time.Duration, time.Time) (bool, error)
-	CompleteProviderRun(context.Context, string, error, time.Time) error
-	List(context.Context, models.JobSearch) ([]models.BrowseJob, error)
-	Job(context.Context, int64) (*models.BrowseJob, error)
-	Delete(context.Context, int64) (bool, error)
-	Providers(context.Context) ([]string, error)
-	Companies(context.Context, string) ([]models.BrowseCompany, error)
-	DiscoverySettings(context.Context) (models.DiscoverySettings, error)
-	SaveDiscoverySettings(context.Context, models.DiscoverySettings) (models.DiscoverySettings, error)
-	UserProfile(context.Context) (*models.UserProfile, error)
-	SaveUserProfile(context.Context, models.UserProfile) (models.UserProfile, error)
-	AnalysisJob(context.Context, int64) (*models.Job, error)
-	JobAnalysis(context.Context, int64) (*models.JobAnalysisRecord, error)
-	SaveJobAnalysis(context.Context, models.JobAnalysisRecord) error
-	JobsWithoutMatches(context.Context, int) ([]models.BrowseJob, error)
-	JobMatchExists(context.Context, int64) (bool, error)
-	CreateJobMatch(context.Context, int64, string) error
-	JobMatch(context.Context, int64) (*models.JobMatchRecord, error)
-	JobMatches(context.Context) ([]models.JobMatchSummary, error)
-	MatchQueue(context.Context) ([]models.BrowseJob, error)
-	QueueJobMatch(context.Context, int64, bool) (bool, error)
-	QueueJobsWithoutMatches(context.Context, []int64) (int, error)
-	ReplaceMatchQueue(context.Context, []int64) (bool, error)
-	RemoveMatchRequest(context.Context, int64) error
-	CompleteMatchRequest(context.Context, int64, string) error
-}
-
 var sqlBuilder = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
 type SQLite struct {
@@ -73,7 +44,7 @@ func (repository *SQLite) SaveDiscoverySettings(ctx context.Context, settings mo
 	return settings, err
 }
 
-func NewSQLite(db *sql.DB) JobRepository {
+func NewSQLite(db *sql.DB) *SQLite {
 	return &SQLite{db: db}
 }
 
@@ -393,41 +364,6 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 		return models.UserProfile{}, fmt.Errorf("save user profile: %w", err)
 	}
 	return profile, nil
-}
-
-func (repository *SQLite) JobsWithoutMatches(ctx context.Context, limit int) ([]models.BrowseJob, error) {
-	if limit < 1 {
-		return []models.BrowseJob{}, nil
-	}
-	rows, err := repository.db.QueryContext(ctx, `
-		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
-			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
-			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text
-		FROM jobs
-		LEFT JOIN companies ON companies.id = jobs.company_id
-		LEFT JOIN job_matches ON job_matches.job_id = jobs.id
-		WHERE job_matches.job_id IS NULL
-		ORDER BY jobs.posted_at DESC, jobs.id DESC
-		LIMIT ?`, limit)
-	if err != nil {
-		return nil, fmt.Errorf("query jobs without matches: %w", err)
-	}
-	defer rows.Close()
-
-	jobs := make([]models.BrowseJob, 0)
-	for rows.Next() {
-		var job models.BrowseJob
-		if err := rows.Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company,
-			&job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
-			&job.PostedAt, &job.BodyText); err != nil {
-			return nil, fmt.Errorf("scan job without match: %w", err)
-		}
-		jobs = append(jobs, job)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate jobs without matches: %w", err)
-	}
-	return jobs, nil
 }
 
 func (repository *SQLite) JobMatchExists(ctx context.Context, jobID int64) (bool, error) {

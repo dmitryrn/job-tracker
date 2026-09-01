@@ -17,7 +17,7 @@ import (
 	"nice/internal/repositories"
 )
 
-func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
+func TestJobMatchWorkerCreatesOnlyOneMatchPerJob(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
@@ -31,8 +31,8 @@ func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
 	require.NoError(t, err)
 	matcher := &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "First assessment"}}
 	analyzer := &recordingJobAnalyzer{analysis: testJobAnalysis()}
-	processor := NewJobMatchProcessor(repository, analyzer, matcher, zap.NewNop(), time.Minute)
-	worked, err := processor.process(context.Background())
+	worker := NewJobMatchWorker(repository, repository, repository, repository, repository, analyzer, matcher, zap.NewNop(), time.Minute)
+	worked, err := worker.process(context.Background())
 	require.NoError(t, err)
 	require.False(t, worked)
 	assert.Zero(t, matcher.calls)
@@ -41,10 +41,10 @@ func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 
-	worked, err = processor.process(context.Background())
+	worked, err = worker.process(context.Background())
 	require.NoError(t, err)
 	require.True(t, worked)
-	worked, err = processor.process(context.Background())
+	worked, err = worker.process(context.Background())
 	require.NoError(t, err)
 	require.False(t, worked)
 
@@ -62,7 +62,7 @@ func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
 	assert.Equal(t, "backend_engineering", storedAnalysis.Analysis.Role.Family)
 }
 
-func TestJobMatchProcessorWaitsForProfile(t *testing.T) {
+func TestJobMatchWorkerWaitsForProfile(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
@@ -77,8 +77,8 @@ func TestJobMatchProcessorWaitsForProfile(t *testing.T) {
 	require.True(t, found)
 
 	matcher := &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "unused"}}
-	processor := NewJobMatchProcessor(repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop(), time.Minute)
-	worked, err := processor.process(context.Background())
+	worker := NewJobMatchWorker(repository, repository, repository, repository, repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop(), time.Minute)
+	worked, err := worker.process(context.Background())
 	require.NoError(t, err)
 	require.False(t, worked)
 	assert.Zero(t, matcher.calls)
@@ -87,7 +87,7 @@ func TestJobMatchProcessorWaitsForProfile(t *testing.T) {
 	assert.Len(t, queue, 1)
 }
 
-func TestJobMatchProcessorKeepsFailedRequestInQueue(t *testing.T) {
+func TestJobMatchWorkerKeepsFailedRequestInQueue(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
@@ -104,8 +104,8 @@ func TestJobMatchProcessorKeepsFailedRequestInQueue(t *testing.T) {
 	require.True(t, found)
 
 	matcher := &recordingProfileJobMatcher{err: errors.New("model unavailable")}
-	processor := NewJobMatchProcessor(repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop(), time.Minute)
-	worked, err := processor.process(context.Background())
+	worker := NewJobMatchWorker(repository, repository, repository, repository, repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop(), time.Minute)
+	worked, err := worker.process(context.Background())
 	require.True(t, worked)
 	require.EqualError(t, err, "model unavailable")
 	queue, err := repository.MatchQueue(context.Background())
@@ -146,7 +146,7 @@ func (matcher *recordingProfileJobMatcher) Match(_ context.Context, _ models.Bro
 	return matcher.assessment, matcher.err
 }
 
-func TestJobMatchProcessorReusesCurrentJobAnalysis(t *testing.T) {
+func TestJobMatchWorkerReusesCurrentJobAnalysis(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
@@ -159,16 +159,16 @@ func TestJobMatchProcessorReusesCurrentJobAnalysis(t *testing.T) {
 	_, err = repository.SaveUserProfile(context.Background(), models.UserProfile{Skills: []models.UserProfileSkill{}})
 	require.NoError(t, err)
 	analyzer := &recordingJobAnalyzer{analysis: testJobAnalysis()}
-	processor := NewJobMatchProcessor(repository, analyzer, &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "assessment"}}, zap.NewNop(), time.Minute)
+	worker := NewJobMatchWorker(repository, repository, repository, repository, repository, analyzer, &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "assessment"}}, zap.NewNop(), time.Minute)
 
 	_, err = repository.QueueJobMatch(context.Background(), 1, false)
 	require.NoError(t, err)
-	_, err = processor.process(context.Background())
+	_, err = worker.process(context.Background())
 	require.NoError(t, err)
 
 	_, err = repository.QueueJobMatch(context.Background(), 1, true)
 	require.NoError(t, err)
-	_, err = processor.process(context.Background())
+	_, err = worker.process(context.Background())
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, analyzer.calls)
