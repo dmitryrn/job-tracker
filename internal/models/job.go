@@ -29,6 +29,7 @@ type DiscoverySettings struct {
 }
 
 type AdzunaSearchSettings struct {
+	Enabled        bool   `json:"enabled"`
 	Query          string `json:"query"`
 	Country        string `json:"country"`
 	MaxDaysOld     int    `json:"maxDaysOld"`
@@ -38,11 +39,13 @@ type AdzunaSearchSettings struct {
 }
 
 type RemotiveSearchSettings struct {
+	Enabled  bool   `json:"enabled"`
 	Query    string `json:"query"`
 	Category string `json:"category"`
 }
 
 type JobicySearchSettings struct {
+	Enabled  bool   `json:"enabled"`
 	Count    int    `json:"count"`
 	Geo      string `json:"geo"`
 	Industry string `json:"industry"`

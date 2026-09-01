@@ -57,6 +57,7 @@ export type UserProfile = {
 
 export type DiscoverySettings = {
   adzuna: {
+    enabled: boolean;
     query: string;
     country: string;
     maxDaysOld: number;
@@ -65,10 +66,12 @@ export type DiscoverySettings = {
     workplace: string;
   };
   remotive: {
+    enabled: boolean;
     query: string;
     category: string;
   };
   jobicy: {
+    enabled: boolean;
     count: number;
     geo: string;
     industry: string;

@@ -23,11 +23,11 @@ type SQLite struct {
 func (repository *SQLite) DiscoverySettings(ctx context.Context) (models.DiscoverySettings, error) {
 	var settings models.DiscoverySettings
 	err := repository.db.QueryRowContext(ctx, `
-		SELECT adzuna_query, adzuna_country, adzuna_max_days_old, adzuna_max_pages, adzuna_results_per_page, adzuna_workplace,
-		       remotive_query, remotive_category, jobicy_count, jobicy_geo, jobicy_industry, jobicy_tag
+		SELECT adzuna_enabled, adzuna_query, adzuna_country, adzuna_max_days_old, adzuna_max_pages, adzuna_results_per_page, adzuna_workplace,
+		       remotive_enabled, remotive_query, remotive_category, jobicy_enabled, jobicy_count, jobicy_geo, jobicy_industry, jobicy_tag
 		FROM discovery_settings WHERE id = 1`).Scan(
-		&settings.Adzuna.Query, &settings.Adzuna.Country, &settings.Adzuna.MaxDaysOld, &settings.Adzuna.MaxPages, &settings.Adzuna.ResultsPerPage, &settings.Adzuna.Workplace,
-		&settings.Remotive.Query, &settings.Remotive.Category, &settings.Jobicy.Count, &settings.Jobicy.Geo, &settings.Jobicy.Industry, &settings.Jobicy.Tag,
+		&settings.Adzuna.Enabled, &settings.Adzuna.Query, &settings.Adzuna.Country, &settings.Adzuna.MaxDaysOld, &settings.Adzuna.MaxPages, &settings.Adzuna.ResultsPerPage, &settings.Adzuna.Workplace,
+		&settings.Remotive.Enabled, &settings.Remotive.Query, &settings.Remotive.Category, &settings.Jobicy.Enabled, &settings.Jobicy.Count, &settings.Jobicy.Geo, &settings.Jobicy.Industry, &settings.Jobicy.Tag,
 	)
 	return settings, err
 }
@@ -35,11 +35,11 @@ func (repository *SQLite) DiscoverySettings(ctx context.Context) (models.Discove
 func (repository *SQLite) SaveDiscoverySettings(ctx context.Context, settings models.DiscoverySettings) (models.DiscoverySettings, error) {
 	_, err := repository.db.ExecContext(ctx, `
 		UPDATE discovery_settings SET
-			adzuna_query = ?, adzuna_country = ?, adzuna_max_days_old = ?, adzuna_max_pages = ?, adzuna_results_per_page = ?, adzuna_workplace = ?,
-			remotive_query = ?, remotive_category = ?, jobicy_count = ?, jobicy_geo = ?, jobicy_industry = ?, jobicy_tag = ?
+			adzuna_enabled = ?, adzuna_query = ?, adzuna_country = ?, adzuna_max_days_old = ?, adzuna_max_pages = ?, adzuna_results_per_page = ?, adzuna_workplace = ?,
+			remotive_enabled = ?, remotive_query = ?, remotive_category = ?, jobicy_enabled = ?, jobicy_count = ?, jobicy_geo = ?, jobicy_industry = ?, jobicy_tag = ?
 		WHERE id = 1`,
-		settings.Adzuna.Query, settings.Adzuna.Country, settings.Adzuna.MaxDaysOld, settings.Adzuna.MaxPages, settings.Adzuna.ResultsPerPage, settings.Adzuna.Workplace,
-		settings.Remotive.Query, settings.Remotive.Category, settings.Jobicy.Count, settings.Jobicy.Geo, settings.Jobicy.Industry, settings.Jobicy.Tag,
+		settings.Adzuna.Enabled, settings.Adzuna.Query, settings.Adzuna.Country, settings.Adzuna.MaxDaysOld, settings.Adzuna.MaxPages, settings.Adzuna.ResultsPerPage, settings.Adzuna.Workplace,
+		settings.Remotive.Enabled, settings.Remotive.Query, settings.Remotive.Category, settings.Jobicy.Enabled, settings.Jobicy.Count, settings.Jobicy.Geo, settings.Jobicy.Industry, settings.Jobicy.Tag,
 	)
 	return settings, err
 }

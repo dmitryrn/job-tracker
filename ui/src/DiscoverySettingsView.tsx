@@ -2,9 +2,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import { fetchDiscoverySettings, saveDiscoverySettings, type DiscoverySettings } from "./api";
 
 const emptySettings: DiscoverySettings = {
-  adzuna: { query: "", country: "", maxDaysOld: 30, maxPages: 1, resultsPerPage: 50, workplace: "remote-hybrid" },
-  remotive: { query: "", category: "software-development" },
-  jobicy: { count: 50, geo: "", industry: "", tag: "" },
+  adzuna: { enabled: true, query: "", country: "", maxDaysOld: 30, maxPages: 1, resultsPerPage: 50, workplace: "remote-hybrid" },
+  remotive: { enabled: true, query: "", category: "software-development" },
+  jobicy: { enabled: true, count: 50, geo: "", industry: "", tag: "" },
 };
 
 export default function DiscoverySettingsView() {
@@ -37,7 +37,7 @@ export default function DiscoverySettingsView() {
     return () => controller.abort();
   }, []);
 
-  function update(provider: keyof DiscoverySettings, field: string, value: string | number) {
+  function update(provider: keyof DiscoverySettings, field: string, value: string | number | boolean) {
     setSettings((current) => ({ ...current, [provider]: { ...current[provider], [field]: value } }));
     setSaved(false);
   }
@@ -70,7 +70,10 @@ export default function DiscoverySettingsView() {
       {loading ? <p className="browse-loading">Loading search setup...</p> : (
         <form className="profile-form" onSubmit={(event) => void submit(event)}>
           <section className="profile-section">
-            <h2>Adzuna</h2>
+            <div className="profile-section-heading">
+              <h2>Adzuna</h2>
+              <label className="provider-toggle"><input type="checkbox" checked={settings.adzuna.enabled} onChange={(event) => update("adzuna", "enabled", event.target.checked)} /> Enabled</label>
+            </div>
             <p>Germany-focused aggregated listings, filtered locally for the preferred work arrangement.</p>
             <div className="profile-fields">
               <label>Search phrase<input value={settings.adzuna.query} onChange={(event) => update("adzuna", "query", event.target.value)} /></label>
@@ -83,7 +86,10 @@ export default function DiscoverySettingsView() {
           </section>
 
           <section className="profile-section">
-            <h2>Remotive</h2>
+            <div className="profile-section-heading">
+              <h2>Remotive</h2>
+              <label className="provider-toggle"><input type="checkbox" checked={settings.remotive.enabled} onChange={(event) => update("remotive", "enabled", event.target.checked)} /> Enabled</label>
+            </div>
             <p>Remote listings filtered by a search phrase and Remotive category slug.</p>
             <div className="profile-fields">
               <label>Search phrase<input value={settings.remotive.query} onChange={(event) => update("remotive", "query", event.target.value)} /></label>
@@ -92,7 +98,10 @@ export default function DiscoverySettingsView() {
           </section>
 
           <section className="profile-section">
-            <h2>Jobicy</h2>
+            <div className="profile-section-heading">
+              <h2>Jobicy</h2>
+              <label className="provider-toggle"><input type="checkbox" checked={settings.jobicy.enabled} onChange={(event) => update("jobicy", "enabled", event.target.checked)} /> Enabled</label>
+            </div>
             <p>Remote listings filtered by geography, industry, and an optional tag.</p>
             <div className="profile-fields">
               <label>Results to fetch<input type="number" min="1" max="200" value={settings.jobicy.count} onChange={(event) => update("jobicy", "count", Number(event.target.value))} /></label>

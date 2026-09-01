@@ -100,6 +100,8 @@ button { cursor: pointer; }
 .profile-form textarea { line-height: 1.5; resize: vertical; }
 .profile-summary { margin-top: 16px; }
 .profile-section-heading { align-items: start; display: flex; gap: 18px; justify-content: space-between; }
+.profile-form .provider-toggle { align-items: center; color: #263d56; display: flex; font-size: 12px; gap: 7px; white-space: nowrap; }
+.profile-form .provider-toggle input[type="checkbox"] { accent-color: #263d56; height: 16px; margin: 0; padding: 0; width: 16px; }
 .secondary-action, .save-profile { background: #263d56; border: 0; border-radius: 4px; color: #fff; padding: 9px 12px; }
 .secondary-action:hover, .save-profile:hover { background: #1c3047; }
 .skill-editor { display: grid; gap: 12px; margin-top: 18px; }

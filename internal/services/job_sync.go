@@ -104,6 +104,10 @@ func (syncer *JobSync) sync(ctx context.Context) {
 }
 
 func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSearchSettings) {
+	if !settings.Enabled {
+		syncer.logger.Info("provider sync skipped", zap.String("provider", "adzuna"), zap.String("reason", "disabled"))
+		return
+	}
 	if !syncer.startProviderRun(ctx, "adzuna", syncer.adzunaInterval) {
 		return
 	}
@@ -124,6 +128,10 @@ func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSea
 }
 
 func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.RemotiveSearchSettings) {
+	if !settings.Enabled {
+		syncer.logger.Info("provider sync skipped", zap.String("provider", "remotive"), zap.String("reason", "disabled"))
+		return
+	}
 	if !syncer.startProviderRun(ctx, "remotive", syncer.remotiveInterval) {
 		return
 	}
@@ -144,6 +152,10 @@ func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.Remotiv
 }
 
 func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySearchSettings) {
+	if !settings.Enabled {
+		syncer.logger.Info("provider sync skipped", zap.String("provider", "jobicy"), zap.String("reason", "disabled"))
+		return
+	}
 	if !syncer.startProviderRun(ctx, "jobicy", syncer.jobicyInterval) {
 		return
 	}

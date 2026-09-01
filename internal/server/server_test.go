@@ -92,15 +92,17 @@ func TestDiscoverySettingsAPI(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, "software engineer", result.Settings.Adzuna.Query)
+	assert.True(t, result.Settings.Adzuna.Enabled)
 	assert.Equal(t, "software-development", result.Settings.Remotive.Category)
 
-	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"query":"platform engineer","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"query":"platform engineer","category":"software-development"},"jobicy":{"count":25,"geo":"europe","industry":"engineering","tag":"golang"}}`)
+	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"enabled":false,"query":"platform engineer","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"enabled":true,"query":"platform engineer","category":"software-development"},"jobicy":{"enabled":true,"count":25,"geo":"europe","industry":"engineering","tag":"golang"}}`)
 	require.Equal(t, http.StatusOK, response.Code)
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, "platform engineer", result.Settings.Adzuna.Query)
+	assert.False(t, result.Settings.Adzuna.Enabled)
 	assert.Equal(t, "golang", result.Settings.Jobicy.Tag)
 
-	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"query":"","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"query":"platform engineer","category":"software-development"},"jobicy":{"count":25,"geo":"europe","industry":"engineering","tag":"golang"}}`)
+	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"enabled":false,"query":"","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"enabled":true,"query":"platform engineer","category":"software-development"},"jobicy":{"enabled":true,"count":25,"geo":"europe","industry":"engineering","tag":"golang"}}`)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
