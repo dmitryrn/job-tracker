@@ -45,9 +45,22 @@ type BrowseCompany struct {
 }
 
 type JobMatchRecord struct {
-	JobID     int64  `json:"jobId"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"createdAt"`
+	JobID      int64               `json:"jobId"`
+	Content    string              `json:"content"`
+	Assessment *JobMatchAssessment `json:"assessment,omitempty"`
+	CreatedAt  string              `json:"createdAt"`
+}
+
+type JobMatchAssessment struct {
+	MatcherVersion   string   `json:"matcherVersion"`
+	Model            string   `json:"model"`
+	Score            int      `json:"score"`
+	Label            string   `json:"label"`
+	Summary          string   `json:"summary"`
+	Strengths        []string `json:"strengths"`
+	Gaps             []string `json:"gaps"`
+	Questions        []string `json:"questions"`
+	ApplicationAngle string   `json:"applicationAngle"`
 }
 
 type JobMatchSummary struct {

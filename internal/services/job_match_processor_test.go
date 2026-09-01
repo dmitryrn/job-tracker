@@ -29,7 +29,7 @@ func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
 	}}))
 	_, err = repository.SaveUserProfile(context.Background(), models.UserProfile{Skills: []models.UserProfileSkill{}})
 	require.NoError(t, err)
-	matcher := &recordingProfileJobMatcher{content: "First assessment"}
+	matcher := &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "First assessment"}}
 	analyzer := &recordingJobAnalyzer{analysis: testJobAnalysis()}
 	processor := NewJobMatchProcessor(repository, analyzer, matcher, zap.NewNop())
 	worked, err := processor.process(context.Background())
@@ -51,7 +51,9 @@ func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
 	match, err := repository.JobMatch(context.Background(), 1)
 	require.NoError(t, err)
 	require.NotNil(t, match)
-	assert.Equal(t, "First assessment", match.Content)
+	require.NotNil(t, match.Assessment)
+	assert.Equal(t, "First assessment", match.Assessment.Summary)
+	assert.Equal(t, "backend_engineering", matcher.analyses[0].Analysis.Role.Family)
 	assert.Equal(t, 1, matcher.calls)
 	assert.Equal(t, 1, analyzer.calls)
 	storedAnalysis, err := repository.JobAnalysis(context.Background(), 1)
@@ -74,7 +76,7 @@ func TestJobMatchProcessorWaitsForProfile(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 
-	matcher := &recordingProfileJobMatcher{content: "unused"}
+	matcher := &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "unused"}}
 	processor := NewJobMatchProcessor(repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop())
 	worked, err := processor.process(context.Background())
 	require.NoError(t, err)
@@ -113,14 +115,16 @@ func TestJobMatchProcessorKeepsFailedRequestInQueue(t *testing.T) {
 }
 
 type recordingProfileJobMatcher struct {
-	calls   int
-	content string
-	err     error
+	calls      int
+	analyses   []models.JobAnalysisRecord
+	assessment models.JobMatchAssessment
+	err        error
 }
 
-func (matcher *recordingProfileJobMatcher) Match(_ context.Context, _ models.BrowseJob, _ models.UserProfile) (string, error) {
+func (matcher *recordingProfileJobMatcher) Match(_ context.Context, _ models.BrowseJob, analysis models.JobAnalysisRecord, _ models.UserProfile) (models.JobMatchAssessment, error) {
 	matcher.calls++
-	return matcher.content, matcher.err
+	matcher.analyses = append(matcher.analyses, analysis)
+	return matcher.assessment, matcher.err
 }
 
 func TestJobMatchProcessorReusesCurrentJobAnalysis(t *testing.T) {
@@ -136,7 +140,7 @@ func TestJobMatchProcessorReusesCurrentJobAnalysis(t *testing.T) {
 	_, err = repository.SaveUserProfile(context.Background(), models.UserProfile{Skills: []models.UserProfileSkill{}})
 	require.NoError(t, err)
 	analyzer := &recordingJobAnalyzer{analysis: testJobAnalysis()}
-	processor := NewJobMatchProcessor(repository, analyzer, &recordingProfileJobMatcher{content: "assessment"}, zap.NewNop())
+	processor := NewJobMatchProcessor(repository, analyzer, &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "assessment"}}, zap.NewNop())
 
 	_, err = repository.QueueJobMatch(context.Background(), 1, false)
 	require.NoError(t, err)

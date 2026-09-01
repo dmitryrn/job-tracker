@@ -123,6 +123,12 @@ button { cursor: pointer; }
 .job-post, .match-panel { background: #fff; border: 1px solid #dedcd5; color: #304860; font-size: 14px; line-height: 1.65; margin: 22px 0; padding: 22px; white-space: pre-wrap; }
 .match-panel { white-space: normal; }
 .match-panel p:last-child { margin: 8px 0 0; }
+.match-panel h3 { font-size: 12px; letter-spacing: .06em; margin: 18px 0 6px; text-transform: uppercase; }
+.match-panel ul { margin: 6px 0; padding-left: 20px; }
+.match-score { align-items: baseline; display: flex; gap: 4px; margin: 8px 0 12px; }
+.match-score strong { color: #1e5948; font-family: Georgia, serif; font-size: 38px; font-weight: 400; line-height: 1; }
+.match-score span { color: #65758a; }
+.match-score p { color: #1e5948; font-size: 12px; font-weight: 700; margin: 0 0 0 8px; text-transform: uppercase; }
 .job-page-actions { border-top: 1px solid #d6d5d0; margin-top: 28px; padding-top: 18px; }
 .match-panel .secondary-action { margin-top: 16px; }
 .analysis-loading { color: #65758a; font-size: 13px; margin: 18px 0; }

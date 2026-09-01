@@ -480,6 +480,10 @@ func (repository *SQLite) JobMatch(ctx context.Context, jobID int64) (*models.Jo
 	if err != nil {
 		return nil, fmt.Errorf("get job match: %w", err)
 	}
+	var assessment models.JobMatchAssessment
+	if err := json.Unmarshal([]byte(match.Content), &assessment); err == nil && assessment.MatcherVersion != "" {
+		match.Assessment = &assessment
+	}
 	return &match, nil
 }
 

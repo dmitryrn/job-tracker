@@ -37,7 +37,7 @@ func main() {
 			services.NewUserProfileService,
 			services.NewJobAnalyzer,
 			newJobAnalysisService,
-			services.NewNoOpProfileJobMatcher,
+			newProfileJobMatcher,
 			services.NewJobMatchProcessor,
 			services.NewJobMatches,
 			services.NewJobMatchRequests,
@@ -53,6 +53,10 @@ func newJobCompletionClient(client *openrouter.Client) services.JobCompletionCli
 
 func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisService {
 	return analyzer
+}
+
+func newProfileJobMatcher(client services.JobCompletionClient) services.ProfileJobMatcher {
+	return services.NewLLMProfileJobMatcher(client)
 }
 
 func registerLifecycle(

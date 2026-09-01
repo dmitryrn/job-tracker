@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { deleteJob, fetchJobMatch, queueJobMatch, type BrowseJob, type JobAnalysis, type JobMatch } from "./api";
+import { deleteJob, fetchJobMatch, queueJobMatch, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment } from "./api";
 
 type JobDetailViewProps = {
   job: BrowseJob;
@@ -85,6 +85,19 @@ function JobAnalysisPanel({ record }: { record: JobAnalysis }) {
   );
 }
 
+function JobMatchAssessmentPanel({ assessment }: { assessment: JobMatchAssessment }) {
+  return (
+    <>
+      <div className="match-score"><strong>{assessment.score}</strong><span>/100</span><p>{assessment.label}</p></div>
+      <p>{assessment.summary}</p>
+      {assessment.strengths.length > 0 && <section><h3>Strengths</h3><ul>{assessment.strengths.map((strength) => <li key={strength}>{strength}</li>)}</ul></section>}
+      {assessment.gaps.length > 0 && <section><h3>Gaps</h3><ul>{assessment.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul></section>}
+      {assessment.questions.length > 0 && <section><h3>Questions to resolve</h3><ul>{assessment.questions.map((question) => <li key={question}>{question}</li>)}</ul></section>}
+      {assessment.applicationAngle && <section><h3>Application angle</h3><p>{assessment.applicationAngle}</p></section>}
+    </>
+  );
+}
+
 export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted }: JobDetailViewProps) {
   const [match, setMatch] = useState<JobMatch | null>();
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
@@ -165,7 +178,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
         <>
           <section className="match-panel">
             <p className="eyebrow">Current match</p>
-            {match === undefined ? <p>Loading match...</p> : match === null ? <p>{queued ? "Match request queued." : "No match yet."}</p> : <p>{match.content}</p>}
+            {match === undefined ? <p>Loading match...</p> : match === null ? <p>{queued ? "Match request queued." : "No match yet."}</p> : match.assessment ? <JobMatchAssessmentPanel assessment={match.assessment} /> : <p>{match.content}</p>}
             {match !== undefined && <button type="button" className="secondary-action" disabled={queueing} onClick={() => void requestMatch(match !== null)}>{queueing ? "Queueing..." : match === null ? "Create match" : "Redo match"}</button>}
           </section>
           {analysis === undefined ? <p className="analysis-loading">Loading job analysis...</p> : analysis && <JobAnalysisPanel record={analysis} />}

@@ -57,7 +57,20 @@ export type UserProfile = {
 export type JobMatch = {
   jobId: number;
   content: string;
+  assessment: JobMatchAssessment | null;
   createdAt: string;
+};
+
+export type JobMatchAssessment = {
+  matcherVersion: string;
+  model: string;
+  score: number;
+  label: string;
+  summary: string;
+  strengths: string[];
+  gaps: string[];
+  questions: string[];
+  applicationAngle: string;
 };
 
 export type JobMatchSummary = {

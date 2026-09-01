@@ -168,7 +168,7 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 }
 
 func newTestServer(repository repositories.JobRepository) *Server {
-	processor := services.NewJobMatchProcessor(repository, noOpJobAnalysisService{}, services.NewNoOpProfileJobMatcher(), zap.NewNop())
+	processor := services.NewJobMatchProcessor(repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop())
 	return New(
 		config.Config{},
 		zap.NewNop(),
@@ -183,6 +183,12 @@ type noOpJobAnalysisService struct{}
 
 func (noOpJobAnalysisService) Analyze(context.Context, models.Job) (services.JobAnalysis, error) {
 	return services.JobAnalysis{}, nil
+}
+
+type noOpProfileJobMatcher struct{}
+
+func (noOpProfileJobMatcher) Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (models.JobMatchAssessment, error) {
+	return models.JobMatchAssessment{}, nil
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {

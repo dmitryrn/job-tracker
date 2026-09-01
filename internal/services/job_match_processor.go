@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -13,27 +15,16 @@ import (
 	"nice/internal/repositories"
 )
 
-const noOpMatchContent = "Match analysis has not been implemented yet."
 const jobMatchRetryInterval = 30 * time.Second
 
 var ErrMatchJobNotFound = errors.New("job not found")
 
 type ProfileJobMatcher interface {
-	Match(context.Context, models.BrowseJob, models.UserProfile) (string, error)
+	Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (models.JobMatchAssessment, error)
 }
 
 type JobAnalysisService interface {
 	Analyze(context.Context, models.Job) (JobAnalysis, error)
-}
-
-type noOpProfileJobMatcher struct{}
-
-func NewNoOpProfileJobMatcher() ProfileJobMatcher {
-	return noOpProfileJobMatcher{}
-}
-
-func (noOpProfileJobMatcher) Match(_ context.Context, _ models.BrowseJob, _ models.UserProfile) (string, error) {
-	return noOpMatchContent, nil
 }
 
 type JobMatchProcessor struct {
@@ -153,11 +144,22 @@ func (processor *JobMatchProcessor) processJob(ctx context.Context, job models.B
 		return processor.repository.RemoveMatchRequest(ctx, job.ID)
 	}
 
-	content, err := processor.matcher.Match(ctx, job, profile)
+	analysis, err := processor.repository.JobAnalysis(ctx, job.ID)
 	if err != nil {
 		return err
 	}
-	return processor.repository.CompleteMatchRequest(ctx, job.ID, content)
+	if analysis == nil {
+		return errors.New("job analysis was not saved")
+	}
+	assessment, err := processor.matcher.Match(ctx, job, *analysis, profile)
+	if err != nil {
+		return err
+	}
+	content, err := json.Marshal(assessment)
+	if err != nil {
+		return fmt.Errorf("encode job match assessment: %w", err)
+	}
+	return processor.repository.CompleteMatchRequest(ctx, job.ID, string(content))
 }
 
 func (processor *JobMatchProcessor) ensureJobAnalysis(ctx context.Context, jobID int64) (err error) {
