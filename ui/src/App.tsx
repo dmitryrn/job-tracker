@@ -228,7 +228,6 @@ export default function App() {
   return (
     <main className={route.view === "explorer" ? "shell" : "shell browse-layout"}>
       <header className="app-header">
-        <div className="brand"><span>J</span><div><strong>Jobs</strong><small>Remote work, better sorted</small></div></div>
         <nav className="app-nav" aria-label="Application navigation">
           <button className={route.view === "jobs" || route.view === "companies" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "jobs" })}>Jobs</button>
           <button className={route.view === "matches" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "matches" })}>Matches</button>
