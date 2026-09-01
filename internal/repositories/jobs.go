@@ -491,7 +491,7 @@ func (repository *SQLite) JobMatches(ctx context.Context) ([]models.JobMatchSumm
 	rows, err := repository.db.QueryContext(ctx, `
 		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
 			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
-			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text, job_matches.created_at
+			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text, job_matches.created_at, job_matches.content
 		FROM job_matches
 		JOIN jobs ON jobs.id = job_matches.job_id
 		LEFT JOIN companies ON companies.id = jobs.company_id
@@ -505,10 +505,16 @@ func (repository *SQLite) JobMatches(ctx context.Context) ([]models.JobMatchSumm
 	matches := make([]models.JobMatchSummary, 0)
 	for rows.Next() {
 		var match models.JobMatchSummary
+		var content string
 		if err := rows.Scan(&match.Job.ID, &match.Job.Source, &match.Job.SourceURL, &match.Job.Title, &match.Job.Company,
 			&match.Job.Location, &match.Job.Workplace, &match.Job.EmploymentType, &match.Job.SalaryMin, &match.Job.SalaryMax,
-			&match.Job.PostedAt, &match.Job.BodyText, &match.CreatedAt); err != nil {
+			&match.Job.PostedAt, &match.Job.BodyText, &match.CreatedAt, &content); err != nil {
 			return nil, fmt.Errorf("scan job match: %w", err)
+		}
+		var assessment models.JobMatchAssessment
+		if err := json.Unmarshal([]byte(content), &assessment); err == nil && assessment.MatcherVersion != "" {
+			match.Score = assessment.Score
+			match.Label = assessment.Label
 		}
 		matches = append(matches, match)
 	}

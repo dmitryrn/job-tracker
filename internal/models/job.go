@@ -66,4 +66,6 @@ type JobMatchAssessment struct {
 type JobMatchSummary struct {
 	Job       BrowseJob `json:"job"`
 	CreatedAt string    `json:"createdAt"`
+	Score     int       `json:"score"`
+	Label     string    `json:"label"`
 }

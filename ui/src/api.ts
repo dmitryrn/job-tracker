@@ -76,6 +76,8 @@ export type JobMatchAssessment = {
 export type JobMatchSummary = {
 	job: BrowseJob;
 	createdAt: string;
+	score: number;
+	label: string;
 };
 
 export type JobAnalysis = {
