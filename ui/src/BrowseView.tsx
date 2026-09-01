@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchCompanies, fetchJobs, fetchProviders, type BrowseCompany, type BrowseJob } from "./api";
+import { fetchCompanies, fetchJobs, fetchProviders, queueUnmatchedJobMatches, type BrowseCompany, type BrowseJob } from "./api";
 
 export type BrowseMode = "jobs" | "companies";
 
@@ -101,9 +101,12 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
   const [companies, setCompanies] = useState<BrowseCompany[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [queueing, setQueueing] = useState(false);
+  const [queueMessage, setQueueMessage] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
+    setQueueMessage("");
     async function load() {
       setLoading(true);
       try {
@@ -138,6 +141,21 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
     setSearchFields((current) => checked ? [...current, field] : current.filter((value) => value !== field));
   }
 
+  const unmatchedJobs = jobs.filter((job) => !job.hasMatch);
+
+  async function queueUnmatchedJobs() {
+    setQueueing(true);
+    try {
+      const result = await queueUnmatchedJobMatches(unmatchedJobs.map((job) => job.id));
+      setQueueMessage(result.queued > 0 ? `${result.queued} ${result.queued === 1 ? "role" : "roles"} queued for processing.` : "All unmatched roles in view are already queued.");
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not queue unmatched roles");
+    } finally {
+      setQueueing(false);
+    }
+  }
+
   return (
     <section className="browse-page">
       <header className="browse-header">
@@ -146,9 +164,12 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
           {mode === "companies" && <h1>Meet the companies hiring</h1>}
           {mode === "companies" && <p className="browse-subtitle">The organizations behind the roles in your database.</p>}
         </div>
-        <div className="browse-stat">
-          <strong>{mode === "jobs" ? jobs.length : companies.length}</strong>
-          <span>{mode === "jobs" ? "roles in view" : "companies in view"}</span>
+        <div className="browse-summary">
+          <div className="browse-stat">
+            <strong>{mode === "jobs" ? jobs.length : companies.length}</strong>
+            <span>{mode === "jobs" ? "roles in view" : "companies in view"}</span>
+          </div>
+          {mode === "jobs" && <button type="button" className="queue-unmatched-action" disabled={loading || queueing || unmatchedJobs.length === 0} onClick={() => void queueUnmatchedJobs()}>{queueing ? "Queueing..." : `Queue ${unmatchedJobs.length} unmatched ${unmatchedJobs.length === 1 ? "role" : "roles"}`}</button>}
         </div>
       </header>
 
@@ -189,6 +210,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       </form>
 
       {error && <p className="query-error">{error}</p>}
+      {queueMessage && <p className="queue-message">{queueMessage}</p>}
       {loading && <p className="browse-loading">Loading...</p>}
       {mode === "jobs" ? (
         <div className="job-grid">

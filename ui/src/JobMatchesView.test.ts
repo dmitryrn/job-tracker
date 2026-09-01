@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortJobMatches } from "./JobMatchesView";
+import { formatMatchDate, sortJobMatches } from "./JobMatchesView";
 
 const matches = [
   { job: { id: 1 }, createdAt: "2026-08-26T12:00:00Z", score: 67, label: "Possible match" },
@@ -15,5 +15,22 @@ describe("sortJobMatches", () => {
   it("sorts by numeric match score", () => {
     expect(sortJobMatches(matches, "score-desc").map((match) => match.job.id)).toEqual([2, 1, 3]);
     expect(sortJobMatches(matches, "score-asc").map((match) => match.job.id)).toEqual([3, 1, 2]);
+  });
+});
+
+describe("formatMatchDate", () => {
+  it("includes the browser-local time for a match from today", () => {
+    const date = new Date("2026-08-27T12:00:00Z");
+    const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(date);
+
+    expect(formatMatchDate("2026-08-27T12:00:00Z", new Date("2026-08-27T12:30:00Z"))).toBe(`Matched today at ${time}`);
+  });
+
+  it("includes a browser-local calendar date and time for older matches", () => {
+    const date = new Date("2026-08-26T12:00:00Z");
+    const day = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+    const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(date);
+
+    expect(formatMatchDate("2026-08-26T12:00:00Z", new Date("2026-08-27T12:00:00Z"))).toBe(`Matched ${day} at ${time}`);
   });
 });

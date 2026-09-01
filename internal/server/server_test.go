@@ -78,6 +78,58 @@ func TestJobAPIRejectsUnknownSearchField(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestQueueUnmatchedJobsAPI(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
+		{Source: "example", SourceID: "matched", SourceURL: "https://example.com/matched", Title: "Matched", BodyText: "", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "unmatched", SourceURL: "https://example.com/unmatched", Title: "Unmatched", BodyText: "", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "queued", SourceURL: "https://example.com/queued", Title: "Queued", BodyText: "", Workplace: "remote", MetadataJSON: "{}"},
+	}))
+	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "Existing match"))
+	_, err = repository.QueueJobMatch(context.Background(), 3, false)
+	require.NoError(t, err)
+
+	response := requestWithBody(newTestServer(repository).http.Handler, http.MethodPost, "/api/match-queue", `{"jobIds":[1,2,3]}`)
+	require.Equal(t, http.StatusAccepted, response.Code)
+	assert.JSONEq(t, `{"queued":1}`, response.Body.String())
+
+	match, err := repository.JobMatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotNil(t, match)
+	queue, err := repository.MatchQueue(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []int64{2, 3}, []int64{queue[0].ID, queue[1].ID})
+}
+
+func TestRemoveMatchQueueItemAPI(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
+		{Source: "example", SourceID: "first", SourceURL: "https://example.com/first", Title: "First", BodyText: "", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "second", SourceURL: "https://example.com/second", Title: "Second", BodyText: "", Workplace: "remote", MetadataJSON: "{}"},
+	}))
+	_, err = repository.QueueJobMatch(context.Background(), 2, false)
+	require.NoError(t, err)
+	_, err = repository.QueueJobMatch(context.Background(), 1, false)
+	require.NoError(t, err)
+
+	response := request(newTestServer(repository).http.Handler, http.MethodDelete, "/api/match-queue/1")
+	require.Equal(t, http.StatusNoContent, response.Code)
+	queue, err := repository.MatchQueue(context.Background())
+	require.NoError(t, err)
+	require.Len(t, queue, 1)
+	assert.Equal(t, int64(2), queue[0].ID)
+}
+
 func TestProfileAndJobMatchAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)

@@ -166,6 +166,14 @@ export function queueJobMatch(id: number, redo: boolean) {
   return request<{ queued: boolean }>(`jobs/${id}/match${redo ? "/redo" : ""}`, { method: "POST" });
 }
 
+export function queueUnmatchedJobMatches(jobIds: number[]) {
+  return request<{ queued: number }>("match-queue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jobIds }),
+  });
+}
+
 export function fetchMatchQueue(signal: AbortSignal) {
   return request<{ jobs: BrowseJob[] }>("match-queue", { signal });
 }
@@ -176,6 +184,14 @@ export function reorderMatchQueue(jobIds: number[]) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jobIds }),
   });
+}
+
+export async function removeMatchQueueItem(id: number) {
+  const response = await fetch(apiURL(`match-queue/${id}`), { method: "DELETE" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => undefined) as { error?: string } | undefined;
+    throw new Error(body?.error || `Could not remove job from match queue (${response.status})`);
+  }
 }
 
 export async function deleteJob(id: number) {

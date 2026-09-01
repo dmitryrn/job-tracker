@@ -35,6 +35,7 @@ type JobRepository interface {
 	JobMatches(context.Context) ([]models.JobMatchSummary, error)
 	MatchQueue(context.Context) ([]models.BrowseJob, error)
 	QueueJobMatch(context.Context, int64, bool) (bool, error)
+	QueueJobsWithoutMatches(context.Context, []int64) (int, error)
 	ReplaceMatchQueue(context.Context, []int64) (bool, error)
 	RemoveMatchRequest(context.Context, int64) error
 	CompleteMatchRequest(context.Context, int64, string) error
@@ -573,6 +574,61 @@ func (repository *SQLite) QueueJobMatch(ctx context.Context, jobID int64, redo b
 		return false, fmt.Errorf("commit queue match request: %w", err)
 	}
 	return true, nil
+}
+
+func (repository *SQLite) QueueJobsWithoutMatches(ctx context.Context, jobIDs []int64) (int, error) {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin queue unmatched job matches: %w", err)
+	}
+	defer transaction.Rollback()
+
+	queue, err := readMatchQueue(ctx, transaction)
+	if err != nil {
+		return 0, err
+	}
+	alreadyQueued := make(map[int64]struct{}, len(queue))
+	for _, jobID := range queue {
+		alreadyQueued[jobID] = struct{}{}
+	}
+
+	requested := make([]int64, 0, len(jobIDs))
+	seen := make(map[int64]struct{}, len(jobIDs))
+	for _, jobID := range jobIDs {
+		if _, duplicate := seen[jobID]; duplicate {
+			continue
+		}
+		seen[jobID] = struct{}{}
+		if _, queued := alreadyQueued[jobID]; queued {
+			continue
+		}
+
+		var exists, hasMatch bool
+		if err := transaction.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM jobs WHERE id = ?)`, jobID).Scan(&exists); err != nil {
+			return 0, fmt.Errorf("check job for match queue: %w", err)
+		}
+		if !exists {
+			continue
+		}
+		if err := transaction.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM job_matches WHERE job_id = ?)`, jobID).Scan(&hasMatch); err != nil {
+			return 0, fmt.Errorf("check job match for match queue: %w", err)
+		}
+		if hasMatch {
+			continue
+		}
+		requested = append(requested, jobID)
+	}
+
+	if len(requested) > 0 {
+		queue = append(requested, queue...)
+		if err := writeMatchQueue(ctx, transaction, queue); err != nil {
+			return 0, err
+		}
+	}
+	if err := transaction.Commit(); err != nil {
+		return 0, fmt.Errorf("commit queue unmatched job matches: %w", err)
+	}
+	return len(requested), nil
 }
 
 func (repository *SQLite) ReplaceMatchQueue(ctx context.Context, jobIDs []int64) (bool, error) {

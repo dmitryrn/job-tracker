@@ -32,7 +32,9 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, prof
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
 	mux.HandleFunc("GET /api/matches", jobMatchesHandler(matches, logger))
 	mux.HandleFunc("GET /api/match-queue", matchQueueHandler(requests, logger))
+	mux.HandleFunc("POST /api/match-queue", queueUnmatchedJobMatchesHandler(requests, logger))
 	mux.HandleFunc("PUT /api/match-queue", reorderMatchQueueHandler(requests, logger))
+	mux.HandleFunc("DELETE /api/match-queue/{id}", removeMatchQueueHandler(requests, logger))
 	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))
 	mux.HandleFunc("GET /api/companies", companiesHandler(browse, logger))
 	mux.HandleFunc("GET /api/profile", profileHandler(profile, logger))
@@ -212,6 +214,33 @@ func matchQueueHandler(requests *services.JobMatchRequests, logger *zap.Logger) 
 	}
 }
 
+func queueUnmatchedJobMatchesHandler(requests *services.JobMatchRequests, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var body struct {
+			JobIDs []int64 `json:"jobIds"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			logger.Warn("invalid unmatched job match queue", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "jobIds must be valid JSON")
+			return
+		}
+		for _, id := range body.JobIDs {
+			if id < 1 {
+				logger.Warn("invalid unmatched job match queue ID", zap.Int64("id", id))
+				writeError(writer, http.StatusBadRequest, "job IDs must be positive integers")
+				return
+			}
+		}
+		queued, err := requests.QueueUnmatched(request.Context(), body.JobIDs)
+		if err != nil {
+			logger.Error("queue unmatched job matches failed", zap.Int64s("job_ids", body.JobIDs), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not queue unmatched job matches")
+			return
+		}
+		writeJSON(writer, http.StatusAccepted, map[string]int{"queued": queued})
+	}
+}
+
 func reorderMatchQueueHandler(requests *services.JobMatchRequests, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var body struct {
@@ -238,6 +267,23 @@ func reorderMatchQueueHandler(requests *services.JobMatchRequests, logger *zap.L
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]bool{"queued": true})
+	}
+}
+
+func removeMatchQueueHandler(requests *services.JobMatchRequests, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid match queue job ID", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		if err := requests.Remove(request.Context(), id); err != nil {
+			logger.Error("remove job from match queue failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not remove job from match queue")
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
 	}
 }
 

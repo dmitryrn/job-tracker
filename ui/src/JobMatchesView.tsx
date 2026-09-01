@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { formatDate } from "./BrowseView";
 import { fetchJobMatches, type BrowseJob, type JobMatchSummary } from "./api";
 
 type JobMatchesViewProps = {
@@ -14,6 +13,19 @@ const matchSortDescriptions: Record<MatchSort, string> = {
   "score-desc": "Highest scores first.",
   "score-asc": "Lowest scores first.",
 };
+
+export function formatMatchDate(value: string, now = new Date()) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Matched recently";
+  }
+  const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(date);
+  if (date.toDateString() === now.toDateString()) {
+    return `Matched today at ${time}`;
+  }
+  const day = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+  return `Matched ${day} at ${time}`;
+}
 
 export function sortJobMatches(matches: JobMatchSummary[], sort: MatchSort) {
   return [...matches].sort((left, right) => {
@@ -79,7 +91,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
           {sortJobMatches(matches, sort).map((match) => (
             <li key={match.job.id}>
               <button type="button" className="match-job" onClick={() => onOpenMatch(match.job)}>
-                <span className="match-topline"><span className="match-created">Matched {formatDate(match.createdAt)}</span><span className="match-label">{match.label || "Unlabeled"}</span></span>
+                <span className="match-topline"><span className="match-created">{formatMatchDate(match.createdAt)}</span><span className="match-label">{match.label || "Unlabeled"}</span></span>
                 <strong>{match.job.title}</strong>
                 <span>{match.job.company || "Company not listed"}</span>
               </button>

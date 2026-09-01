@@ -271,6 +271,17 @@ func (requests *JobMatchRequests) Queue(ctx context.Context, jobID int64, redo b
 	return nil
 }
 
+func (requests *JobMatchRequests) QueueUnmatched(ctx context.Context, jobIDs []int64) (int, error) {
+	queued, err := requests.repository.QueueJobsWithoutMatches(ctx, jobIDs)
+	if err != nil {
+		return 0, err
+	}
+	if queued > 0 {
+		requests.processor.Wake()
+	}
+	return queued, nil
+}
+
 func (requests *JobMatchRequests) List(ctx context.Context) ([]models.BrowseJob, error) {
 	return requests.repository.MatchQueue(ctx)
 }
@@ -285,4 +296,8 @@ func (requests *JobMatchRequests) Reorder(ctx context.Context, jobIDs []int64) e
 	}
 	requests.processor.Wake()
 	return nil
+}
+
+func (requests *JobMatchRequests) Remove(ctx context.Context, jobID int64) error {
+	return requests.repository.RemoveMatchRequest(ctx, jobID)
 }

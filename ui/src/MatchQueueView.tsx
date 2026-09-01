@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchMatchQueue, reorderMatchQueue, type BrowseJob } from "./api";
+import { fetchMatchQueue, removeMatchQueueItem, reorderMatchQueue, type BrowseJob } from "./api";
 
 type MatchQueueViewProps = {
   onOpenJob: (job: BrowseJob) => void;
@@ -54,6 +54,22 @@ export default function MatchQueueView({ onOpenJob }: MatchQueueViewProps) {
     }
   }
 
+  async function remove(index: number) {
+    const job = jobs[index];
+    const next = jobs.filter((_, currentIndex) => currentIndex !== index);
+    setSaving(true);
+    setJobs(next);
+    try {
+      await removeMatchQueueItem(job.id);
+      setError("");
+    } catch (reason) {
+      setJobs(jobs);
+      setError(reason instanceof Error ? reason.message : "Could not remove job from match queue");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="queue-page">
       <header className="queue-header">
@@ -68,6 +84,7 @@ export default function MatchQueueView({ onOpenJob }: MatchQueueViewProps) {
               <div className="queue-actions">
                 <button type="button" className="queue-move" disabled={saving || index === 0} onClick={() => void move(index, -1)} aria-label={`Move ${job.title} up`}>Up</button>
                 <button type="button" className="queue-move" disabled={saving || index === jobs.length - 1} onClick={() => void move(index, 1)} aria-label={`Move ${job.title} down`}>Down</button>
+                <button type="button" className="queue-remove" disabled={saving} onClick={() => void remove(index)} aria-label={`Remove ${job.title} from the match queue`}>Remove</button>
               </div>
             </li>
           ))}
