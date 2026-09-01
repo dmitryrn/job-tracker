@@ -45,17 +45,6 @@ func TestLoadRejectsJobicyIntervalBelowOneHour(t *testing.T) {
 	assert.ErrorContains(t, err, "at least 1h")
 }
 
-func TestLoadIgnoresLegacyDiscoveryFilters(t *testing.T) {
-	t.Chdir(t.TempDir())
-	content := strings.Replace(testConfig("6h", "12h", "24h"), "sync_interval = \"6h\"", "query = \"software engineer\"\ncountry = \"de\"\nmax_days_old = 30\nmax_pages = 5\nresults_per_page = 50\nworkplace = \"remote-hybrid\"\nsync_interval = \"6h\"", 1)
-	content = strings.Replace(content, "sync_interval = \"12h\"", "query = \"software engineer\"\nsync_interval = \"12h\"", 1)
-	content = strings.Replace(content, "sync_interval = \"24h\"", "count = 50\ngeo = \"europe\"\nindustry = \"engineering\"\ntag = \"\"\nsync_interval = \"24h\"", 1)
-	writeTestConfigContent(t, content)
-
-	_, err := Load()
-	assert.NoError(t, err)
-}
-
 func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 	config := testConfig("6h", "12h", "24h")
 	tests := []struct {

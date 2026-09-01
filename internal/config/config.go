@@ -97,26 +97,15 @@ type fileJobMatchConfig struct {
 }
 
 type fileAdzunaConfig struct {
-	SyncInterval         string `toml:"sync_interval" validate:"notblank,duration"`
-	LegacyQuery          string `toml:"query"`
-	LegacyCountry        string `toml:"country"`
-	LegacyMaxDaysOld     int    `toml:"max_days_old"`
-	LegacyMaxPages       int    `toml:"max_pages"`
-	LegacyResultsPerPage int    `toml:"results_per_page"`
-	LegacyWorkplace      string `toml:"workplace"`
+	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
 }
 
 type fileRemotiveConfig struct {
 	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
-	LegacyQuery  string `toml:"query"`
 }
 
 type fileJobicyConfig struct {
-	SyncInterval   string `toml:"sync_interval" validate:"notblank,duration"`
-	LegacyCount    int    `toml:"count"`
-	LegacyGeo      string `toml:"geo"`
-	LegacyIndustry string `toml:"industry"`
-	LegacyTag      string `toml:"tag"`
+	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
 }
 
 func Load() (Config, error) {
