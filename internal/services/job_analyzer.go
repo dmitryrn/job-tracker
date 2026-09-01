@@ -299,7 +299,7 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 			return fmt.Errorf("job analysis contains an invalid constraint %q", constraint.Kind)
 		}
 		if !validQuote(constraint.Quote, quoteSource) {
-			return fmt.Errorf("job analysis constraint %q quote is not in source", constraint.Kind)
+			return fmt.Errorf("job analysis constraint %q quote %q is not in source", constraint.Kind, constraint.Quote)
 		}
 	}
 	seenRequirements := make(map[string]bool, len(draft.Requirements))
@@ -313,7 +313,7 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 			return fmt.Errorf("job analysis contains an invalid requirement %q", requirement.ID)
 		}
 		if !validQuote(requirement.Quote, quoteSource) {
-			return fmt.Errorf("job analysis requirement %q quote is not in source", requirement.ID)
+			return fmt.Errorf("job analysis requirement %q quote %q is not in source", requirement.ID, requirement.Quote)
 		}
 		if requirement.Kind == "must_have" && !jobMustHavePattern.MatchString(requirement.Quote) {
 			requirement.Kind = "strong_preference"
@@ -323,16 +323,22 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 	}
 	for index := range draft.Responsibilities {
 		item := &draft.Responsibilities[index]
-		if !validConcept(item.Concept) || !validQuote(item.Quote, quoteSource) {
+		if !validConcept(item.Concept) {
 			return fmt.Errorf("job analysis contains an invalid responsibility")
+		}
+		if !validQuote(item.Quote, quoteSource) {
+			return fmt.Errorf("job analysis responsibility quote %q is not in source", item.Quote)
 		}
 		item.Concept = canonicalJobConcept(item.Concept)
 	}
 	preferences := make([]models.JobEvidence, 0, len(draft.Preferences))
 	for index := range draft.Preferences {
 		item := &draft.Preferences[index]
-		if !validConcept(item.Concept) || !validQuote(item.Quote, quoteSource) {
+		if !validConcept(item.Concept) {
 			return fmt.Errorf("job analysis contains an invalid preference")
+		}
+		if !validQuote(item.Quote, quoteSource) {
+			return fmt.Errorf("job analysis preference quote %q is not in source", item.Quote)
 		}
 		item.Concept = canonicalJobConcept(item.Concept)
 		if !jobOptionalPattern.MatchString(item.Quote) {

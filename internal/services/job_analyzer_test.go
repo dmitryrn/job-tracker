@@ -66,7 +66,7 @@ func TestJobAnalyzerRejectsClaimsWithoutPostingQuotes(t *testing.T) {
 	}}, "analyzer-test-model", "high")
 
 	_, err := analyzer.Analyze(context.Background(), models.Job{Title: "Backend Engineer", BodyText: "Build APIs."})
-	assert.ErrorContains(t, err, "quote is not in source")
+	assert.ErrorContains(t, err, `quote "Must have Go experience." is not in source`)
 }
 
 func TestJobAnalyzerRejectsBlankJob(t *testing.T) {
