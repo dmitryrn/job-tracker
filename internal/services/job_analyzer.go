@@ -18,7 +18,6 @@ import (
 const (
 	JobAnalyzerVersion   = "v2"
 	JobPromptVersion     = "2026-08-28.1"
-	JobAnalyzerModel     = "z-ai/glm-5.2:free"
 	jobAnalysisMaxTokens = 4000
 )
 
@@ -119,6 +118,7 @@ type JobCompletionClient interface {
 
 type JobAnalyzer struct {
 	client JobCompletionClient
+	model  string
 }
 
 type JobAnalysis struct {
@@ -131,8 +131,8 @@ type JobAnalysis struct {
 	Analysis              models.JobAnalysisDraft `json:"analysis"`
 }
 
-func NewJobAnalyzer(client JobCompletionClient) *JobAnalyzer {
-	return &JobAnalyzer{client: client}
+func NewJobAnalyzer(client JobCompletionClient, model string) *JobAnalyzer {
+	return &JobAnalyzer{client: client, model: model}
 }
 
 func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAnalysis, error) {
@@ -144,7 +144,7 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 
 	temperature := 0.0
 	request := openrouter.ChatRequest{
-		Model: JobAnalyzerModel,
+		Model: analyzer.model,
 		Messages: []openrouter.Message{
 			{Role: "system", Content: jobExtractionInstructions},
 			{Role: "user", Content: "Analyze this job posting.\n\n<job>\n" + input + "\n</job>"},

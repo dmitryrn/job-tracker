@@ -12,7 +12,6 @@ import (
 
 const (
 	LLMProfileJobMatcherVersion = "v1"
-	ProfileJobMatcherModel      = "z-ai/glm-5.2:free"
 	profileMatchMaxTokens       = 2400
 )
 
@@ -39,10 +38,11 @@ var profileMatchResponseSchema = json.RawMessage(`{
 
 type LLMProfileJobMatcher struct {
 	client JobCompletionClient
+	model  string
 }
 
-func NewLLMProfileJobMatcher(client JobCompletionClient) *LLMProfileJobMatcher {
-	return &LLMProfileJobMatcher{client: client}
+func NewLLMProfileJobMatcher(client JobCompletionClient, model string) *LLMProfileJobMatcher {
+	return &LLMProfileJobMatcher{client: client, model: model}
 }
 
 func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.BrowseJob, analysis models.JobAnalysisRecord, profile models.UserProfile) (models.JobMatchAssessment, error) {
@@ -57,7 +57,7 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 
 	temperature := 0.2
 	response, err := matcher.client.Complete(ctx, openrouter.ChatRequest{
-		Model: ProfileJobMatcherModel,
+		Model: matcher.model,
 		Messages: []openrouter.Message{
 			{Role: "system", Content: profileJobMatchInstructions},
 			{Role: "user", Content: "Assess this job against this profile.\n\n<input>\n" + string(input) + "\n</input>"},

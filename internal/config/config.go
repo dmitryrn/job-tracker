@@ -20,6 +20,7 @@ type Config struct {
 	HTTPAddress  string
 	DatabasePath string
 	Providers    ProviderConfig
+	LLM          LLMConfig
 	OpenRouter   OpenRouterConfig
 }
 
@@ -27,6 +28,12 @@ type ProviderConfig struct {
 	Adzuna   AdzunaConfig
 	Jobicy   JobicyConfig
 	Remotive RemotiveConfig
+}
+
+type LLMConfig struct {
+	BaseURL string
+	Model   string
+	APIKey  string
 }
 
 type OpenRouterConfig struct {
@@ -65,11 +72,18 @@ type fileConfig struct {
 	Database struct {
 		Path string `toml:"path" validate:"notblank"`
 	} `toml:"database"`
+	LLM       fileLLMConfig `toml:"llm"`
 	Providers struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
 		Jobicy   fileJobicyConfig   `toml:"jobicy"`
 		Remotive fileRemotiveConfig `toml:"remotive"`
 	} `toml:"providers"`
+}
+
+type fileLLMConfig struct {
+	BaseURL string `toml:"base_url" validate:"notblank,url"`
+	Model   string `toml:"model" validate:"notblank"`
+	APIKey  string `toml:"api_key" validate:"notblank"`
 }
 
 type fileAdzunaConfig struct {
@@ -170,6 +184,11 @@ func Load() (Config, error) {
 				Tag:          source.Providers.Jobicy.Tag,
 				SyncInterval: jobicyInterval,
 			},
+		},
+		LLM: LLMConfig{
+			BaseURL: source.LLM.BaseURL,
+			Model:   source.LLM.Model,
+			APIKey:  source.LLM.APIKey,
 		},
 		OpenRouter: OpenRouterConfig{APIKey: openRouterAPIKey},
 	}, nil

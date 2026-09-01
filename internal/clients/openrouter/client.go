@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	baseURL               = "https://openrouter.ai/api/v1/chat/completions"
-	DefaultModel          = "openrouter/free"
 	maxErrorResponseBytes = 64 << 10
 )
 
@@ -50,7 +48,7 @@ type Client struct {
 }
 
 func NewClient(cfg config.Config) *Client {
-	return newClient(cfg.OpenRouter.APIKey, DefaultModel, &http.Client{Timeout: 120 * time.Second}, baseURL)
+	return newClient(cfg.LLM.APIKey, cfg.LLM.Model, &http.Client{Timeout: 120 * time.Second}, cfg.LLM.BaseURL)
 }
 
 func newClient(apiKey, model string, httpClient *http.Client, baseURL string) *Client {
@@ -64,40 +62,40 @@ func newClient(apiKey, model string, httpClient *http.Client, baseURL string) *C
 
 func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResponse, error) {
 	if strings.TrimSpace(client.apiKey) == "" {
-		return ChatResponse{}, fmt.Errorf("OpenRouter API key is required")
+		return ChatResponse{}, fmt.Errorf("LLM API key is required")
 	}
 	if strings.TrimSpace(input.Model) == "" {
 		input.Model = client.model
 	}
 	if strings.TrimSpace(input.Model) == "" {
-		return ChatResponse{}, fmt.Errorf("OpenRouter model is required")
+		return ChatResponse{}, fmt.Errorf("LLM model is required")
 	}
 
 	payload, err := json.Marshal(input)
 	if err != nil {
-		return ChatResponse{}, fmt.Errorf("encode OpenRouter request: %w", err)
+		return ChatResponse{}, fmt.Errorf("encode LLM request: %w", err)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, client.baseURL, bytes.NewReader(payload))
 	if err != nil {
-		return ChatResponse{}, fmt.Errorf("create OpenRouter request: %w", err)
+		return ChatResponse{}, fmt.Errorf("create LLM request: %w", err)
 	}
 	request.Header.Set("Authorization", "Bearer "+client.apiKey)
 	request.Header.Set("Content-Type", "application/json")
 
 	response, err := client.http.Do(request)
 	if err != nil {
-		return ChatResponse{}, fmt.Errorf("call OpenRouter: %w", err)
+		return ChatResponse{}, fmt.Errorf("call LLM: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		body, err := io.ReadAll(io.LimitReader(response.Body, maxErrorResponseBytes))
 		if err != nil {
-			return ChatResponse{}, fmt.Errorf("read unsuccessful OpenRouter response: %w", err)
+			return ChatResponse{}, fmt.Errorf("read unsuccessful LLM response: %w", err)
 		}
 		if body := strings.TrimSpace(string(body)); body != "" {
-			return ChatResponse{}, fmt.Errorf("OpenRouter returned %s: %s", response.Status, body)
+			return ChatResponse{}, fmt.Errorf("LLM returned %s: %s", response.Status, body)
 		}
-		return ChatResponse{}, fmt.Errorf("OpenRouter returned %s", response.Status)
+		return ChatResponse{}, fmt.Errorf("LLM returned %s", response.Status)
 	}
 
 	var body struct {
@@ -113,7 +111,7 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 2<<20))
 	if err := decoder.Decode(&body); err != nil {
-		return ChatResponse{}, fmt.Errorf("decode OpenRouter response: %w", err)
+		return ChatResponse{}, fmt.Errorf("decode LLM response: %w", err)
 	}
 	if len(body.Choices) == 0 {
 		return ChatResponse{}, noCompletionContentError(body.Model, "")
@@ -136,7 +134,7 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 }
 
 func noCompletionContentError(model, reason string) error {
-	message := "OpenRouter returned no completion content"
+	message := "LLM returned no completion content"
 	if reason != "" {
 		message += " (" + reason + ")"
 	}

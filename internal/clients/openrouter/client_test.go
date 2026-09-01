@@ -12,6 +12,7 @@ import (
 )
 
 func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
+	const model = "test-model"
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		assert.Equal(t, http.MethodPost, request.Method)
 		assert.Equal(t, "Bearer test-key", request.Header.Get("Authorization"))
@@ -19,7 +20,7 @@ func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
 
 		var body ChatRequest
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&body))
-		assert.Equal(t, DefaultModel, body.Model)
+		assert.Equal(t, model, body.Model)
 		assert.Equal(t, []Message{{Role: "user", Content: "Extract this CV"}}, body.Messages)
 		assert.True(t, body.Provider.RequireParameters)
 		require.NotNil(t, body.Temperature)
@@ -30,7 +31,7 @@ func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newClient("test-key", DefaultModel, server.Client(), server.URL)
+	client := newClient("test-key", model, server.Client(), server.URL)
 	temperature := 0.0
 	response, err := client.Complete(context.Background(), ChatRequest{
 		Messages:    []Message{{Role: "user", Content: "Extract this CV"}},
@@ -50,7 +51,7 @@ func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newClient("test-key", DefaultModel, server.Client(), server.URL)
+	client := newClient("test-key", "test-model", server.Client(), server.URL)
 	_, err := client.Complete(context.Background(), ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
 	assert.ErrorContains(t, err, "429 Too Many Requests")
 	assert.ErrorContains(t, err, `{"error":{"code":429,"message":"Daily free model quota exhausted"}}`)
@@ -63,7 +64,7 @@ func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newClient("test-key", DefaultModel, server.Client(), server.URL)
+	client := newClient("test-key", "test-model", server.Client(), server.URL)
 	_, err := client.Complete(context.Background(), ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
-	assert.EqualError(t, err, "OpenRouter returned no completion content (length) from provider/model")
+	assert.EqualError(t, err, "LLM returned no completion content (length) from provider/model")
 }

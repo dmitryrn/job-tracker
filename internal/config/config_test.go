@@ -25,6 +25,9 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, 50, cfg.Providers.Jobicy.Count)
 	assert.Equal(t, "europe", cfg.Providers.Jobicy.Geo)
 	assert.Equal(t, "engineering", cfg.Providers.Jobicy.Industry)
+	assert.Equal(t, "https://llm.example.com/v1/chat/completions", cfg.LLM.BaseURL)
+	assert.Equal(t, "test-model", cfg.LLM.Model)
+	assert.Equal(t, "test-llm-key", cfg.LLM.APIKey)
 }
 
 func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
@@ -97,6 +100,11 @@ http_address = ":8080"
 
 [database]
 path = "jobs.db"
+
+[llm]
+base_url = "https://llm.example.com/v1/chat/completions"
+model = "test-model"
+api_key = "test-llm-key"
 
 [providers.adzuna]
 query = "software engineer"

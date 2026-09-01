@@ -21,7 +21,7 @@ import (
 )
 
 var updateJobResults = flag.Bool("update-job-results", false, "refresh job analyzer snapshots with OpenRouter")
-var jobAnalyzerModelList = flag.String("job-analyzer-models", openrouter.DefaultModel, "comma-separated OpenRouter models for job analyzer snapshots")
+var jobAnalyzerModelList = flag.String("job-analyzer-models", "", "comma-separated LLM models for job analyzer snapshots")
 
 type jobFixtureResult struct {
 	Fixture        string      `json:"fixture"`
@@ -43,8 +43,8 @@ func TestAnalyzeJobFixtures(t *testing.T) {
 	resultsDirectory := filepath.Join(root, "jobs", "results")
 	require.NoError(t, os.MkdirAll(resultsDirectory, 0o755))
 
-	for _, model := range configuredJobAnalyzerModels(t) {
-		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openrouter.NewClient(configuration), model: model})
+	for _, model := range configuredJobAnalyzerModels(t, configuration.LLM.Model) {
+		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openrouter.NewClient(configuration), model: model}, model)
 		for _, fixture := range fixtures {
 			t.Run(model+"/"+filepath.Base(fixture), func(t *testing.T) {
 				job := loadJobFixture(t, filepath.Base(fixture))
@@ -120,9 +120,13 @@ func jobFixtureResultName(fixture, model string) string {
 	return fmt.Sprintf("%s.%s.result.json", strings.TrimSuffix(name, filepath.Ext(name)), model)
 }
 
-func configuredJobAnalyzerModels(t *testing.T) []string {
+func configuredJobAnalyzerModels(t *testing.T, defaultModel string) []string {
 	t.Helper()
-	values := strings.Split(*jobAnalyzerModelList, ",")
+	modelList := *jobAnalyzerModelList
+	if strings.TrimSpace(modelList) == "" {
+		modelList = defaultModel
+	}
+	values := strings.Split(modelList, ",")
 	models := make([]string, 0, len(values))
 	for _, value := range values {
 		if model := strings.TrimSpace(value); model != "" {
