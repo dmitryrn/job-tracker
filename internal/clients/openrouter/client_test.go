@@ -25,18 +25,21 @@ func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
 		assert.True(t, body.Provider.RequireParameters)
 		require.NotNil(t, body.Temperature)
 		assert.Zero(t, *body.Temperature)
+		assert.Equal(t, "high", body.ReasoningEffort)
 
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"model":"provider/model","choices":[{"message":{"content":"{\"name\":\"Riley\"}"}}]}`))
 	}))
 	defer server.Close()
 
-	client := newClient("test-key", model, server.Client(), server.URL)
+	client := newClient("test-key", server.Client(), server.URL)
 	temperature := 0.0
 	response, err := client.Complete(context.Background(), ChatRequest{
-		Messages:    []Message{{Role: "user", Content: "Extract this CV"}},
-		Temperature: &temperature,
-		Provider:    ProviderPreferences{RequireParameters: true},
+		Model:           model,
+		Messages:        []Message{{Role: "user", Content: "Extract this CV"}},
+		Temperature:     &temperature,
+		ReasoningEffort: "high",
+		Provider:        ProviderPreferences{RequireParameters: true},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "provider/model", response.Model)
@@ -51,8 +54,8 @@ func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newClient("test-key", "test-model", server.Client(), server.URL)
-	_, err := client.Complete(context.Background(), ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
+	client := newClient("test-key", server.Client(), server.URL)
+	_, err := client.Complete(context.Background(), ChatRequest{Model: "test-model", Messages: []Message{{Role: "user", Content: "CV"}}})
 	assert.ErrorContains(t, err, "429 Too Many Requests")
 	assert.ErrorContains(t, err, `{"error":{"code":429,"message":"Daily free model quota exhausted"}}`)
 }
@@ -64,7 +67,7 @@ func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newClient("test-key", "test-model", server.Client(), server.URL)
-	_, err := client.Complete(context.Background(), ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
+	client := newClient("test-key", server.Client(), server.URL)
+	_, err := client.Complete(context.Background(), ChatRequest{Model: "test-model", Messages: []Message{{Role: "user", Content: "CV"}}})
 	assert.EqualError(t, err, "LLM returned no completion content (length) from provider/model")
 }

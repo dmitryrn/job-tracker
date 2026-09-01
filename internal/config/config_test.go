@@ -26,8 +26,11 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "europe", cfg.Providers.Jobicy.Geo)
 	assert.Equal(t, "engineering", cfg.Providers.Jobicy.Industry)
 	assert.Equal(t, "https://llm.example.com/v1/chat/completions", cfg.LLM.BaseURL)
-	assert.Equal(t, "test-model", cfg.LLM.Model)
 	assert.Equal(t, "test-llm-key", cfg.LLM.APIKey)
+	assert.Equal(t, "job-analysis-model", cfg.LLM.JobAnalysis.Model)
+	assert.Equal(t, "high", cfg.LLM.JobAnalysis.ReasoningEffort)
+	assert.Equal(t, "profile-matcher-model", cfg.LLM.ProfileMatcher.Model)
+	assert.Equal(t, "medium", cfg.LLM.ProfileMatcher.ReasoningEffort)
 }
 
 func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
@@ -103,8 +106,15 @@ path = "jobs.db"
 
 [llm]
 base_url = "https://llm.example.com/v1/chat/completions"
-model = "test-model"
 api_key = "test-llm-key"
+
+[llm.job_analysis]
+model = "job-analysis-model"
+reasoning_effort = "high"
+
+[llm.profile_matcher]
+model = "profile-matcher-model"
+reasoning_effort = "medium"
 
 [providers.adzuna]
 query = "software engineer"

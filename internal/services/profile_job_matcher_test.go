@@ -24,7 +24,7 @@ func TestLLMProfileJobMatcherReturnsValidatedAssessment(t *testing.T) {
 		}`,
 	}}
 
-	assessment, err := NewLLMProfileJobMatcher(client, "matcher-test-model").Match(context.Background(),
+	assessment, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(),
 		models.BrowseJob{ID: 1, Title: "Senior Backend Engineer", BodyText: "Build Go services."},
 		models.JobAnalysisRecord{JobID: 1, Analysis: models.JobAnalysisDraft{Requirements: []models.JobRequirement{{ID: "go", Concept: "go", Kind: "must_have", Quote: "Build Go services."}}}},
 		models.UserProfile{Headline: "Backend engineer", Skills: []models.UserProfileSkill{{Name: "Go", Notes: "Production services"}}},
@@ -36,6 +36,7 @@ func TestLLMProfileJobMatcherReturnsValidatedAssessment(t *testing.T) {
 	assert.Equal(t, LLMProfileJobMatcherVersion, assessment.MatcherVersion)
 	assert.Equal(t, "test-model", assessment.Model)
 	assert.Equal(t, "matcher-test-model", client.request.Model)
+	assert.Equal(t, "high", client.request.ReasoningEffort)
 	assert.Equal(t, profileMatchMaxTokens, client.request.MaxTokens)
 	assert.Contains(t, client.request.Messages[1].Content, `"title":"Senior Backend Engineer"`)
 	assert.Contains(t, client.request.Messages[1].Content, `"headline":"Backend engineer"`)
@@ -51,7 +52,7 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 		"applicationAngle":""
 	}`}}
 
-	_, err := NewLLMProfileJobMatcher(client, "matcher-test-model").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
+	_, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
 	assert.ErrorContains(t, err, "score must be between 0 and 100")
 }
 

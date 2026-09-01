@@ -27,12 +27,13 @@ type ProviderPreferences struct {
 }
 
 type ChatRequest struct {
-	Model          string              `json:"model"`
-	Messages       []Message           `json:"messages"`
-	ResponseFormat json.RawMessage     `json:"response_format,omitempty"`
-	MaxTokens      int                 `json:"max_tokens,omitempty"`
-	Temperature    *float64            `json:"temperature,omitempty"`
-	Provider       ProviderPreferences `json:"provider"`
+	Model           string              `json:"model"`
+	Messages        []Message           `json:"messages"`
+	ResponseFormat  json.RawMessage     `json:"response_format,omitempty"`
+	MaxTokens       int                 `json:"max_tokens,omitempty"`
+	Temperature     *float64            `json:"temperature,omitempty"`
+	ReasoningEffort string              `json:"reasoning_effort,omitempty"`
+	Provider        ProviderPreferences `json:"provider"`
 }
 
 type ChatResponse struct {
@@ -42,19 +43,17 @@ type ChatResponse struct {
 
 type Client struct {
 	apiKey  string
-	model   string
 	http    *http.Client
 	baseURL string
 }
 
 func NewClient(cfg config.Config) *Client {
-	return newClient(cfg.LLM.APIKey, cfg.LLM.Model, &http.Client{Timeout: 120 * time.Second}, cfg.LLM.BaseURL)
+	return newClient(cfg.LLM.APIKey, &http.Client{Timeout: 120 * time.Second}, cfg.LLM.BaseURL)
 }
 
-func newClient(apiKey, model string, httpClient *http.Client, baseURL string) *Client {
+func newClient(apiKey string, httpClient *http.Client, baseURL string) *Client {
 	return &Client{
 		apiKey:  apiKey,
-		model:   model,
 		http:    httpClient,
 		baseURL: baseURL,
 	}
@@ -63,9 +62,6 @@ func newClient(apiKey, model string, httpClient *http.Client, baseURL string) *C
 func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResponse, error) {
 	if strings.TrimSpace(client.apiKey) == "" {
 		return ChatResponse{}, fmt.Errorf("LLM API key is required")
-	}
-	if strings.TrimSpace(input.Model) == "" {
-		input.Model = client.model
 	}
 	if strings.TrimSpace(input.Model) == "" {
 		return ChatResponse{}, fmt.Errorf("LLM model is required")

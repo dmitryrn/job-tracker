@@ -117,8 +117,9 @@ type JobCompletionClient interface {
 }
 
 type JobAnalyzer struct {
-	client JobCompletionClient
-	model  string
+	client          JobCompletionClient
+	model           string
+	reasoningEffort string
 }
 
 type JobAnalysis struct {
@@ -131,8 +132,8 @@ type JobAnalysis struct {
 	Analysis              models.JobAnalysisDraft `json:"analysis"`
 }
 
-func NewJobAnalyzer(client JobCompletionClient, model string) *JobAnalyzer {
-	return &JobAnalyzer{client: client, model: model}
+func NewJobAnalyzer(client JobCompletionClient, model, reasoningEffort string) *JobAnalyzer {
+	return &JobAnalyzer{client: client, model: model, reasoningEffort: reasoningEffort}
 }
 
 func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAnalysis, error) {
@@ -149,10 +150,11 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 			{Role: "system", Content: jobExtractionInstructions},
 			{Role: "user", Content: "Analyze this job posting.\n\n<job>\n" + input + "\n</job>"},
 		},
-		ResponseFormat: jobResponseSchema,
-		MaxTokens:      jobAnalysisMaxTokens,
-		Temperature:    &temperature,
-		Provider:       openrouter.ProviderPreferences{RequireParameters: true},
+		ResponseFormat:  jobResponseSchema,
+		MaxTokens:       jobAnalysisMaxTokens,
+		Temperature:     &temperature,
+		ReasoningEffort: analyzer.reasoningEffort,
+		Provider:        openrouter.ProviderPreferences{RequireParameters: true},
 	}
 	response, err := analyzer.client.Complete(ctx, request)
 	if err != nil {

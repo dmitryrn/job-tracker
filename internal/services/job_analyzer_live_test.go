@@ -43,8 +43,8 @@ func TestAnalyzeJobFixtures(t *testing.T) {
 	resultsDirectory := filepath.Join(root, "jobs", "results")
 	require.NoError(t, os.MkdirAll(resultsDirectory, 0o755))
 
-	for _, model := range configuredJobAnalyzerModels(t, configuration.LLM.Model) {
-		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openrouter.NewClient(configuration), model: model}, model)
+	for _, model := range configuredJobAnalyzerModels(t, configuration.LLM.JobAnalysis.Model) {
+		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openrouter.NewClient(configuration), model: model}, model, configuration.LLM.JobAnalysis.ReasoningEffort)
 		for _, fixture := range fixtures {
 			t.Run(model+"/"+filepath.Base(fixture), func(t *testing.T) {
 				job := loadJobFixture(t, filepath.Base(fixture))

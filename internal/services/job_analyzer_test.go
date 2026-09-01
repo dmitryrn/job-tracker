@@ -37,7 +37,7 @@ Build reliable services.
 Experience with Kubernetes is a plus.`,
 	}
 
-	analysis, err := NewJobAnalyzer(client, "analyzer-test-model").Analyze(context.Background(), job)
+	analysis, err := NewJobAnalyzer(client, "analyzer-test-model", "high").Analyze(context.Background(), job)
 	require.NoError(t, err)
 	assert.Equal(t, JobAnalyzerVersion, analysis.AnalyzerVersion)
 	assert.Equal(t, JobPromptVersion, analysis.PromptVersion)
@@ -49,6 +49,7 @@ Experience with Kubernetes is a plus.`,
 	assert.Contains(t, analysis.NormalizedDescription, "Must have 5 years of professional Golang experience.")
 	assert.Contains(t, client.request.Messages[1].Content, "Supplementary provider metadata:")
 	assert.Equal(t, "analyzer-test-model", client.request.Model)
+	assert.Equal(t, "high", client.request.ReasoningEffort)
 	assert.Equal(t, jobAnalysisMaxTokens, client.request.MaxTokens)
 }
 
@@ -62,14 +63,14 @@ func TestJobAnalyzerRejectsClaimsWithoutPostingQuotes(t *testing.T) {
 			"preferences":[],
 			"unknowns":[]
 		}`,
-	}}, "analyzer-test-model")
+	}}, "analyzer-test-model", "high")
 
 	_, err := analyzer.Analyze(context.Background(), models.Job{Title: "Backend Engineer", BodyText: "Build APIs."})
 	assert.ErrorContains(t, err, "quote is not in source")
 }
 
 func TestJobAnalyzerRejectsBlankJob(t *testing.T) {
-	_, err := NewJobAnalyzer(&fakeJobCompletionClient{}, "analyzer-test-model").Analyze(context.Background(), models.Job{})
+	_, err := NewJobAnalyzer(&fakeJobCompletionClient{}, "analyzer-test-model", "high").Analyze(context.Background(), models.Job{})
 	assert.ErrorContains(t, err, "job title or description is required")
 }
 
@@ -99,7 +100,7 @@ func TestJobAnalyzerDowngradesAnImplicitMustHave(t *testing.T) {
 			"preferences":[],
 			"unknowns":[]
 		}`,
-	}}, "analyzer-test-model")
+	}}, "analyzer-test-model", "high")
 
 	analysis, err := analyzer.Analyze(context.Background(), models.Job{Title: "Backend Engineer", BodyText: "We need solid Go experience."})
 	require.NoError(t, err)
@@ -116,7 +117,7 @@ func TestJobAnalyzerReclassifiesANonOptionalPreference(t *testing.T) {
 			"preferences":[{"concept":"go_experience","quote":"solid Go experience"}],
 			"unknowns":[]
 		}`,
-	}}, "analyzer-test-model")
+	}}, "analyzer-test-model", "high")
 
 	analysis, err := analyzer.Analyze(context.Background(), models.Job{Title: "Backend Engineer", BodyText: "We need solid Go experience."})
 	require.NoError(t, err)
@@ -135,7 +136,7 @@ func TestJobAnalyzerRejectsAnEmptyExtraction(t *testing.T) {
 			"preferences":[],
 			"unknowns":[]
 		}`,
-	}}, "analyzer-test-model")
+	}}, "analyzer-test-model", "high")
 
 	_, err := analyzer.Analyze(context.Background(), models.Job{Title: "Backend Engineer", BodyText: "Build APIs."})
 	assert.ErrorContains(t, err, "no extracted claims")

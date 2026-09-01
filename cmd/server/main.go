@@ -52,7 +52,7 @@ func newJobCompletionClient(client *openrouter.Client) services.JobCompletionCli
 }
 
 func newJobAnalyzer(client services.JobCompletionClient, cfg config.Config) *services.JobAnalyzer {
-	return services.NewJobAnalyzer(client, cfg.LLM.Model)
+	return services.NewJobAnalyzer(client, cfg.LLM.JobAnalysis.Model, cfg.LLM.JobAnalysis.ReasoningEffort)
 }
 
 func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisService {
@@ -60,7 +60,7 @@ func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisS
 }
 
 func newProfileJobMatcher(client services.JobCompletionClient, cfg config.Config) services.ProfileJobMatcher {
-	return services.NewLLMProfileJobMatcher(client, cfg.LLM.Model)
+	return services.NewLLMProfileJobMatcher(client, cfg.LLM.ProfileMatcher.Model, cfg.LLM.ProfileMatcher.ReasoningEffort)
 }
 
 func registerLifecycle(

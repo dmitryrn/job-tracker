@@ -31,9 +31,15 @@ type ProviderConfig struct {
 }
 
 type LLMConfig struct {
-	BaseURL string
-	Model   string
-	APIKey  string
+	BaseURL        string
+	APIKey         string
+	JobAnalysis    LLMTaskConfig
+	ProfileMatcher LLMTaskConfig
+}
+
+type LLMTaskConfig struct {
+	Model           string
+	ReasoningEffort string
 }
 
 type OpenRouterConfig struct {
@@ -81,9 +87,15 @@ type fileConfig struct {
 }
 
 type fileLLMConfig struct {
-	BaseURL string `toml:"base_url" validate:"notblank,url"`
-	Model   string `toml:"model" validate:"notblank"`
-	APIKey  string `toml:"api_key" validate:"notblank"`
+	BaseURL        string            `toml:"base_url" validate:"notblank,url"`
+	APIKey         string            `toml:"api_key" validate:"notblank"`
+	JobAnalysis    fileLLMTaskConfig `toml:"job_analysis"`
+	ProfileMatcher fileLLMTaskConfig `toml:"profile_matcher"`
+}
+
+type fileLLMTaskConfig struct {
+	Model           string `toml:"model" validate:"notblank"`
+	ReasoningEffort string `toml:"reasoning_effort" validate:"oneof=low medium high"`
 }
 
 type fileAdzunaConfig struct {
@@ -187,8 +199,15 @@ func Load() (Config, error) {
 		},
 		LLM: LLMConfig{
 			BaseURL: source.LLM.BaseURL,
-			Model:   source.LLM.Model,
 			APIKey:  source.LLM.APIKey,
+			JobAnalysis: LLMTaskConfig{
+				Model:           source.LLM.JobAnalysis.Model,
+				ReasoningEffort: source.LLM.JobAnalysis.ReasoningEffort,
+			},
+			ProfileMatcher: LLMTaskConfig{
+				Model:           source.LLM.ProfileMatcher.Model,
+				ReasoningEffort: source.LLM.ProfileMatcher.ReasoningEffort,
+			},
 		},
 		OpenRouter: OpenRouterConfig{APIKey: openRouterAPIKey},
 	}, nil

@@ -37,12 +37,13 @@ var profileMatchResponseSchema = json.RawMessage(`{
 }`)
 
 type LLMProfileJobMatcher struct {
-	client JobCompletionClient
-	model  string
+	client          JobCompletionClient
+	model           string
+	reasoningEffort string
 }
 
-func NewLLMProfileJobMatcher(client JobCompletionClient, model string) *LLMProfileJobMatcher {
-	return &LLMProfileJobMatcher{client: client, model: model}
+func NewLLMProfileJobMatcher(client JobCompletionClient, model, reasoningEffort string) *LLMProfileJobMatcher {
+	return &LLMProfileJobMatcher{client: client, model: model, reasoningEffort: reasoningEffort}
 }
 
 func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.BrowseJob, analysis models.JobAnalysisRecord, profile models.UserProfile) (models.JobMatchAssessment, error) {
@@ -62,10 +63,11 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 			{Role: "system", Content: profileJobMatchInstructions},
 			{Role: "user", Content: "Assess this job against this profile.\n\n<input>\n" + string(input) + "\n</input>"},
 		},
-		ResponseFormat: profileMatchResponseSchema,
-		MaxTokens:      profileMatchMaxTokens,
-		Temperature:    &temperature,
-		Provider:       openrouter.ProviderPreferences{RequireParameters: true},
+		ResponseFormat:  profileMatchResponseSchema,
+		MaxTokens:       profileMatchMaxTokens,
+		Temperature:     &temperature,
+		ReasoningEffort: matcher.reasoningEffort,
+		Provider:        openrouter.ProviderPreferences{RequireParameters: true},
 	})
 	if err != nil {
 		return models.JobMatchAssessment{}, fmt.Errorf("match profile to job: %w", err)
