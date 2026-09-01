@@ -12,6 +12,7 @@ import (
 	"nice/internal/clients/jobicy"
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
+	"nice/internal/models"
 	"nice/internal/repositories"
 )
 
@@ -88,17 +89,22 @@ func (syncer *JobSync) run(ctx context.Context) {
 }
 
 func (syncer *JobSync) sync(ctx context.Context) {
-	syncer.syncAdzuna(ctx)
-	syncer.syncJobicy(ctx)
-	syncer.syncRemotive(ctx)
+	settings, err := syncer.repository.DiscoverySettings(ctx)
+	if err != nil {
+		syncer.logger.Error("load discovery settings failed", zap.Error(err))
+		return
+	}
+	syncer.syncAdzuna(ctx, settings.Adzuna)
+	syncer.syncJobicy(ctx, settings.Jobicy)
+	syncer.syncRemotive(ctx, settings.Remotive)
 }
 
-func (syncer *JobSync) syncAdzuna(ctx context.Context) {
+func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSearchSettings) {
 	if !syncer.startProviderRun(ctx, "adzuna", syncer.adzunaInterval) {
 		return
 	}
 	syncer.logger.Info("syncing Adzuna jobs")
-	jobs, err := syncer.adzuna.Fetch(ctx)
+	jobs, err := syncer.adzuna.Fetch(ctx, settings)
 	if err != nil {
 		syncer.logger.Error("Adzuna sync failed", zap.Error(err))
 		syncer.completeProviderRun(ctx, "adzuna", err)
@@ -113,12 +119,12 @@ func (syncer *JobSync) syncAdzuna(ctx context.Context) {
 	syncer.logger.Info("stored Adzuna jobs", zap.Int("count", len(jobs)))
 }
 
-func (syncer *JobSync) syncRemotive(ctx context.Context) {
+func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.RemotiveSearchSettings) {
 	if !syncer.startProviderRun(ctx, "remotive", syncer.remotiveInterval) {
 		return
 	}
 	syncer.logger.Info("syncing Remotive jobs")
-	jobs, err := syncer.remotive.Fetch(ctx)
+	jobs, err := syncer.remotive.Fetch(ctx, settings)
 	if err != nil {
 		syncer.logger.Error("Remotive sync failed", zap.Error(err))
 		syncer.completeProviderRun(ctx, "remotive", err)
@@ -133,12 +139,12 @@ func (syncer *JobSync) syncRemotive(ctx context.Context) {
 	syncer.logger.Info("stored Remotive jobs", zap.Int("count", len(jobs)))
 }
 
-func (syncer *JobSync) syncJobicy(ctx context.Context) {
+func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySearchSettings) {
 	if !syncer.startProviderRun(ctx, "jobicy", syncer.jobicyInterval) {
 		return
 	}
 	syncer.logger.Info("syncing Jobicy jobs")
-	jobs, err := syncer.jobicy.Fetch(ctx)
+	jobs, err := syncer.jobicy.Fetch(ctx, settings)
 	if err != nil {
 		syncer.logger.Error("Jobicy sync failed", zap.Error(err))
 		syncer.completeProviderRun(ctx, "jobicy", err)

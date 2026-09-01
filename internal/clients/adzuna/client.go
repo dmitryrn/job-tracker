@@ -18,7 +18,6 @@ const baseURL = "https://api.adzuna.com/v1/api"
 
 type Client struct {
 	config config.AdzunaConfig
-	query  string
 	http   *http.Client
 }
 
@@ -53,32 +52,31 @@ type job struct {
 func NewClient(cfg config.Config) *Client {
 	return &Client{
 		config: cfg.Providers.Adzuna,
-		query:  cfg.Providers.Adzuna.Query,
 		http:   &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
+func (c *Client) Fetch(ctx context.Context, settings models.AdzunaSearchSettings) ([]models.Job, error) {
 	var jobs []models.Job
-	for page := 1; page <= c.config.MaxPages; page++ {
-		result, err := c.fetchPage(ctx, page)
+	for page := 1; page <= settings.MaxPages; page++ {
+		result, err := c.fetchPage(ctx, page, settings)
 		if err != nil {
 			return nil, err
 		}
 		for _, item := range result {
-			if c.matchesWorkplace(item) {
+			if matchesWorkplace(item, settings.Workplace) {
 				jobs = append(jobs, toModel(item))
 			}
 		}
-		if len(result) < c.config.ResultsPerPage {
+		if len(result) < settings.ResultsPerPage {
 			break
 		}
 	}
 	return jobs, nil
 }
 
-func (c *Client) fetchPage(ctx context.Context, page int) ([]job, error) {
-	endpoint := fmt.Sprintf("%s/jobs/%s/search/%d", baseURL, url.PathEscape(c.config.Country), page)
+func (c *Client) fetchPage(ctx context.Context, page int, settings models.AdzunaSearchSettings) ([]job, error) {
+	endpoint := fmt.Sprintf("%s/jobs/%s/search/%d", baseURL, url.PathEscape(settings.Country), page)
 	requestURL, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, err
@@ -86,9 +84,9 @@ func (c *Client) fetchPage(ctx context.Context, page int) ([]job, error) {
 	params := requestURL.Query()
 	params.Set("app_id", c.config.AppID)
 	params.Set("app_key", c.config.APIKey)
-	params.Set("what", c.query)
-	params.Set("max_days_old", fmt.Sprint(c.config.MaxDaysOld))
-	params.Set("results_per_page", fmt.Sprint(c.config.ResultsPerPage))
+	params.Set("what", settings.Query)
+	params.Set("max_days_old", fmt.Sprint(settings.MaxDaysOld))
+	params.Set("results_per_page", fmt.Sprint(settings.ResultsPerPage))
 	params.Set("content-type", "application/json")
 	requestURL.RawQuery = params.Encode()
 
@@ -117,12 +115,12 @@ func (c *Client) fetchPage(ctx context.Context, page int) ([]job, error) {
 	return result.Results, nil
 }
 
-func (c *Client) matchesWorkplace(job job) bool {
-	if c.config.Workplace == "any" {
+func matchesWorkplace(job job, workplace string) bool {
+	if workplace == "any" {
 		return true
 	}
 	text := strings.ToLower(strings.Join([]string{job.Title, job.Description, job.Location.DisplayName}, " "))
-	if c.config.Workplace == "remote" {
+	if workplace == "remote" {
 		return strings.Contains(text, "remote")
 	}
 	return strings.Contains(text, "remote") || strings.Contains(text, "hybrid")

@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"nice/internal/models"
 )
 
 func TestFetchMapsFullDescription(t *testing.T) {
@@ -19,7 +21,7 @@ func TestFetchMapsFullDescription(t *testing.T) {
 	}))
 	defer server.Close()
 
-	jobs, err := newClient(server.Client(), server.URL, "software engineer").Fetch(context.Background())
+	jobs, err := newClient(server.Client(), server.URL).Fetch(context.Background(), models.RemotiveSearchSettings{Query: "software engineer", Category: "software-development"})
 	require.NoError(t, err)
 	require.Len(t, jobs, 1)
 	job := jobs[0]
@@ -38,7 +40,7 @@ func TestFetchFiltersOtherCategories(t *testing.T) {
 	}))
 	defer server.Close()
 
-	jobs, err := newClient(server.Client(), server.URL, "engineer").Fetch(context.Background())
+	jobs, err := newClient(server.Client(), server.URL).Fetch(context.Background(), models.RemotiveSearchSettings{Query: "engineer", Category: "software-development"})
 	require.NoError(t, err)
 	require.Len(t, jobs, 1)
 	assert.Equal(t, "1", jobs[0].SourceID)

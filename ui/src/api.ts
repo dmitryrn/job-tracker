@@ -55,6 +55,27 @@ export type UserProfile = {
   updatedAt: string;
 };
 
+export type DiscoverySettings = {
+  adzuna: {
+    query: string;
+    country: string;
+    maxDaysOld: number;
+    maxPages: number;
+    resultsPerPage: number;
+    workplace: string;
+  };
+  remotive: {
+    query: string;
+    category: string;
+  };
+  jobicy: {
+    count: number;
+    geo: string;
+    industry: string;
+    tag: string;
+  };
+};
+
 export type JobMatch = {
   jobId: number;
   content: string;
@@ -140,6 +161,18 @@ export function fetchCompanies(search: string, signal: AbortSignal) {
 
 export function fetchProfile(signal: AbortSignal) {
   return request<{ profile: UserProfile | null }>("profile", { signal });
+}
+
+export function fetchDiscoverySettings(signal: AbortSignal) {
+  return request<{ settings: DiscoverySettings }>("discovery-settings", { signal });
+}
+
+export function saveDiscoverySettings(settings: DiscoverySettings) {
+  return request<{ settings: DiscoverySettings }>("discovery-settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
 }
 
 export function saveProfile(profile: UserProfile) {

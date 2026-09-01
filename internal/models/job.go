@@ -22,6 +22,33 @@ type JobSearch struct {
 	Fields   []string
 }
 
+type DiscoverySettings struct {
+	Adzuna   AdzunaSearchSettings   `json:"adzuna"`
+	Remotive RemotiveSearchSettings `json:"remotive"`
+	Jobicy   JobicySearchSettings   `json:"jobicy"`
+}
+
+type AdzunaSearchSettings struct {
+	Query          string `json:"query"`
+	Country        string `json:"country"`
+	MaxDaysOld     int    `json:"maxDaysOld"`
+	MaxPages       int    `json:"maxPages"`
+	ResultsPerPage int    `json:"resultsPerPage"`
+	Workplace      string `json:"workplace"`
+}
+
+type RemotiveSearchSettings struct {
+	Query    string `json:"query"`
+	Category string `json:"category"`
+}
+
+type JobicySearchSettings struct {
+	Count    int    `json:"count"`
+	Geo      string `json:"geo"`
+	Industry string `json:"industry"`
+	Tag      string `json:"tag"`
+}
+
 type BrowseJob struct {
 	ID             int64  `json:"id"`
 	Source         string `json:"source"`

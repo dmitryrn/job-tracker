@@ -5,12 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nice/internal/config"
+	"nice/internal/models"
 )
 
 func TestFetchMapsJobicyResponse(t *testing.T) {
@@ -30,12 +29,11 @@ func TestFetchMapsJobicyResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	jobs, err := newClient(server.Client(), server.URL, config.JobicyConfig{
-		Count:        50,
-		Geo:          "europe",
-		Industry:     "engineering",
-		SyncInterval: time.Hour,
-	}).Fetch(context.Background())
+	jobs, err := newClient(server.Client(), server.URL).Fetch(context.Background(), models.JobicySearchSettings{
+		Count:    50,
+		Geo:      "europe",
+		Industry: "engineering",
+	})
 	require.NoError(t, err)
 	require.Len(t, jobs, 1)
 	job := jobs[0]

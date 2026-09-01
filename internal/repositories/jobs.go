@@ -23,6 +23,8 @@ type JobRepository interface {
 	Delete(context.Context, int64) (bool, error)
 	Providers(context.Context) ([]string, error)
 	Companies(context.Context, string) ([]models.BrowseCompany, error)
+	DiscoverySettings(context.Context) (models.DiscoverySettings, error)
+	SaveDiscoverySettings(context.Context, models.DiscoverySettings) (models.DiscoverySettings, error)
 	UserProfile(context.Context) (*models.UserProfile, error)
 	SaveUserProfile(context.Context, models.UserProfile) (models.UserProfile, error)
 	AnalysisJob(context.Context, int64) (*models.Job, error)
@@ -45,6 +47,30 @@ var sqlBuilder = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
 type SQLite struct {
 	db *sql.DB
+}
+
+func (repository *SQLite) DiscoverySettings(ctx context.Context) (models.DiscoverySettings, error) {
+	var settings models.DiscoverySettings
+	err := repository.db.QueryRowContext(ctx, `
+		SELECT adzuna_query, adzuna_country, adzuna_max_days_old, adzuna_max_pages, adzuna_results_per_page, adzuna_workplace,
+		       remotive_query, remotive_category, jobicy_count, jobicy_geo, jobicy_industry, jobicy_tag
+		FROM discovery_settings WHERE id = 1`).Scan(
+		&settings.Adzuna.Query, &settings.Adzuna.Country, &settings.Adzuna.MaxDaysOld, &settings.Adzuna.MaxPages, &settings.Adzuna.ResultsPerPage, &settings.Adzuna.Workplace,
+		&settings.Remotive.Query, &settings.Remotive.Category, &settings.Jobicy.Count, &settings.Jobicy.Geo, &settings.Jobicy.Industry, &settings.Jobicy.Tag,
+	)
+	return settings, err
+}
+
+func (repository *SQLite) SaveDiscoverySettings(ctx context.Context, settings models.DiscoverySettings) (models.DiscoverySettings, error) {
+	_, err := repository.db.ExecContext(ctx, `
+		UPDATE discovery_settings SET
+			adzuna_query = ?, adzuna_country = ?, adzuna_max_days_old = ?, adzuna_max_pages = ?, adzuna_results_per_page = ?, adzuna_workplace = ?,
+			remotive_query = ?, remotive_category = ?, jobicy_count = ?, jobicy_geo = ?, jobicy_industry = ?, jobicy_tag = ?
+		WHERE id = 1`,
+		settings.Adzuna.Query, settings.Adzuna.Country, settings.Adzuna.MaxDaysOld, settings.Adzuna.MaxPages, settings.Adzuna.ResultsPerPage, settings.Adzuna.Workplace,
+		settings.Remotive.Query, settings.Remotive.Category, settings.Jobicy.Count, settings.Jobicy.Geo, settings.Jobicy.Industry, settings.Jobicy.Tag,
+	)
+	return settings, err
 }
 
 func NewSQLite(db *sql.DB) JobRepository {

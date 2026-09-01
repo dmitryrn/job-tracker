@@ -78,6 +78,32 @@ func TestJobAPIRejectsUnknownSearchField(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestDiscoverySettingsAPI(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	handler := newTestServer(repositories.NewSQLite(db)).http.Handler
+	response := request(handler, http.MethodGet, "/api/discovery-settings")
+	require.Equal(t, http.StatusOK, response.Code)
+	var result struct {
+		Settings models.DiscoverySettings `json:"settings"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+	assert.Equal(t, "software engineer", result.Settings.Adzuna.Query)
+	assert.Equal(t, "software-development", result.Settings.Remotive.Category)
+
+	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"query":"platform engineer","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"query":"platform engineer","category":"software-development"},"jobicy":{"count":25,"geo":"europe","industry":"engineering","tag":"golang"}}`)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+	assert.Equal(t, "platform engineer", result.Settings.Adzuna.Query)
+	assert.Equal(t, "golang", result.Settings.Jobicy.Tag)
+
+	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"query":"","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"query":"platform engineer","category":"software-development"},"jobicy":{"count":25,"geo":"europe","industry":"engineering","tag":"golang"}}`)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
 func TestQueueUnmatchedJobsAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -240,6 +266,7 @@ func newTestServer(repository repositories.JobRepository) *Server {
 		config.Config{},
 		zap.NewNop(),
 		services.NewJobBrowse(repository),
+		services.NewDiscoverySettingsService(repository),
 		services.NewUserProfileService(repository),
 		services.NewJobMatches(repository),
 		services.NewJobMatchRequests(repository, processor),

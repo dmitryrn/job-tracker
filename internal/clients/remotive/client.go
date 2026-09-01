@@ -11,16 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"nice/internal/config"
 	"nice/internal/models"
 )
 
 const baseURL = "https://remotive.com/api/remote-jobs"
 
-const softwareDevelopmentCategory = "Software Development"
-
 type Client struct {
-	query   string
 	http    *http.Client
 	baseURL string
 }
@@ -44,22 +40,22 @@ type job struct {
 	CompanyLogoURL            string   `json:"company_logo_url"`
 }
 
-func NewClient(cfg config.Config) *Client {
-	return newClient(&http.Client{Timeout: 30 * time.Second}, baseURL, cfg.Providers.Remotive.Query)
+func NewClient() *Client {
+	return newClient(&http.Client{Timeout: 30 * time.Second}, baseURL)
 }
 
-func newClient(httpClient *http.Client, baseURL, query string) *Client {
-	return &Client{query: query, http: httpClient, baseURL: baseURL}
+func newClient(httpClient *http.Client, baseURL string) *Client {
+	return &Client{http: httpClient, baseURL: baseURL}
 }
 
-func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
+func (c *Client) Fetch(ctx context.Context, settings models.RemotiveSearchSettings) ([]models.Job, error) {
 	requestURL, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, err
 	}
 	params := requestURL.Query()
-	params.Set("search", c.query)
-	params.Set("category", "software-development")
+	params.Set("search", settings.Query)
+	params.Set("category", settings.Category)
 	requestURL.RawQuery = params.Encode()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
@@ -86,12 +82,16 @@ func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
 	}
 	jobs := make([]models.Job, 0, len(result.Jobs))
 	for _, item := range result.Jobs {
-		if !strings.EqualFold(item.Category, softwareDevelopmentCategory) {
+		if !matchesCategory(item.Category, settings.Category) {
 			continue
 		}
 		jobs = append(jobs, toModel(item))
 	}
 	return jobs, nil
+}
+
+func matchesCategory(category, filter string) bool {
+	return strings.EqualFold(category, filter) || strings.EqualFold(category, strings.ReplaceAll(filter, "-", " "))
 }
 
 func toModel(job job) models.Job {

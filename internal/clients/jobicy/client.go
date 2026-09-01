@@ -11,14 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"nice/internal/config"
 	"nice/internal/models"
 )
 
 const baseURL = "https://jobicy.com/api/v2/remote-jobs"
 
 type Client struct {
-	config  config.JobicyConfig
 	http    *http.Client
 	baseURL string
 }
@@ -55,16 +53,16 @@ type job struct {
 	SalaryPeriod    string   `json:"salaryPeriod"`
 }
 
-func NewClient(cfg config.Config) *Client {
-	return newClient(&http.Client{Timeout: 30 * time.Second}, baseURL, cfg.Providers.Jobicy)
+func NewClient() *Client {
+	return newClient(&http.Client{Timeout: 30 * time.Second}, baseURL)
 }
 
-func newClient(httpClient *http.Client, baseURL string, cfg config.JobicyConfig) *Client {
-	return &Client{config: cfg, http: httpClient, baseURL: baseURL}
+func newClient(httpClient *http.Client, baseURL string) *Client {
+	return &Client{http: httpClient, baseURL: baseURL}
 }
 
-func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
-	industryName, err := c.industryName(ctx)
+func (c *Client) Fetch(ctx context.Context, settings models.JobicySearchSettings) ([]models.Job, error) {
+	industryName, err := c.industryName(ctx, settings.Industry)
 	if err != nil {
 		return nil, err
 	}
@@ -74,15 +72,15 @@ func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
 		return nil, err
 	}
 	params := requestURL.Query()
-	params.Set("count", strconv.Itoa(c.config.Count))
-	if c.config.Geo != "" {
-		params.Set("geo", c.config.Geo)
+	params.Set("count", strconv.Itoa(settings.Count))
+	if settings.Geo != "" {
+		params.Set("geo", settings.Geo)
 	}
-	if c.config.Industry != "" {
-		params.Set("industry", c.config.Industry)
+	if settings.Industry != "" {
+		params.Set("industry", settings.Industry)
 	}
-	if c.config.Tag != "" {
-		params.Set("tag", c.config.Tag)
+	if settings.Tag != "" {
+		params.Set("tag", settings.Tag)
 	}
 	requestURL.RawQuery = params.Encode()
 
@@ -118,8 +116,8 @@ func (c *Client) Fetch(ctx context.Context) ([]models.Job, error) {
 	return jobs, nil
 }
 
-func (c *Client) industryName(ctx context.Context) (string, error) {
-	if c.config.Industry == "" {
+func (c *Client) industryName(ctx context.Context, industrySlug string) (string, error) {
+	if industrySlug == "" {
 		return "", nil
 	}
 
@@ -154,11 +152,11 @@ func (c *Client) industryName(ctx context.Context) (string, error) {
 		return "", err
 	}
 	for _, industry := range result.Industries {
-		if industry.Slug == c.config.Industry {
+		if industry.Slug == industrySlug {
 			return industry.Name, nil
 		}
 	}
-	return "", fmt.Errorf("Jobicy industry %q was not found", c.config.Industry)
+	return "", fmt.Errorf("Jobicy industry %q was not found", industrySlug)
 }
 
 func matchesIndustry(job job, industry string) bool {

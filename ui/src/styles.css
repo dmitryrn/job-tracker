@@ -13,7 +13,7 @@ button { cursor: pointer; }
 .shell { display: grid; grid-template-columns: 238px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); min-height: 100vh; }
 .shell.browse-layout { grid-template-columns: minmax(0, 1fr); }
 .app-header { align-items: center; grid-column: 1 / -1; padding: 18px clamp(18px, 4vw, 58px); }
-.app-nav { display: flex; gap: 6px; }
+.app-nav { display: flex; flex-wrap: wrap; gap: 6px; }
 .app-nav-link { background: transparent; border: 1px solid transparent; border-radius: 4px; color: #9eafc7; font-size: 13px; padding: 8px 12px; }
 .app-nav-link:hover, .app-nav-link.active { background: #1f314a; border-color: #38516e; color: #fff; }
 .sidebar { background: #101a2b; border-right: 1px solid #2e4059; padding: 26px 16px; }

@@ -34,6 +34,7 @@ func main() {
 			repositories.NewSQLite,
 			services.NewJobSync,
 			services.NewJobBrowse,
+			services.NewDiscoverySettingsService,
 			services.NewUserProfileService,
 			newJobAnalyzer,
 			newJobAnalysisService,

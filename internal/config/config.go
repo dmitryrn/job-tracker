@@ -52,27 +52,16 @@ type OpenRouterConfig struct {
 }
 
 type AdzunaConfig struct {
-	AppID          string
-	APIKey         string
-	Query          string
-	Country        string
-	MaxDaysOld     int
-	MaxPages       int
-	ResultsPerPage int
-	Workplace      string
-	SyncInterval   time.Duration
+	AppID        string
+	APIKey       string
+	SyncInterval time.Duration
 }
 
 type RemotiveConfig struct {
-	Query        string
 	SyncInterval time.Duration
 }
 
 type JobicyConfig struct {
-	Count        int
-	Geo          string
-	Industry     string
-	Tag          string
 	SyncInterval time.Duration
 }
 
@@ -108,26 +97,26 @@ type fileJobMatchConfig struct {
 }
 
 type fileAdzunaConfig struct {
-	Query          string `toml:"query" validate:"notblank"`
-	Country        string `toml:"country" validate:"notblank"`
-	MaxDaysOld     int    `toml:"max_days_old" validate:"gte=1"`
-	MaxPages       int    `toml:"max_pages" validate:"gte=1"`
-	ResultsPerPage int    `toml:"results_per_page" validate:"gte=1"`
-	Workplace      string `toml:"workplace" validate:"oneof=any remote remote-hybrid"`
-	SyncInterval   string `toml:"sync_interval" validate:"notblank,duration"`
+	SyncInterval         string `toml:"sync_interval" validate:"notblank,duration"`
+	LegacyQuery          string `toml:"query"`
+	LegacyCountry        string `toml:"country"`
+	LegacyMaxDaysOld     int    `toml:"max_days_old"`
+	LegacyMaxPages       int    `toml:"max_pages"`
+	LegacyResultsPerPage int    `toml:"results_per_page"`
+	LegacyWorkplace      string `toml:"workplace"`
 }
 
 type fileRemotiveConfig struct {
-	Query        string `toml:"query" validate:"notblank"`
 	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
+	LegacyQuery  string `toml:"query"`
 }
 
 type fileJobicyConfig struct {
-	Count        int    `toml:"count" validate:"gte=1,lte=200"`
-	Geo          string `toml:"geo"`
-	Industry     string `toml:"industry"`
-	Tag          string `toml:"tag"`
-	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
+	SyncInterval   string `toml:"sync_interval" validate:"notblank,duration"`
+	LegacyCount    int    `toml:"count"`
+	LegacyGeo      string `toml:"geo"`
+	LegacyIndustry string `toml:"industry"`
+	LegacyTag      string `toml:"tag"`
 }
 
 func Load() (Config, error) {
@@ -192,25 +181,14 @@ func Load() (Config, error) {
 		DatabasePath: source.Database.Path,
 		Providers: ProviderConfig{
 			Adzuna: AdzunaConfig{
-				AppID:          appID,
-				APIKey:         apiKey,
-				Query:          source.Providers.Adzuna.Query,
-				Country:        source.Providers.Adzuna.Country,
-				MaxDaysOld:     source.Providers.Adzuna.MaxDaysOld,
-				MaxPages:       source.Providers.Adzuna.MaxPages,
-				ResultsPerPage: source.Providers.Adzuna.ResultsPerPage,
-				Workplace:      source.Providers.Adzuna.Workplace,
-				SyncInterval:   adzunaInterval,
+				AppID:        appID,
+				APIKey:       apiKey,
+				SyncInterval: adzunaInterval,
 			},
 			Remotive: RemotiveConfig{
-				Query:        source.Providers.Remotive.Query,
 				SyncInterval: remotiveInterval,
 			},
 			Jobicy: JobicyConfig{
-				Count:        source.Providers.Jobicy.Count,
-				Geo:          source.Providers.Jobicy.Geo,
-				Industry:     source.Providers.Jobicy.Industry,
-				Tag:          source.Providers.Jobicy.Tag,
 				SyncInterval: jobicyInterval,
 			},
 		},

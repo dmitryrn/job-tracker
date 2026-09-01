@@ -21,7 +21,7 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, settings *services.DiscoverySettingsService, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -37,6 +37,8 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, prof
 	mux.HandleFunc("DELETE /api/match-queue/{id}", removeMatchQueueHandler(requests, logger))
 	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))
 	mux.HandleFunc("GET /api/companies", companiesHandler(browse, logger))
+	mux.HandleFunc("GET /api/discovery-settings", discoverySettingsHandler(settings, logger))
+	mux.HandleFunc("PUT /api/discovery-settings", saveDiscoverySettingsHandler(settings, logger))
 	mux.HandleFunc("GET /api/profile", profileHandler(profile, logger))
 	mux.HandleFunc("PUT /api/profile", saveProfileHandler(profile, logger))
 	mux.HandleFunc("OPTIONS /api/{path...}", optionsHandler)
@@ -47,6 +49,41 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, prof
 			Handler: cors(mux),
 		},
 		logger: logger,
+	}
+}
+
+func discoverySettingsHandler(settings *services.DiscoverySettingsService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		value, err := settings.Settings(request.Context())
+		if err != nil {
+			logger.Error("load discovery settings failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load discovery settings")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"settings": value})
+	}
+}
+
+func saveDiscoverySettingsHandler(settings *services.DiscoverySettingsService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var value models.DiscoverySettings
+		if err := json.NewDecoder(request.Body).Decode(&value); err != nil {
+			logger.Warn("invalid discovery settings", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "settings must be valid JSON")
+			return
+		}
+		saved, err := settings.Save(request.Context(), value)
+		if err != nil {
+			if errors.Is(err, services.ErrInvalidDiscoverySettings) {
+				logger.Warn("invalid discovery settings", zap.Error(err))
+				writeError(writer, http.StatusBadRequest, err.Error())
+				return
+			}
+			logger.Error("save discovery settings failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not save discovery settings")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"settings": saved})
 	}
 }
 
