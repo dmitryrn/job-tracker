@@ -89,20 +89,16 @@ func (processor *JobMatchProcessor) run(ctx context.Context) {
 		}
 
 		timer := time.NewTimer(interval)
+		wake := processor.wake
 		if cooldown {
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
-			continue
+			// Queue changes cannot skip the configured run cooldown.
+			wake = nil
 		}
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return
-		case <-processor.wake:
+		case <-wake:
 			timer.Stop()
 		case <-timer.C:
 		}
