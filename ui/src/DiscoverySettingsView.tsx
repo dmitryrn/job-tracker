@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { fetchDiscoverySettings, saveDiscoverySettings, type DiscoverySettings } from "./api";
+import { fetchDiscoverySettings, fetchProviderPreview, saveDiscoverySettings, type DiscoverySettings } from "./api";
+import JSONTree from "./JSONTree";
 
 const emptySettings: DiscoverySettings = {
   adzuna: { enabled: true, query: "", country: "", maxDaysOld: 30, maxPages: 1, resultsPerPage: 50, workplace: "remote-hybrid" },
@@ -7,12 +8,17 @@ const emptySettings: DiscoverySettings = {
   jobicy: { enabled: true, count: 50, geo: "", industry: "", tag: "" },
 };
 
+type DiscoveryProvider = keyof DiscoverySettings;
+
 export default function DiscoverySettingsView() {
   const [settings, setSettings] = useState<DiscoverySettings>(emptySettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [previewing, setPreviewing] = useState<DiscoveryProvider>();
+  const [previews, setPreviews] = useState<Partial<Record<DiscoveryProvider, unknown[]>>>({});
+  const [previewErrors, setPreviewErrors] = useState<Partial<Record<DiscoveryProvider, string>>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -57,13 +63,26 @@ export default function DiscoverySettingsView() {
     }
   }
 
+  async function preview(provider: DiscoveryProvider) {
+    setPreviewing(provider);
+    setPreviewErrors((current) => ({ ...current, [provider]: "" }));
+    try {
+      const result = await fetchProviderPreview(provider, settings);
+      setPreviews((current) => ({ ...current, [provider]: result.jobs }));
+    } catch (reason) {
+      setPreviewErrors((current) => ({ ...current, [provider]: reason instanceof Error ? reason.message : "Could not fetch provider preview" }));
+    } finally {
+      setPreviewing(undefined);
+    }
+  }
+
   return (
     <section className="profile-page">
       <header className="profile-header">
         <div>
           <p className="eyebrow">Discovery</p>
           <h1>What roles to search for</h1>
-          <p>These filters apply when each provider next refreshes. Credentials and refresh schedules stay on the server.</p>
+          <p>These filters apply when each provider next refreshes. Preview a provider with the current form values without saving or importing jobs. Credentials and refresh schedules stay on the server.</p>
         </div>
       </header>
 
@@ -72,8 +91,13 @@ export default function DiscoverySettingsView() {
           <section className="profile-section">
             <div className="profile-section-heading">
               <h2>Adzuna</h2>
-              <label className="provider-toggle"><input type="checkbox" checked={settings.adzuna.enabled} onChange={(event) => update("adzuna", "enabled", event.target.checked)} /> Enabled</label>
+              <div className="provider-section-actions">
+                <label className="provider-toggle"><input type="checkbox" checked={settings.adzuna.enabled} onChange={(event) => update("adzuna", "enabled", event.target.checked)} /> Enabled</label>
+                <button className="secondary-action" type="button" disabled={previewing === "adzuna"} onClick={() => void preview("adzuna")}>{previewing === "adzuna" ? "Fetching..." : "Fetch preview"}</button>
+                <PreviewOutcome jobs={previews.adzuna} />
+              </div>
             </div>
+            {previewErrors.adzuna && <p className="query-error">{previewErrors.adzuna}</p>}
             <p>Germany-focused aggregated listings, filtered locally for the preferred work arrangement.</p>
             <div className="profile-fields">
               <label>Search phrase<input value={settings.adzuna.query} onChange={(event) => update("adzuna", "query", event.target.value)} /></label>
@@ -83,25 +107,37 @@ export default function DiscoverySettingsView() {
               <label>Results per page<input type="number" min="1" value={settings.adzuna.resultsPerPage} onChange={(event) => update("adzuna", "resultsPerPage", Number(event.target.value))} /></label>
               <label>Work arrangement<select value={settings.adzuna.workplace} onChange={(event) => update("adzuna", "workplace", event.target.value)}><option value="any">Any</option><option value="remote">Remote only</option><option value="remote-hybrid">Remote or hybrid</option></select></label>
             </div>
+            {previews.adzuna !== undefined && <ProviderPreview jobs={previews.adzuna} />}
           </section>
 
           <section className="profile-section">
             <div className="profile-section-heading">
               <h2>Remotive</h2>
-              <label className="provider-toggle"><input type="checkbox" checked={settings.remotive.enabled} onChange={(event) => update("remotive", "enabled", event.target.checked)} /> Enabled</label>
+              <div className="provider-section-actions">
+                <label className="provider-toggle"><input type="checkbox" checked={settings.remotive.enabled} onChange={(event) => update("remotive", "enabled", event.target.checked)} /> Enabled</label>
+                <button className="secondary-action" type="button" disabled={previewing === "remotive"} onClick={() => void preview("remotive")}>{previewing === "remotive" ? "Fetching..." : "Fetch preview"}</button>
+                <PreviewOutcome jobs={previews.remotive} />
+              </div>
             </div>
+            {previewErrors.remotive && <p className="query-error">{previewErrors.remotive}</p>}
             <p>Remote listings filtered by a search phrase and Remotive category slug.</p>
             <div className="profile-fields">
               <label>Search phrase<input value={settings.remotive.query} onChange={(event) => update("remotive", "query", event.target.value)} /></label>
               <label>Category slug<input value={settings.remotive.category} onChange={(event) => update("remotive", "category", event.target.value)} placeholder="software-development" /></label>
             </div>
+            {previews.remotive !== undefined && <ProviderPreview jobs={previews.remotive} />}
           </section>
 
           <section className="profile-section">
             <div className="profile-section-heading">
               <h2>Jobicy</h2>
-              <label className="provider-toggle"><input type="checkbox" checked={settings.jobicy.enabled} onChange={(event) => update("jobicy", "enabled", event.target.checked)} /> Enabled</label>
+              <div className="provider-section-actions">
+                <label className="provider-toggle"><input type="checkbox" checked={settings.jobicy.enabled} onChange={(event) => update("jobicy", "enabled", event.target.checked)} /> Enabled</label>
+                <button className="secondary-action" type="button" disabled={previewing === "jobicy"} onClick={() => void preview("jobicy")}>{previewing === "jobicy" ? "Fetching..." : "Fetch preview"}</button>
+                <PreviewOutcome jobs={previews.jobicy} />
+              </div>
             </div>
+            {previewErrors.jobicy && <p className="query-error">{previewErrors.jobicy}</p>}
             <p>Remote listings filtered by geography, industry, and an optional tag.</p>
             <div className="profile-fields">
               <label>Results to fetch<input type="number" min="1" max="200" value={settings.jobicy.count} onChange={(event) => update("jobicy", "count", Number(event.target.value))} /></label>
@@ -109,6 +145,7 @@ export default function DiscoverySettingsView() {
               <label>Industry slug<input value={settings.jobicy.industry} onChange={(event) => update("jobicy", "industry", event.target.value)} placeholder="engineering" /></label>
               <label>Tag (optional)<input value={settings.jobicy.tag} onChange={(event) => update("jobicy", "tag", event.target.value)} /></label>
             </div>
+            {previews.jobicy !== undefined && <ProviderPreview jobs={previews.jobicy} />}
           </section>
 
           {error && <p className="query-error">{error}</p>}
@@ -120,4 +157,23 @@ export default function DiscoverySettingsView() {
       )}
     </section>
   );
+}
+
+function ProviderPreview({ jobs }: { jobs: unknown[] }) {
+  return (
+    <section className="provider-preview" aria-live="polite">
+      <div className="provider-preview-heading">
+        <h3>Fetched JSON</h3>
+        <span>{jobs.length} {jobs.length === 1 ? "job" : "jobs"}</span>
+      </div>
+      {jobs.length === 0 ? <p className="provider-preview-empty">The provider request succeeded, but no jobs matched these filters.</p> : <JSONTree value={{ jobs }} />}
+    </section>
+  );
+}
+
+function PreviewOutcome({ jobs }: { jobs: unknown[] | undefined }) {
+  if (jobs === undefined) {
+    return null;
+  }
+  return <span className={jobs.length === 0 ? "provider-preview-outcome empty" : "provider-preview-outcome"}>{jobs.length === 0 ? "No matches" : `${jobs.length} fetched`}</span>;
 }

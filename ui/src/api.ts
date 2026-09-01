@@ -178,6 +178,14 @@ export function saveDiscoverySettings(settings: DiscoverySettings) {
   });
 }
 
+export function fetchProviderPreview(provider: keyof DiscoverySettings, settings: DiscoverySettings) {
+  return request<{ jobs: unknown[] }>(`discovery-preview/${provider}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+}
+
 export function saveProfile(profile: UserProfile) {
   return request<{ profile: UserProfile }>("profile", {
     method: "PUT",

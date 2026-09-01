@@ -42,6 +42,7 @@ func main() {
 			services.NewJobSync,
 			services.NewJobBrowse,
 			services.NewDiscoverySettingsService,
+			services.NewProviderPreviewService,
 			services.NewUserProfileService,
 			newJobAnalyzer,
 			newJobAnalysisService,

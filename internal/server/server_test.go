@@ -106,6 +106,31 @@ func TestDiscoverySettingsAPI(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestDiscoveryPreviewAPIRejectsUnknownProvider(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	response := requestWithBody(newTestServer(repositories.NewSQLite(db)).http.Handler, http.MethodPost, "/api/discovery-preview/unknown", `{}`)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	assert.JSONEq(t, `{"error":"unknown discovery provider"}`, response.Body.String())
+}
+
+func TestDiscoveryPreviewAPIEncodesNoJobsAsArray(t *testing.T) {
+	response := httptest.NewRecorder()
+	discoveryPreviewHandler(discoveryPreviewStub{}, zap.NewNop()).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/discovery-preview/adzuna", strings.NewReader(`{}`)))
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.JSONEq(t, `{"jobs":[]}`, response.Body.String())
+}
+
+type discoveryPreviewStub struct{}
+
+func (discoveryPreviewStub) Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error) {
+	return nil, nil
+}
+
 func TestQueueUnmatchedJobsAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -269,6 +294,7 @@ func newTestServer(repository *repositories.SQLite) *Server {
 		zap.NewNop(),
 		services.NewJobBrowse(repository),
 		services.NewDiscoverySettingsService(repository),
+		services.NewProviderPreviewService(nil, nil, nil),
 		services.NewUserProfileService(repository),
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),

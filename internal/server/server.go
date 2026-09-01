@@ -21,7 +21,7 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, settings *services.DiscoverySettingsService, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -39,6 +39,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, sett
 	mux.HandleFunc("GET /api/companies", companiesHandler(browse, logger))
 	mux.HandleFunc("GET /api/discovery-settings", discoverySettingsHandler(settings, logger))
 	mux.HandleFunc("PUT /api/discovery-settings", saveDiscoverySettingsHandler(settings, logger))
+	mux.HandleFunc("POST /api/discovery-preview/{provider}", discoveryPreviewHandler(previews, logger))
 	mux.HandleFunc("GET /api/profile", profileHandler(profile, logger))
 	mux.HandleFunc("PUT /api/profile", saveProfileHandler(profile, logger))
 	mux.HandleFunc("OPTIONS /api/{path...}", optionsHandler)
@@ -49,6 +50,40 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, sett
 			Handler: cors(mux),
 		},
 		logger: logger,
+	}
+}
+
+type discoveryPreviewer interface {
+	Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error)
+}
+
+func discoveryPreviewHandler(previews discoveryPreviewer, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var settings models.DiscoverySettings
+		if err := json.NewDecoder(request.Body).Decode(&settings); err != nil {
+			logger.Warn("invalid discovery preview settings", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "settings must be valid JSON")
+			return
+		}
+
+		provider := request.PathValue("provider")
+		jobs, err := previews.Preview(request.Context(), provider, settings)
+		if err != nil {
+			if errors.Is(err, services.ErrUnknownDiscoveryProvider) || errors.Is(err, services.ErrInvalidDiscoverySettings) {
+				logger.Warn("discovery preview rejected", zap.String("provider", provider), zap.Error(err))
+				writeError(writer, http.StatusBadRequest, err.Error())
+				return
+			}
+			logger.Error("discovery preview failed", zap.String("provider", provider), zap.Error(err))
+			writeError(writer, http.StatusBadGateway, "could not fetch provider preview")
+			return
+		}
+		if jobs == nil {
+			jobs = []models.Job{}
+		}
+
+		logger.Info("discovery preview fetched", zap.String("provider", provider), zap.Int("job_count", len(jobs)))
+		writeJSON(writer, http.StatusOK, map[string]any{"jobs": jobs})
 	}
 }
 

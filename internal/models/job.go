@@ -1,19 +1,19 @@
 package models
 
 type Job struct {
-	Source         string
-	SourceID       string
-	SourceURL      string
-	Title          string
-	BodyText       string
-	Company        string
-	Location       string
-	Workplace      string
-	EmploymentType string
-	SalaryMin      *int64
-	SalaryMax      *int64
-	PostedAt       string
-	MetadataJSON   string
+	Source         string `json:"source"`
+	SourceID       string `json:"sourceId"`
+	SourceURL      string `json:"sourceURL"`
+	Title          string `json:"title"`
+	BodyText       string `json:"bodyText"`
+	Company        string `json:"company"`
+	Location       string `json:"location"`
+	Workplace      string `json:"workplace"`
+	EmploymentType string `json:"employmentType"`
+	SalaryMin      *int64 `json:"salaryMin"`
+	SalaryMax      *int64 `json:"salaryMax"`
+	PostedAt       string `json:"postedAt"`
+	MetadataJSON   string `json:"metadataJSON"`
 }
 
 type JobSearch struct {
