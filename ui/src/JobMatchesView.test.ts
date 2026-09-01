@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMatchDate, sortJobMatches } from "./JobMatchesView";
+import { formatJobPostedDate, formatMatchDate, sortJobMatches } from "./JobMatchesView";
 
 const matches = [
   { job: { id: 1 }, createdAt: "2026-08-26T12:00:00Z", score: 67, label: "Possible match" },
@@ -32,5 +32,16 @@ describe("formatMatchDate", () => {
     const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(date);
 
     expect(formatMatchDate("2026-08-26T12:00:00Z", new Date("2026-08-27T12:00:00Z"))).toBe(`Matched ${day} at ${time}`);
+  });
+});
+
+describe("formatJobPostedDate", () => {
+  it("shows a relative posting date when it is available", () => {
+    expect(formatJobPostedDate("2026-08-26T12:00:00Z", new Date("2026-08-27T12:00:00Z"))).toBe("Posted 1d ago");
+  });
+
+  it("omits missing or invalid posting dates", () => {
+    expect(formatJobPostedDate("", new Date("2026-08-27T12:00:00Z"))).toBe("");
+    expect(formatJobPostedDate("not a date", new Date("2026-08-27T12:00:00Z"))).toBe("");
   });
 });

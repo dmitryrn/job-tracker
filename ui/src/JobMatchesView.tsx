@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { fetchJobMatches, type BrowseJob, type JobMatchSummary } from "./api";
+import { formatDate } from "./BrowseView";
 
 type JobMatchesViewProps = {
   onOpenMatch: (job: BrowseJob) => void;
@@ -14,6 +15,14 @@ const matchSortDescriptions: Record<MatchSort, string> = {
   "score-asc": "Lowest scores first.",
 };
 
+const matchStatusLegend = [
+  { label: "Skip", score: 0 },
+  { label: "Possible fit", score: 40 },
+  { label: "Worth applying", score: 60 },
+  { label: "Strong fit", score: 75 },
+  { label: "Exceptional fit", score: 90 },
+];
+
 export function formatMatchDate(value: string, now = new Date()) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -25,6 +34,13 @@ export function formatMatchDate(value: string, now = new Date()) {
   }
   const day = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
   return `Matched ${day} at ${time}`;
+}
+
+export function formatJobPostedDate(value: string, now = new Date()) {
+  if (!value || Number.isNaN(new Date(value).getTime())) {
+    return "";
+  }
+  return `Posted ${formatDate(value, now)}`;
 }
 
 export function sortJobMatches(matches: JobMatchSummary[], sort: MatchSort) {
@@ -85,18 +101,25 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
           </select>
         </label>
       </header>
+      <aside className="match-legend" aria-label="Match status legend">
+        {matchStatusLegend.map((status) => <span className="match-label" key={status.label} style={{ "--match-score": status.score } as CSSProperties}>{status.label}</span>)}
+        <span className="match-label unlabeled">Unlabeled</span>
+      </aside>
       {error && <p className="query-error">{error}</p>}
       {loading ? <p className="browse-loading">Loading matches...</p> : matches.length === 0 ? <p className="empty browse-empty">No completed matches yet.</p> : (
         <ol className="matches-list">
-          {sortJobMatches(matches, sort).map((match) => (
-            <li key={match.job.id}>
-              <button type="button" className="match-job" onClick={() => onOpenMatch(match.job)}>
-                <span className="match-topline"><span className="match-created">{formatMatchDate(match.createdAt)}</span><span className="match-label">{match.label || "Unlabeled"}</span></span>
-                <strong>{match.job.title}</strong>
-                <span>{match.job.company || "Company not listed"}</span>
-              </button>
-            </li>
-          ))}
+          {sortJobMatches(matches, sort).map((match) => {
+            const postedDate = formatJobPostedDate(match.job.postedAt);
+            return (
+              <li key={match.job.id}>
+                <button type="button" className="match-job" onClick={() => onOpenMatch(match.job)}>
+                  <span className="match-topline"><span className="match-created">{formatMatchDate(match.createdAt)}</span><span className={match.label ? "match-label" : "match-label unlabeled"} style={{ "--match-score": match.score } as CSSProperties}>{match.label || "Unlabeled"}</span></span>
+                  <strong>{match.job.title}</strong>
+                  <span className="match-job-meta"><span>{match.job.company || "Company not listed"}</span>{postedDate && <span className="match-posted">{postedDate}</span>}</span>
+                </button>
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>
