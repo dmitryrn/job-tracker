@@ -94,7 +94,6 @@ type fileConfig struct {
 
 type fileLLMConfig struct {
 	BaseURL        string            `toml:"base_url" validate:"notblank,url"`
-	APIKey         string            `toml:"api_key" validate:"notblank"`
 	JobAnalysis    fileLLMTaskConfig `toml:"job_analysis"`
 	ProfileMatcher fileLLMTaskConfig `toml:"profile_matcher"`
 }
@@ -164,6 +163,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	llmAPIKey, err := requiredString(tokens["OPENCODE_GO_KEY_4"], "OPENCODE_GO_KEY_4")
+	if err != nil {
+		return Config{}, err
+	}
 	adzunaInterval, err := time.ParseDuration(source.Providers.Adzuna.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.adzuna.sync_interval: %w", err)
@@ -213,7 +216,7 @@ func Load() (Config, error) {
 		},
 		LLM: LLMConfig{
 			BaseURL: source.LLM.BaseURL,
-			APIKey:  source.LLM.APIKey,
+			APIKey:  llmAPIKey,
 			JobAnalysis: LLMTaskConfig{
 				Model:           source.LLM.JobAnalysis.Model,
 				ReasoningEffort: source.LLM.JobAnalysis.ReasoningEffort,

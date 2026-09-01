@@ -56,6 +56,15 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 	assert.ErrorContains(t, err, "score must be between 0 and 100")
 }
 
+func TestLLMProfileJobMatcherAcceptsAJSONCodeFence(t *testing.T) {
+	client := &recordingMatchCompletionClient{response: openrouter.ChatResponse{Model: "test-model", Content: "```json\n{\"score\":84,\"summary\":\"Strong fit.\",\"strengths\":[],\"gaps\":[],\"questions\":[],\"applicationAngle\":\"Highlight Go experience.\"}\n```"}}
+
+	assessment, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "low").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
+
+	require.NoError(t, err)
+	assert.Equal(t, 84, assessment.Score)
+}
+
 func TestMatchScoreLabel(t *testing.T) {
 	assert.Equal(t, "Skip", matchScoreLabel(39))
 	assert.Equal(t, "Possible fit", matchScoreLabel(40))

@@ -4,6 +4,20 @@ http_address = ":8080"
 [database]
 path = "jobs.db"
 
+[llm]
+base_url = "https://opencode.ai/zen/go/v1/chat/completions"
+
+[llm.job_analysis]
+model = "glm-5.2"
+reasoning_effort = "low"
+
+[llm.profile_matcher]
+model = "glm-5.2"
+reasoning_effort = "low"
+
+[job_match]
+run_interval = "2m"
+
 [providers.adzuna]
 query = "software engineer"
 country = "de"

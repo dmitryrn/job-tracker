@@ -26,7 +26,7 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "europe", cfg.Providers.Jobicy.Geo)
 	assert.Equal(t, "engineering", cfg.Providers.Jobicy.Industry)
 	assert.Equal(t, "https://llm.example.com/v1/chat/completions", cfg.LLM.BaseURL)
-	assert.Equal(t, "test-llm-key", cfg.LLM.APIKey)
+	assert.Equal(t, "test-go-key", cfg.LLM.APIKey)
 	assert.Equal(t, "job-analysis-model", cfg.LLM.JobAnalysis.Model)
 	assert.Equal(t, "high", cfg.LLM.JobAnalysis.ReasoningEffort)
 	assert.Equal(t, "profile-matcher-model", cfg.LLM.ProfileMatcher.Model)
@@ -107,7 +107,6 @@ path = "jobs.db"
 
 [llm]
 base_url = "https://llm.example.com/v1/chat/completions"
-api_key = "test-llm-key"
 
 [llm.job_analysis]
 model = "job-analysis-model"
@@ -145,5 +144,5 @@ sync_interval = %q
 func writeTestConfigContent(t *testing.T, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(configFile, []byte(content), 0o600))
-	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\nOPENROUTER_API_KEY=test\n"), 0o600))
+	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\nOPENROUTER_API_KEY=test\nOPENCODE_GO_KEY_4=test-go-key\n"), 0o600))
 }

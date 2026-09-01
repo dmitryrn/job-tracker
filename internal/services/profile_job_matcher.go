@@ -73,8 +73,8 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 		return models.JobMatchAssessment{}, fmt.Errorf("match profile to job: %w", err)
 	}
 
-	var assessment models.JobMatchAssessment
-	if err := json.Unmarshal([]byte(response.Content), &assessment); err != nil {
+	assessment, err := decodeProfileJobMatch(response.Content)
+	if err != nil {
 		return models.JobMatchAssessment{}, fmt.Errorf("decode profile-job match from %s: %w", response.Model, err)
 	}
 	if err := validateProfileJobMatch(&assessment); err != nil {
@@ -83,6 +83,23 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 	assessment.MatcherVersion = LLMProfileJobMatcherVersion
 	assessment.Model = response.Model
 	assessment.Label = matchScoreLabel(assessment.Score)
+	return assessment, nil
+}
+
+func decodeProfileJobMatch(content string) (models.JobMatchAssessment, error) {
+	var assessment models.JobMatchAssessment
+	if err := json.Unmarshal([]byte(content), &assessment); err == nil {
+		return assessment, nil
+	}
+
+	start := strings.IndexByte(content, '{')
+	if start == -1 {
+		return models.JobMatchAssessment{}, fmt.Errorf("response does not contain a JSON object")
+	}
+	decoder := json.NewDecoder(strings.NewReader(content[start:]))
+	if err := decoder.Decode(&assessment); err != nil {
+		return models.JobMatchAssessment{}, err
+	}
 	return assessment, nil
 }
 
