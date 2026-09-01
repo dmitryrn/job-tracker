@@ -158,6 +158,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) ([]
 		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
 		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
 		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text",
+		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)",
 	).From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
 	if search.Search != "" && len(search.Fields) > 0 {
 		matches := squirrel.Or{}
@@ -184,7 +185,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) ([]
 		var job models.BrowseJob
 		if err := rows.Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company,
 			&job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
-			&job.PostedAt, &job.BodyText); err != nil {
+			&job.PostedAt, &job.BodyText, &job.HasMatch); err != nil {
 			return nil, fmt.Errorf("scan job: %w", err)
 		}
 		jobs = append(jobs, job)

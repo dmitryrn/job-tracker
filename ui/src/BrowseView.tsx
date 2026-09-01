@@ -61,7 +61,7 @@ function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
     <article className="job-card">
       <button className="job-card-button" onClick={onOpen}>
         <div className="job-card-topline">
-          <span className="source-label">{job.source}</span>
+          <span className="job-card-status"><span className="source-label">{job.source}</span><span className={job.hasMatch ? "match-status ready" : "match-status"}>{job.hasMatch ? "Match ready" : "No match yet"}</span></span>
           <span className="posted-label">{formatDate(job.postedAt)}</span>
         </div>
         <h2>{job.title}</h2>

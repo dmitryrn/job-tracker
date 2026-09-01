@@ -44,6 +44,14 @@ func TestJobAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
 	require.Len(t, jobs.Jobs, 1)
 	assert.Equal(t, "Designer", jobs.Jobs[0].Title)
+	assert.False(t, jobs.Jobs[0].HasMatch)
+	require.NoError(t, repository.CreateJobMatch(context.Background(), jobs.Jobs[0].ID, "match"))
+
+	response = request(handler, http.MethodGet, "/api/jobs?search=searchable&fields=body")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
+	require.Len(t, jobs.Jobs, 1)
+	assert.True(t, jobs.Jobs[0].HasMatch)
 
 	response = request(handler, http.MethodGet, "/api/providers")
 	require.Equal(t, http.StatusOK, response.Code)

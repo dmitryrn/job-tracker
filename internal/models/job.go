@@ -35,6 +35,7 @@ type BrowseJob struct {
 	SalaryMax      *int64 `json:"salaryMax"`
 	PostedAt       string `json:"postedAt"`
 	BodyText       string `json:"bodyText"`
+	HasMatch       bool   `json:"hasMatch"`
 }
 
 type BrowseCompany struct {

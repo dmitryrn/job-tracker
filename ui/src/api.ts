@@ -11,6 +11,7 @@ export type BrowseJob = {
   salaryMax: number | null;
   postedAt: string;
   bodyText: string;
+  hasMatch: boolean;
 };
 
 export type BrowseCompany = {
