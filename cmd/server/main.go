@@ -38,7 +38,7 @@ func main() {
 			newJobAnalyzer,
 			newJobAnalysisService,
 			newProfileJobMatcher,
-			services.NewJobMatchProcessor,
+			newJobMatchProcessor,
 			services.NewJobMatches,
 			services.NewJobMatchRequests,
 			server.New,
@@ -61,6 +61,10 @@ func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisS
 
 func newProfileJobMatcher(client services.JobCompletionClient, cfg config.Config) services.ProfileJobMatcher {
 	return services.NewLLMProfileJobMatcher(client, cfg.LLM.ProfileMatcher.Model, cfg.LLM.ProfileMatcher.ReasoningEffort)
+}
+
+func newJobMatchProcessor(repository repositories.JobRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchProcessor {
+	return services.NewJobMatchProcessor(repository, analyzer, matcher, logger, cfg.JobMatch.RunInterval)
 }
 
 func registerLifecycle(

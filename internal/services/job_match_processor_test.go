@@ -31,7 +31,7 @@ func TestJobMatchProcessorCreatesOnlyOneMatchPerJob(t *testing.T) {
 	require.NoError(t, err)
 	matcher := &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "First assessment"}}
 	analyzer := &recordingJobAnalyzer{analysis: testJobAnalysis()}
-	processor := NewJobMatchProcessor(repository, analyzer, matcher, zap.NewNop())
+	processor := NewJobMatchProcessor(repository, analyzer, matcher, zap.NewNop(), time.Minute)
 	worked, err := processor.process(context.Background())
 	require.NoError(t, err)
 	require.False(t, worked)
@@ -77,7 +77,7 @@ func TestJobMatchProcessorWaitsForProfile(t *testing.T) {
 	require.True(t, found)
 
 	matcher := &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "unused"}}
-	processor := NewJobMatchProcessor(repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop())
+	processor := NewJobMatchProcessor(repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop(), time.Minute)
 	worked, err := processor.process(context.Background())
 	require.NoError(t, err)
 	require.False(t, worked)
@@ -104,7 +104,7 @@ func TestJobMatchProcessorKeepsFailedRequestInQueue(t *testing.T) {
 	require.True(t, found)
 
 	matcher := &recordingProfileJobMatcher{err: errors.New("model unavailable")}
-	processor := NewJobMatchProcessor(repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop())
+	processor := NewJobMatchProcessor(repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, matcher, zap.NewNop(), time.Minute)
 	worked, err := processor.process(context.Background())
 	require.True(t, worked)
 	require.EqualError(t, err, "model unavailable")
@@ -112,6 +112,25 @@ func TestJobMatchProcessorKeepsFailedRequestInQueue(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, queue, 1)
 	assert.Equal(t, int64(1), queue[0].ID)
+}
+
+func TestJobMatchRunInterval(t *testing.T) {
+	runInterval := 2 * time.Minute
+	interval, cooldown := jobMatchRunInterval(true, nil, runInterval)
+	assert.Equal(t, runInterval, interval)
+	assert.True(t, cooldown)
+
+	interval, cooldown = jobMatchRunInterval(true, errors.New("match failed"), runInterval)
+	assert.Equal(t, runInterval, interval)
+	assert.True(t, cooldown)
+
+	interval, cooldown = jobMatchRunInterval(false, errors.New("queue failed"), runInterval)
+	assert.Equal(t, runInterval, interval)
+	assert.True(t, cooldown)
+
+	interval, cooldown = jobMatchRunInterval(false, nil, runInterval)
+	assert.Equal(t, jobMatchRetryInterval, interval)
+	assert.False(t, cooldown)
 }
 
 type recordingProfileJobMatcher struct {
@@ -140,7 +159,7 @@ func TestJobMatchProcessorReusesCurrentJobAnalysis(t *testing.T) {
 	_, err = repository.SaveUserProfile(context.Background(), models.UserProfile{Skills: []models.UserProfileSkill{}})
 	require.NoError(t, err)
 	analyzer := &recordingJobAnalyzer{analysis: testJobAnalysis()}
-	processor := NewJobMatchProcessor(repository, analyzer, &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "assessment"}}, zap.NewNop())
+	processor := NewJobMatchProcessor(repository, analyzer, &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{MatcherVersion: "test", Score: 84, Summary: "assessment"}}, zap.NewNop(), time.Minute)
 
 	_, err = repository.QueueJobMatch(context.Background(), 1, false)
 	require.NoError(t, err)

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -168,7 +169,7 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 }
 
 func newTestServer(repository repositories.JobRepository) *Server {
-	processor := services.NewJobMatchProcessor(repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop())
+	processor := services.NewJobMatchProcessor(repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
 	return New(
 		config.Config{},
 		zap.NewNop(),

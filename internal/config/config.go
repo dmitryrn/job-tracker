@@ -21,6 +21,7 @@ type Config struct {
 	DatabasePath string
 	Providers    ProviderConfig
 	LLM          LLMConfig
+	JobMatch     JobMatchConfig
 	OpenRouter   OpenRouterConfig
 }
 
@@ -40,6 +41,10 @@ type LLMConfig struct {
 type LLMTaskConfig struct {
 	Model           string
 	ReasoningEffort string
+}
+
+type JobMatchConfig struct {
+	RunInterval time.Duration
 }
 
 type OpenRouterConfig struct {
@@ -78,7 +83,8 @@ type fileConfig struct {
 	Database struct {
 		Path string `toml:"path" validate:"notblank"`
 	} `toml:"database"`
-	LLM       fileLLMConfig `toml:"llm"`
+	LLM       fileLLMConfig      `toml:"llm"`
+	JobMatch  fileJobMatchConfig `toml:"job_match"`
 	Providers struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
 		Jobicy   fileJobicyConfig   `toml:"jobicy"`
@@ -96,6 +102,10 @@ type fileLLMConfig struct {
 type fileLLMTaskConfig struct {
 	Model           string `toml:"model" validate:"notblank"`
 	ReasoningEffort string `toml:"reasoning_effort" validate:"oneof=low medium high"`
+}
+
+type fileJobMatchConfig struct {
+	RunInterval string `toml:"run_interval" validate:"notblank,duration"`
 }
 
 type fileAdzunaConfig struct {
@@ -166,6 +176,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.jobicy.sync_interval: %w", err)
 	}
+	jobMatchRunInterval, err := time.ParseDuration(source.JobMatch.RunInterval)
+	if err != nil {
+		return Config{}, fmt.Errorf("parse job_match.run_interval: %w", err)
+	}
 	if jobicyInterval < time.Hour {
 		return Config{}, fmt.Errorf("providers.jobicy.sync_interval must be at least 1h")
 	}
@@ -209,6 +223,7 @@ func Load() (Config, error) {
 				ReasoningEffort: source.LLM.ProfileMatcher.ReasoningEffort,
 			},
 		},
+		JobMatch:   JobMatchConfig{RunInterval: jobMatchRunInterval},
 		OpenRouter: OpenRouterConfig{APIKey: openRouterAPIKey},
 	}, nil
 }

@@ -28,18 +28,19 @@ type JobAnalysisService interface {
 }
 
 type JobMatchProcessor struct {
-	repository repositories.JobRepository
-	analyzer   JobAnalysisService
-	matcher    ProfileJobMatcher
-	logger     *zap.Logger
-	cancel     context.CancelFunc
-	done       chan struct{}
-	wake       chan struct{}
-	mutex      sync.Mutex
+	repository  repositories.JobRepository
+	analyzer    JobAnalysisService
+	matcher     ProfileJobMatcher
+	logger      *zap.Logger
+	runInterval time.Duration
+	cancel      context.CancelFunc
+	done        chan struct{}
+	wake        chan struct{}
+	mutex       sync.Mutex
 }
 
-func NewJobMatchProcessor(repository repositories.JobRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, logger *zap.Logger) *JobMatchProcessor {
-	return &JobMatchProcessor{repository: repository, analyzer: analyzer, matcher: matcher, logger: logger, wake: make(chan struct{}, 1)}
+func NewJobMatchProcessor(repository repositories.JobRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, logger *zap.Logger, runInterval time.Duration) *JobMatchProcessor {
+	return &JobMatchProcessor{repository: repository, analyzer: analyzer, matcher: matcher, logger: logger, runInterval: runInterval, wake: make(chan struct{}, 1)}
 }
 
 func (processor *JobMatchProcessor) Register(lifecycle fx.Lifecycle) {
@@ -78,11 +79,25 @@ func (processor *JobMatchProcessor) run(ctx context.Context) {
 	defer close(processor.done)
 	for {
 		worked, err := processor.process(ctx)
-		if worked && err == nil {
-			continue
+		interval, cooldown := jobMatchRunInterval(worked, err, processor.runInterval)
+		if cooldown {
+			if err != nil {
+				processor.logger.Info("job match worker cooling down after failed run", zap.Duration("run_interval", interval), zap.Error(err))
+			} else {
+				processor.logger.Info("job match worker cooling down after successful run", zap.Duration("run_interval", interval))
+			}
 		}
 
-		timer := time.NewTimer(jobMatchRetryInterval)
+		timer := time.NewTimer(interval)
+		if cooldown {
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -92,6 +107,13 @@ func (processor *JobMatchProcessor) run(ctx context.Context) {
 		case <-timer.C:
 		}
 	}
+}
+
+func jobMatchRunInterval(worked bool, err error, runInterval time.Duration) (time.Duration, bool) {
+	if worked || err != nil {
+		return runInterval, true
+	}
+	return jobMatchRetryInterval, false
 }
 
 func (processor *JobMatchProcessor) Wake() {
