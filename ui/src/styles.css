@@ -102,6 +102,9 @@ button { cursor: pointer; }
 .secondary-action:hover, .save-profile:hover { background: #1c3047; }
 .skill-editor { display: grid; gap: 12px; margin-top: 18px; }
 .skill-row { align-items: end; background: #f8f8f5; border: 1px solid #e4e1d9; display: grid; gap: 10px; grid-template-columns: minmax(120px, .9fr) minmax(110px, .6fr) minmax(180px, 1.8fr) auto; padding: 12px; }
+.history-editor { display: grid; gap: 12px; margin-top: 18px; }
+.history-entry { background: #f8f8f5; border: 1px solid #e4e1d9; display: grid; gap: 12px; padding: 12px; }
+.history-fields { display: grid; gap: 10px; grid-template-columns: minmax(150px, 1.4fr) minmax(150px, 1.4fr) minmax(80px, .6fr) minmax(80px, .6fr); }
 .remove-skill { background: transparent; border: 0; color: #a43d2d; font-size: 12px; padding: 10px 4px; }
 .remove-skill:hover { text-decoration: underline; }
 .profile-empty { background: #f8f8f5; border: 1px dashed #cbd2d7; margin-top: 18px !important; padding: 17px; }
@@ -221,6 +224,7 @@ tr:hover td { background: #fffbed; }
   .profile-header, .job-page-header { align-items: start; flex-direction: column; }
   .profile-fields { grid-template-columns: 1fr; }
   .skill-row { grid-template-columns: 1fr; }
+  .history-fields { grid-template-columns: 1fr; }
   .profile-section-heading { flex-direction: column; }
   .profile-actions { align-items: end; flex-direction: column; }
   .match-queue-item { align-items: start; flex-direction: column; }

@@ -86,7 +86,7 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.JSONEq(t, `{"profile":null}`, response.Body.String())
 
-	response = requestWithBody(handler, http.MethodPut, "/api/profile", `{"headline":"Backend engineer","location":"Berlin","workAuthorization":"EU","summary":"APIs and systems","skills":[{"name":" Go ","level":"expert","notes":"Production services"},{"name":"","level":"","notes":""}]}`)
+	response = requestWithBody(handler, http.MethodPut, "/api/profile", `{"headline":"Backend engineer","location":"Berlin","workAuthorization":"EU","summary":"APIs and systems","skills":[{"name":" Go ","level":"expert","notes":"Production services"},{"name":"","level":"","notes":""}],"workHistory":[{"company":" Acme ","title":"Engineer","startDate":"2020","endDate":"2022","body":"Built APIs"},{"company":"","title":"","startDate":"","endDate":"","body":""}],"education":[{"institution":" University ","degree":"BSc","startDate":"2016","endDate":"2020","body":"Computer science"},{"institution":"","degree":"","startDate":"","endDate":"","body":""}]}`)
 	require.Equal(t, http.StatusOK, response.Code)
 	var profileResponse struct {
 		Profile models.UserProfile `json:"profile"`
@@ -95,6 +95,10 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, "Backend engineer", profileResponse.Profile.Headline)
 	require.Len(t, profileResponse.Profile.Skills, 1)
 	assert.Equal(t, "Go", profileResponse.Profile.Skills[0].Name)
+	require.Len(t, profileResponse.Profile.WorkHistory, 1)
+	assert.Equal(t, "Acme", profileResponse.Profile.WorkHistory[0].Company)
+	require.Len(t, profileResponse.Profile.Education, 1)
+	assert.Equal(t, "University", profileResponse.Profile.Education[0].Institution)
 
 	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "No-op match"))
 	require.NoError(t, repository.SaveJobAnalysis(context.Background(), models.JobAnalysisRecord{

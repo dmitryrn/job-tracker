@@ -8,6 +8,8 @@ const emptyProfile: UserProfile = {
   workAuthorization: "",
   summary: "",
   skills: [],
+  workHistory: [],
+  education: [],
   updatedAt: "",
 };
 
@@ -52,6 +54,20 @@ export default function ProfileView() {
     }));
   }
 
+  function updateWorkHistory(index: number, field: "company" | "title" | "startDate" | "endDate" | "body", value: string) {
+    setProfile((current) => ({
+      ...current,
+      workHistory: current.workHistory.map((entry, entryIndex) => entryIndex === index ? { ...entry, [field]: value } : entry),
+    }));
+  }
+
+  function updateEducation(index: number, field: "institution" | "degree" | "startDate" | "endDate" | "body", value: string) {
+    setProfile((current) => ({
+      ...current,
+      education: current.education.map((entry, entryIndex) => entryIndex === index ? { ...entry, [field]: value } : entry),
+    }));
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -87,6 +103,52 @@ export default function ProfileView() {
               <label>Work authorization<input value={profile.workAuthorization} onChange={(event) => updateField("workAuthorization", event.target.value)} placeholder="Eligible to work in the EU" /></label>
             </div>
             <label className="profile-summary">Summary<textarea value={profile.summary} onChange={(event) => updateField("summary", event.target.value)} placeholder="The work, domains, and strengths you want a matcher to consider." rows={5} /></label>
+          </section>
+
+          <section className="profile-section">
+            <div className="profile-section-heading">
+              <div><h2>Work history</h2><p>Use one entry per company and keep its achievements together.</p></div>
+              <button type="button" className="secondary-action" onClick={() => setProfile((current) => ({ ...current, workHistory: [...current.workHistory, { company: "", title: "", startDate: "", endDate: "", body: "" }] }))}>Add role</button>
+            </div>
+            {profile.workHistory.length === 0 ? <p className="profile-empty">No work history yet.</p> : (
+              <div className="history-editor">
+                {profile.workHistory.map((entry, index) => (
+                  <div className="history-entry" key={index}>
+                    <div className="history-fields">
+                      <label>Company<input value={entry.company} onChange={(event) => updateWorkHistory(index, "company", event.target.value)} /></label>
+                      <label>Role<input value={entry.title} onChange={(event) => updateWorkHistory(index, "title", event.target.value)} /></label>
+                      <label>Start<input value={entry.startDate} onChange={(event) => updateWorkHistory(index, "startDate", event.target.value)} placeholder="2023" /></label>
+                      <label>End<input value={entry.endDate} onChange={(event) => updateWorkHistory(index, "endDate", event.target.value)} placeholder="Present" /></label>
+                    </div>
+                    <label>Experience<textarea value={entry.body} onChange={(event) => updateWorkHistory(index, "body", event.target.value)} rows={7} /></label>
+                    <button type="button" className="remove-skill" onClick={() => setProfile((current) => ({ ...current, workHistory: current.workHistory.filter((_, entryIndex) => entryIndex !== index) }))}>Remove role</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="profile-section">
+            <div className="profile-section-heading">
+              <div><h2>Education</h2><p>Keep one entry per qualification or institution.</p></div>
+              <button type="button" className="secondary-action" onClick={() => setProfile((current) => ({ ...current, education: [...current.education, { institution: "", degree: "", startDate: "", endDate: "", body: "" }] }))}>Add education</button>
+            </div>
+            {profile.education.length === 0 ? <p className="profile-empty">No education yet.</p> : (
+              <div className="history-editor">
+                {profile.education.map((entry, index) => (
+                  <div className="history-entry" key={index}>
+                    <div className="history-fields">
+                      <label>Institution<input value={entry.institution} onChange={(event) => updateEducation(index, "institution", event.target.value)} /></label>
+                      <label>Qualification<input value={entry.degree} onChange={(event) => updateEducation(index, "degree", event.target.value)} /></label>
+                      <label>Start<input value={entry.startDate} onChange={(event) => updateEducation(index, "startDate", event.target.value)} placeholder="2015" /></label>
+                      <label>End<input value={entry.endDate} onChange={(event) => updateEducation(index, "endDate", event.target.value)} placeholder="2019" /></label>
+                    </div>
+                    <label>Details<textarea value={entry.body} onChange={(event) => updateEducation(index, "body", event.target.value)} rows={4} /></label>
+                    <button type="button" className="remove-skill" onClick={() => setProfile((current) => ({ ...current, education: current.education.filter((_, entryIndex) => entryIndex !== index) }))}>Remove education</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="profile-section">

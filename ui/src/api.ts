@@ -26,6 +26,22 @@ export type UserProfileSkill = {
   notes: string;
 };
 
+export type UserProfileWorkHistory = {
+  company: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  body: string;
+};
+
+export type UserProfileEducation = {
+  institution: string;
+  degree: string;
+  startDate: string;
+  endDate: string;
+  body: string;
+};
+
 export type UserProfile = {
   id: number;
   headline: string;
@@ -33,6 +49,8 @@ export type UserProfile = {
   workAuthorization: string;
   summary: string;
   skills: UserProfileSkill[];
+  workHistory: UserProfileWorkHistory[];
+  education: UserProfileEducation[];
   updatedAt: string;
 };
 
