@@ -69,6 +69,28 @@ func TestJobAnalyzerRejectsClaimsWithoutPostingQuotes(t *testing.T) {
 	assert.ErrorContains(t, err, `quote "Must have Go experience." is not in source`)
 }
 
+func TestJobAnalyzerAcceptsLabeledAuthoritativeFieldQuote(t *testing.T) {
+	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openrouter.ChatResponse{
+		Model: "test-model",
+		Content: `{
+			"role":{"family":"backend_engineering","seniority":"unknown","seniorityConfidence":"low"},
+			"constraints":[{"kind":"employment_type","value":"full-time","quote":"Employment type: Full-Time","confidence":"high"}],
+			"requirements":[],
+			"responsibilities":[],
+			"preferences":[],
+			"unknowns":[]
+		}`,
+	}}, "analyzer-test-model", "high")
+
+	analysis, err := analyzer.Analyze(context.Background(), models.Job{
+		Title:          "Backend Engineer",
+		EmploymentType: "Full-Time",
+		BodyText:       "Build APIs.",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "employment_type", analysis.Analysis.Constraints[0].Kind)
+}
+
 func TestJobAnalyzerRejectsBlankJob(t *testing.T) {
 	_, err := NewJobAnalyzer(&fakeJobCompletionClient{}, "analyzer-test-model", "high").Analyze(context.Background(), models.Job{})
 	assert.ErrorContains(t, err, "job title or description is required")

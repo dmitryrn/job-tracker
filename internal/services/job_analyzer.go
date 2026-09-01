@@ -251,7 +251,11 @@ func normalizeJobDescription(body string) string {
 }
 
 func canonicalJobInput(job models.Job, normalizedDescription string) string {
-	fields := []string{
+	return strings.TrimSpace(jobQuoteSource(job, normalizedDescription) + "\nSupplementary provider metadata:\n" + strings.TrimSpace(job.MetadataJSON))
+}
+
+func jobQuoteSource(job models.Job, normalizedDescription string) string {
+	return strings.Join([]string{
 		"Source: " + strings.TrimSpace(job.Source),
 		"Title: " + strings.TrimSpace(job.Title),
 		"Company: " + strings.TrimSpace(job.Company),
@@ -262,22 +266,6 @@ func canonicalJobInput(job models.Job, normalizedDescription string) string {
 		"Salary maximum: " + salaryValue(job.SalaryMax),
 		"Posted at: " + strings.TrimSpace(job.PostedAt),
 		"Normalized description:\n" + normalizedDescription,
-		"Supplementary provider metadata:\n" + strings.TrimSpace(job.MetadataJSON),
-	}
-	return strings.TrimSpace(strings.Join(fields, "\n"))
-}
-
-func jobQuoteSource(job models.Job, normalizedDescription string) string {
-	return strings.Join([]string{
-		strings.TrimSpace(job.Title),
-		strings.TrimSpace(job.Company),
-		strings.TrimSpace(job.Location),
-		strings.TrimSpace(job.Workplace),
-		strings.TrimSpace(job.EmploymentType),
-		salaryValue(job.SalaryMin),
-		salaryValue(job.SalaryMax),
-		strings.TrimSpace(job.PostedAt),
-		normalizedDescription,
 	}, "\n")
 }
 
