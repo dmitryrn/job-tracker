@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"nice/internal/clients/linkedin"
+	"nice/internal/config"
 	"nice/internal/models"
 )
 
@@ -18,24 +19,35 @@ type linkedInClient interface {
 }
 
 type LinkedInJobs struct {
-	client linkedInClient
+	client          linkedInClient
+	requestInterval time.Duration
 }
 
-func NewLinkedInJobs(client *linkedin.Client) *LinkedInJobs {
-	return &LinkedInJobs{client: client}
+func NewLinkedInJobs(cfg config.Config, client *linkedin.Client) *LinkedInJobs {
+	return &LinkedInJobs{
+		client:          client,
+		requestInterval: cfg.Providers.LinkedIn.RequestInterval,
+	}
 }
 
 func (service *LinkedInJobs) Fetch(ctx context.Context, settings models.LinkedInSearchSettings) ([]models.Job, error) {
 	jobs := make([]models.Job, 0, settings.Limit)
 	seen := make(map[string]struct{}, settings.Limit)
+	requested := false
 	for start := 0; len(jobs) < settings.Limit; start += linkedInPageSize {
+		if requested {
+			if err := service.wait(ctx); err != nil {
+				return jobs, err
+			}
+		}
+		requested = true
 		results, err := service.client.Search(ctx, linkedin.SearchFilter{
 			Keywords: settings.Query,
 			Location: settings.Location,
 			Start:    start,
 		})
 		if err != nil {
-			return nil, err
+			return jobs, err
 		}
 		if len(results) == 0 {
 			break
@@ -44,13 +56,22 @@ func (service *LinkedInJobs) Fetch(ctx context.Context, settings models.LinkedIn
 			if len(jobs) == settings.Limit {
 				break
 			}
+			if !validLinkedInSearchResult(result) {
+				continue
+			}
 			if _, exists := seen[result.ID]; exists {
 				continue
 			}
 			seen[result.ID] = struct{}{}
+			if err := service.wait(ctx); err != nil {
+				return jobs, err
+			}
 			details, err := service.client.Job(ctx, result.ID)
 			if err != nil {
-				return nil, err
+				return jobs, err
+			}
+			if !validLinkedInJob(details) {
+				continue
 			}
 			jobs = append(jobs, toLinkedInJob(result, details))
 		}
@@ -59,6 +80,32 @@ func (service *LinkedInJobs) Fetch(ctx context.Context, settings models.LinkedIn
 		}
 	}
 	return jobs, nil
+}
+
+func (service *LinkedInJobs) wait(ctx context.Context) error {
+	if service.requestInterval <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(service.requestInterval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func validLinkedInSearchResult(result linkedin.SearchResult) bool {
+	return strings.TrimSpace(result.ID) != "" &&
+		strings.TrimSpace(result.URL) != "" &&
+		strings.TrimSpace(result.Title) != "" &&
+		strings.TrimSpace(result.Company) != "" &&
+		strings.TrimSpace(result.Location) != ""
+}
+
+func validLinkedInJob(details linkedin.Job) bool {
+	return strings.TrimSpace(details.Description) != ""
 }
 
 func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) models.Job {

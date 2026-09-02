@@ -17,10 +17,10 @@ import (
 )
 
 type JobSync struct {
-	adzuna           *adzuna.Client
-	jobicy           *jobicy.Client
-	linkedin         *LinkedInJobs
-	remotive         *remotive.Client
+	adzuna           adzunaFetcher
+	jobicy           jobicyFetcher
+	linkedin         linkedInFetcher
+	remotive         remotiveFetcher
 	jobs             repositories.JobRepository
 	providerRuns     repositories.ProviderRunRepository
 	settings         repositories.DiscoverySettingsRepository
@@ -102,10 +102,25 @@ func (syncer *JobSync) sync(ctx context.Context) {
 		syncer.logger.Error("load discovery settings failed", zap.Error(err))
 		return
 	}
-	syncer.syncAdzuna(ctx, settings.Adzuna)
-	syncer.syncJobicy(ctx, settings.Jobicy)
-	syncer.syncLinkedIn(ctx, settings.LinkedIn)
-	syncer.syncRemotive(ctx, settings.Remotive)
+	var group sync.WaitGroup
+	group.Add(4)
+	go func() {
+		defer group.Done()
+		syncer.syncAdzuna(ctx, settings.Adzuna)
+	}()
+	go func() {
+		defer group.Done()
+		syncer.syncJobicy(ctx, settings.Jobicy)
+	}()
+	go func() {
+		defer group.Done()
+		syncer.syncLinkedIn(ctx, settings.LinkedIn)
+	}()
+	go func() {
+		defer group.Done()
+		syncer.syncRemotive(ctx, settings.Remotive)
+	}()
+	group.Wait()
 }
 
 func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedInSearchSettings) {
@@ -117,19 +132,26 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 		return
 	}
 	syncer.logger.Info("syncing LinkedIn jobs")
-	jobs, err := syncer.linkedin.Fetch(ctx, settings)
-	if err != nil {
-		syncer.logger.Error("LinkedIn sync failed", zap.Error(err))
-		syncer.completeProviderRun(ctx, "linkedin", err)
+	jobs, fetchErr := syncer.linkedin.Fetch(ctx, settings)
+	if fetchErr != nil {
+		syncer.logger.Error("LinkedIn fetch incomplete", zap.Error(fetchErr), zap.Int("fetched_job_count", len(jobs)))
+	}
+	if len(jobs) > 0 {
+		if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
+			syncer.logger.Error("persist LinkedIn jobs failed", zap.Error(err))
+			syncer.completeProviderRun(ctx, "linkedin", err)
+			return
+		}
+		syncer.logger.Info("stored LinkedIn jobs", zap.Int("count", len(jobs)))
+	}
+	if fetchErr != nil {
+		syncer.completeProviderRun(ctx, "linkedin", fetchErr)
 		return
 	}
-	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
-		syncer.logger.Error("persist LinkedIn jobs failed", zap.Error(err))
-		syncer.completeProviderRun(ctx, "linkedin", err)
-		return
+	if len(jobs) == 0 {
+		syncer.logger.Info("stored LinkedIn jobs", zap.Int("count", 0))
 	}
 	syncer.completeProviderRun(ctx, "linkedin", nil)
-	syncer.logger.Info("stored LinkedIn jobs", zap.Int("count", len(jobs)))
 }
 
 func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSearchSettings) {

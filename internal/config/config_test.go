@@ -21,6 +21,7 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, 12*time.Hour, cfg.Providers.Remotive.SyncInterval)
 	assert.Equal(t, 24*time.Hour, cfg.Providers.Jobicy.SyncInterval)
 	assert.Equal(t, 48*time.Hour, cfg.Providers.LinkedIn.SyncInterval)
+	assert.Equal(t, 30*time.Second, cfg.Providers.LinkedIn.RequestInterval)
 	assert.Equal(t, "https://llm.example.com/v1/chat/completions", cfg.LLM.BaseURL)
 	assert.Equal(t, "test-go-key", cfg.LLM.APIKey)
 	assert.Equal(t, "job-analysis-model", cfg.LLM.JobAnalysis.Model)
@@ -110,6 +111,7 @@ sync_interval = %q
 
 [providers.linkedin]
 sync_interval = %q
+request_interval = "30s"
 `, adzunaInterval, remotiveInterval, jobicyInterval, linkedInInterval)
 }
 
