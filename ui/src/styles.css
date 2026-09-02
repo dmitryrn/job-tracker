@@ -142,8 +142,10 @@ button { cursor: pointer; }
 .back-link:hover { text-decoration: underline; }
 .job-page-header h1 { margin-top: 0; }
 .job-page-header > div > p:last-child { color: #496178; font-weight: 700; }
-.job-page-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
-.job-page-meta span { background: #e9edf0; border-radius: 3px; color: #4b6075; font-size: 12px; padding: 6px 8px; }
+.job-page-meta { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 18px 0 0; }
+.job-page-meta > div { background: #e9edf0; border-radius: 3px; min-width: 0; padding: 8px 10px; }
+.job-page-meta dt { color: #68758a; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.job-page-meta dd { color: #304860; font-size: 13px; margin: 3px 0 0; overflow-wrap: anywhere; }
 .detail-tabs { border-bottom: 1px solid #d6d5d0; display: flex; gap: 5px; margin-top: 26px; }
 .detail-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: #68758a; font-size: 13px; padding: 10px 12px; }
 .detail-tab:hover, .detail-tab.active { border-bottom-color: #e5ac4c; color: #1a2638; }

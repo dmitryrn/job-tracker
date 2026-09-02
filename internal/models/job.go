@@ -26,6 +26,7 @@ type DiscoverySettings struct {
 	Adzuna   AdzunaSearchSettings   `json:"adzuna"`
 	Remotive RemotiveSearchSettings `json:"remotive"`
 	Jobicy   JobicySearchSettings   `json:"jobicy"`
+	LinkedIn LinkedInSearchSettings `json:"linkedin"`
 }
 
 type AdzunaSearchSettings struct {
@@ -50,6 +51,13 @@ type JobicySearchSettings struct {
 	Geo      string `json:"geo"`
 	Industry string `json:"industry"`
 	Tag      string `json:"tag"`
+}
+
+type LinkedInSearchSettings struct {
+	Enabled  bool   `json:"enabled"`
+	Query    string `json:"query"`
+	Location string `json:"location"`
+	Limit    int    `json:"limit"`
 }
 
 type BrowseJob struct {

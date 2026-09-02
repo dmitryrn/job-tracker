@@ -37,7 +37,8 @@ describe("formatMatchDate", () => {
 
 describe("formatJobPostedDate", () => {
   it("shows a relative posting date when it is available", () => {
-    expect(formatJobPostedDate("2026-08-26T12:00:00Z", new Date("2026-08-27T12:00:00Z"))).toBe("Posted 1d ago");
+    const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date("2026-08-26T12:00:00Z"));
+    expect(formatJobPostedDate("2026-08-26T12:00:00Z", new Date("2026-08-27T12:00:00Z"))).toBe(`Posted 1d ago, ${time}`);
   });
 
   it("omits missing or invalid posting dates", () => {

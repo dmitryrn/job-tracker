@@ -77,6 +77,12 @@ export type DiscoverySettings = {
     industry: string;
     tag: string;
   };
+  linkedin: {
+    enabled: boolean;
+    query: string;
+    location: string;
+    limit: number;
+  };
 };
 
 export type JobMatch = {

@@ -24,14 +24,15 @@ export function formatDate(value: string, now = new Date()) {
   if (Number.isNaN(date.getTime())) {
     return "Recently posted";
   }
+  const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
   const daysAgo = Math.floor((now.getTime() - date.getTime()) / (24 * 60 * 60 * 1000));
   if (daysAgo <= 0) {
-    return "Today";
+    return `Today, ${time}`;
   }
   if (daysAgo <= 30) {
-    return `${daysAgo}d ago`;
+    return `${daysAgo}d ago, ${time}`;
   }
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
 function formatSalary(job: BrowseJob) {

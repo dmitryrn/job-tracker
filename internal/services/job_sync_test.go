@@ -19,6 +19,7 @@ func TestJobSyncSkipsDisabledProviders(t *testing.T) {
 			Adzuna:   models.AdzunaSearchSettings{Enabled: false},
 			Remotive: models.RemotiveSearchSettings{Enabled: false},
 			Jobicy:   models.JobicySearchSettings{Enabled: false},
+			LinkedIn: models.LinkedInSearchSettings{Enabled: false},
 		}},
 		logger: zap.NewNop(),
 	}

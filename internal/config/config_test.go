@@ -13,13 +13,14 @@ import (
 
 func TestLoadUsesProviderConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
-	writeTestConfig(t, "6h", "12h", "24h")
+	writeTestConfig(t, "6h", "12h", "24h", "48h")
 
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.Equal(t, 6*time.Hour, cfg.Providers.Adzuna.SyncInterval)
 	assert.Equal(t, 12*time.Hour, cfg.Providers.Remotive.SyncInterval)
 	assert.Equal(t, 24*time.Hour, cfg.Providers.Jobicy.SyncInterval)
+	assert.Equal(t, 48*time.Hour, cfg.Providers.LinkedIn.SyncInterval)
 	assert.Equal(t, "https://llm.example.com/v1/chat/completions", cfg.LLM.BaseURL)
 	assert.Equal(t, "test-go-key", cfg.LLM.APIKey)
 	assert.Equal(t, "job-analysis-model", cfg.LLM.JobAnalysis.Model)
@@ -31,7 +32,7 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 
 func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
 	t.Chdir(t.TempDir())
-	writeTestConfig(t, "6h", "12h", "daily")
+	writeTestConfig(t, "6h", "12h", "daily", "48h")
 
 	_, err := Load()
 	assert.ErrorContains(t, err, "duration")
@@ -39,14 +40,14 @@ func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
 
 func TestLoadRejectsJobicyIntervalBelowOneHour(t *testing.T) {
 	t.Chdir(t.TempDir())
-	writeTestConfig(t, "6h", "12h", "30m")
+	writeTestConfig(t, "6h", "12h", "30m", "48h")
 
 	_, err := Load()
 	assert.ErrorContains(t, err, "at least 1h")
 }
 
 func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
-	config := testConfig("6h", "12h", "24h")
+	config := testConfig("6h", "12h", "24h", "48h")
 	tests := []struct {
 		name    string
 		content string
@@ -72,12 +73,12 @@ func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 	}
 }
 
-func writeTestConfig(t *testing.T, adzunaInterval, remotiveInterval, jobicyInterval string) {
+func writeTestConfig(t *testing.T, adzunaInterval, remotiveInterval, jobicyInterval, linkedInInterval string) {
 	t.Helper()
-	writeTestConfigContent(t, testConfig(adzunaInterval, remotiveInterval, jobicyInterval))
+	writeTestConfigContent(t, testConfig(adzunaInterval, remotiveInterval, jobicyInterval, linkedInInterval))
 }
 
-func testConfig(adzunaInterval, remotiveInterval, jobicyInterval string) string {
+func testConfig(adzunaInterval, remotiveInterval, jobicyInterval, linkedInInterval string) string {
 	return fmt.Sprintf(`[server]
 http_address = ":8080"
 
@@ -106,7 +107,10 @@ sync_interval = %q
 
 [providers.jobicy]
 sync_interval = %q
-`, adzunaInterval, remotiveInterval, jobicyInterval)
+
+[providers.linkedin]
+sync_interval = %q
+`, adzunaInterval, remotiveInterval, jobicyInterval, linkedInInterval)
 }
 
 func writeTestConfigContent(t *testing.T, content string) {

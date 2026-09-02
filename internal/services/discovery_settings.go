@@ -33,8 +33,10 @@ func (service *DiscoverySettingsService) Save(ctx context.Context, settings mode
 	settings.Jobicy.Geo = strings.TrimSpace(settings.Jobicy.Geo)
 	settings.Jobicy.Industry = strings.TrimSpace(settings.Jobicy.Industry)
 	settings.Jobicy.Tag = strings.TrimSpace(settings.Jobicy.Tag)
+	settings.LinkedIn.Query = strings.TrimSpace(settings.LinkedIn.Query)
+	settings.LinkedIn.Location = strings.TrimSpace(settings.LinkedIn.Location)
 
-	if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) || settings.Remotive.Query == "" || settings.Remotive.Category == "" || settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 {
+	if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) || settings.Remotive.Query == "" || settings.Remotive.Category == "" || settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 || settings.LinkedIn.Query == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 {
 		return models.DiscoverySettings{}, fmt.Errorf("%w: check required fields and numeric limits", ErrInvalidDiscoverySettings)
 	}
 	return service.repository.SaveDiscoverySettings(ctx, settings)

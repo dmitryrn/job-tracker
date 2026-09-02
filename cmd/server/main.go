@@ -11,6 +11,7 @@ import (
 
 	"nice/internal/clients/adzuna"
 	"nice/internal/clients/jobicy"
+	"nice/internal/clients/linkedin"
 	"nice/internal/clients/openrouter"
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
@@ -28,6 +29,7 @@ func main() {
 			openDatabase,
 			adzuna.NewClient,
 			jobicy.NewClient,
+			linkedin.NewClient,
 			openrouter.NewClient,
 			remotive.NewClient,
 			newJobCompletionClient,
@@ -40,6 +42,7 @@ func main() {
 			repositories.NewJobMatchRepository,
 			repositories.NewMatchQueueRepository,
 			services.NewJobSync,
+			services.NewLinkedInJobs,
 			services.NewJobBrowse,
 			services.NewDiscoverySettingsService,
 			services.NewProviderPreviewService,

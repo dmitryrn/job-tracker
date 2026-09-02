@@ -18,7 +18,7 @@ function plainText(value: string) {
 
 function formatSalary(job: BrowseJob) {
   if (job.salaryMin === null && job.salaryMax === null) {
-    return "Compensation not listed";
+    return "Not listed";
   }
   const formatter = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
   if (job.salaryMin !== null && job.salaryMax !== null) {
@@ -168,7 +168,11 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
         </div>
         <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
       </header>
-      <div className="job-page-meta"><span>{job.location || "Location flexible"}</span><span>{job.employmentType || "Role type not listed"}</span><span>{formatSalary(job)}</span></div>
+      <dl className="job-page-meta">
+        <div><dt>Location</dt><dd>{job.location || "Location flexible"}</dd></div>
+        <div><dt>Employment type</dt><dd>{job.employmentType || "Not listed"}</dd></div>
+        <div><dt>Compensation</dt><dd>{formatSalary(job)}</dd></div>
+      </dl>
       <nav className="detail-tabs" aria-label="Job details">
         <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("post")}>Job post</button>
         <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>

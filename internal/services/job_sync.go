@@ -19,12 +19,14 @@ import (
 type JobSync struct {
 	adzuna           *adzuna.Client
 	jobicy           *jobicy.Client
+	linkedin         *LinkedInJobs
 	remotive         *remotive.Client
 	jobs             repositories.JobRepository
 	providerRuns     repositories.ProviderRunRepository
 	settings         repositories.DiscoverySettingsRepository
 	adzunaInterval   time.Duration
 	jobicyInterval   time.Duration
+	linkedinInterval time.Duration
 	remotiveInterval time.Duration
 	logger           *zap.Logger
 	cancel           context.CancelFunc
@@ -32,16 +34,18 @@ type JobSync struct {
 	mutex            sync.Mutex
 }
 
-func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
+func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:           adzunaClient,
 		jobicy:           jobicyClient,
+		linkedin:         linkedInJobs,
 		remotive:         remotiveClient,
 		jobs:             jobs,
 		providerRuns:     providerRuns,
 		settings:         settings,
 		adzunaInterval:   cfg.Providers.Adzuna.SyncInterval,
 		jobicyInterval:   cfg.Providers.Jobicy.SyncInterval,
+		linkedinInterval: cfg.Providers.LinkedIn.SyncInterval,
 		remotiveInterval: cfg.Providers.Remotive.SyncInterval,
 		logger:           logger,
 	}
@@ -100,7 +104,32 @@ func (syncer *JobSync) sync(ctx context.Context) {
 	}
 	syncer.syncAdzuna(ctx, settings.Adzuna)
 	syncer.syncJobicy(ctx, settings.Jobicy)
+	syncer.syncLinkedIn(ctx, settings.LinkedIn)
 	syncer.syncRemotive(ctx, settings.Remotive)
+}
+
+func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedInSearchSettings) {
+	if !settings.Enabled {
+		syncer.logger.Info("provider sync skipped", zap.String("provider", "linkedin"), zap.String("reason", "disabled"))
+		return
+	}
+	if !syncer.startProviderRun(ctx, "linkedin", syncer.linkedinInterval) {
+		return
+	}
+	syncer.logger.Info("syncing LinkedIn jobs")
+	jobs, err := syncer.linkedin.Fetch(ctx, settings)
+	if err != nil {
+		syncer.logger.Error("LinkedIn sync failed", zap.Error(err))
+		syncer.completeProviderRun(ctx, "linkedin", err)
+		return
+	}
+	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
+		syncer.logger.Error("persist LinkedIn jobs failed", zap.Error(err))
+		syncer.completeProviderRun(ctx, "linkedin", err)
+		return
+	}
+	syncer.completeProviderRun(ctx, "linkedin", nil)
+	syncer.logger.Info("stored LinkedIn jobs", zap.Int("count", len(jobs)))
 }
 
 func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSearchSettings) {

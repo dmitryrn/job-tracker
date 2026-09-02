@@ -19,21 +19,13 @@ reasoning_effort = "low"
 run_interval = "2m"
 
 [providers.adzuna]
-query = "software engineer"
-country = "de"
-max_days_old = 30
-max_pages = 5
-results_per_page = 50
-workplace = "remote-hybrid"
 sync_interval = "6h"
 
 [providers.remotive]
-query = "software engineer"
 sync_interval = "6h"
 
 [providers.jobicy]
-count = 50
-geo = "europe"
-industry = "engineering"
-tag = ""
+sync_interval = "6h"
+
+[providers.linkedin]
 sync_interval = "6h"

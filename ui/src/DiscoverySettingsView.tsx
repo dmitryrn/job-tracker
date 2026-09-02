@@ -6,6 +6,7 @@ const emptySettings: DiscoverySettings = {
   adzuna: { enabled: true, query: "", country: "", maxDaysOld: 30, maxPages: 1, resultsPerPage: 50, workplace: "remote-hybrid" },
   remotive: { enabled: true, query: "", category: "software-development" },
   jobicy: { enabled: true, count: 50, geo: "", industry: "", tag: "" },
+  linkedin: { enabled: false, query: "", location: "", limit: 25 },
 };
 
 type DiscoveryProvider = keyof DiscoverySettings;
@@ -146,6 +147,25 @@ export default function DiscoverySettingsView() {
               <label>Tag (optional)<input value={settings.jobicy.tag} onChange={(event) => update("jobicy", "tag", event.target.value)} /></label>
             </div>
             {previews.jobicy !== undefined && <ProviderPreview jobs={previews.jobicy} />}
+          </section>
+
+          <section className="profile-section">
+            <div className="profile-section-heading">
+              <h2>LinkedIn</h2>
+              <div className="provider-section-actions">
+                <label className="provider-toggle"><input type="checkbox" checked={settings.linkedin.enabled} onChange={(event) => update("linkedin", "enabled", event.target.checked)} /> Enabled</label>
+                <button className="secondary-action" type="button" disabled={previewing === "linkedin"} onClick={() => void preview("linkedin")}>{previewing === "linkedin" ? "Fetching..." : "Fetch preview"}</button>
+                <PreviewOutcome jobs={previews.linkedin} />
+              </div>
+            </div>
+            {previewErrors.linkedin && <p className="query-error">{previewErrors.linkedin}</p>}
+            <p>Public LinkedIn job listings, fetched without an account. Keep this disabled unless you want to import from LinkedIn.</p>
+            <div className="profile-fields">
+              <label>Search phrase<input value={settings.linkedin.query} onChange={(event) => update("linkedin", "query", event.target.value)} /></label>
+              <label>Location (optional)<input value={settings.linkedin.location} onChange={(event) => update("linkedin", "location", event.target.value)} placeholder="Berlin" /></label>
+              <label>Results to fetch<input type="number" min="1" max="100" value={settings.linkedin.limit} onChange={(event) => update("linkedin", "limit", Number(event.target.value))} /></label>
+            </div>
+            {previews.linkedin !== undefined && <ProviderPreview jobs={previews.linkedin} />}
           </section>
 
           {error && <p className="query-error">{error}</p>}

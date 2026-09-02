@@ -28,6 +28,7 @@ type Config struct {
 type ProviderConfig struct {
 	Adzuna   AdzunaConfig
 	Jobicy   JobicyConfig
+	LinkedIn LinkedInConfig
 	Remotive RemotiveConfig
 }
 
@@ -65,6 +66,10 @@ type JobicyConfig struct {
 	SyncInterval time.Duration
 }
 
+type LinkedInConfig struct {
+	SyncInterval time.Duration
+}
+
 type fileConfig struct {
 	Server struct {
 		HTTPAddress string `toml:"http_address" validate:"notblank"`
@@ -77,6 +82,7 @@ type fileConfig struct {
 	Providers struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
 		Jobicy   fileJobicyConfig   `toml:"jobicy"`
+		LinkedIn fileLinkedInConfig `toml:"linkedin"`
 		Remotive fileRemotiveConfig `toml:"remotive"`
 	} `toml:"providers"`
 }
@@ -105,6 +111,10 @@ type fileRemotiveConfig struct {
 }
 
 type fileJobicyConfig struct {
+	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
+}
+
+type fileLinkedInConfig struct {
 	SyncInterval string `toml:"sync_interval" validate:"notblank,duration"`
 }
 
@@ -157,12 +167,19 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.jobicy.sync_interval: %w", err)
 	}
+	linkedInInterval, err := time.ParseDuration(source.Providers.LinkedIn.SyncInterval)
+	if err != nil {
+		return Config{}, fmt.Errorf("parse providers.linkedin.sync_interval: %w", err)
+	}
 	jobMatchRunInterval, err := time.ParseDuration(source.JobMatch.RunInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse job_match.run_interval: %w", err)
 	}
 	if jobicyInterval < time.Hour {
 		return Config{}, fmt.Errorf("providers.jobicy.sync_interval must be at least 1h")
+	}
+	if linkedInInterval < time.Hour {
+		return Config{}, fmt.Errorf("providers.linkedin.sync_interval must be at least 1h")
 	}
 
 	return Config{
@@ -179,6 +196,9 @@ func Load() (Config, error) {
 			},
 			Jobicy: JobicyConfig{
 				SyncInterval: jobicyInterval,
+			},
+			LinkedIn: LinkedInConfig{
+				SyncInterval: linkedInInterval,
 			},
 		},
 		LLM: LLMConfig{

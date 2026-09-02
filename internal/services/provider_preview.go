@@ -22,6 +22,10 @@ type jobicyFetcher interface {
 	Fetch(context.Context, models.JobicySearchSettings) ([]models.Job, error)
 }
 
+type linkedInFetcher interface {
+	Fetch(context.Context, models.LinkedInSearchSettings) ([]models.Job, error)
+}
+
 type remotiveFetcher interface {
 	Fetch(context.Context, models.RemotiveSearchSettings) ([]models.Job, error)
 }
@@ -29,13 +33,15 @@ type remotiveFetcher interface {
 type ProviderPreviewService struct {
 	adzuna   adzunaFetcher
 	jobicy   jobicyFetcher
+	linkedin linkedInFetcher
 	remotive remotiveFetcher
 }
 
-func NewProviderPreviewService(adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, remotiveClient *remotive.Client) *ProviderPreviewService {
+func NewProviderPreviewService(adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client) *ProviderPreviewService {
 	return &ProviderPreviewService{
 		adzuna:   adzunaClient,
 		jobicy:   jobicyClient,
+		linkedin: linkedInJobs,
 		remotive: remotiveClient,
 	}
 }
@@ -66,6 +72,13 @@ func (service *ProviderPreviewService) Preview(ctx context.Context, provider str
 			return nil, fmt.Errorf("%w: Jobicy results must be between 1 and 200", ErrInvalidDiscoverySettings)
 		}
 		return service.jobicy.Fetch(ctx, settings.Jobicy)
+	case "linkedin":
+		settings.LinkedIn.Query = strings.TrimSpace(settings.LinkedIn.Query)
+		settings.LinkedIn.Location = strings.TrimSpace(settings.LinkedIn.Location)
+		if settings.LinkedIn.Query == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 {
+			return nil, fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and 100", ErrInvalidDiscoverySettings)
+		}
+		return service.linkedin.Fetch(ctx, settings.LinkedIn)
 	default:
 		return nil, ErrUnknownDiscoveryProvider
 	}
