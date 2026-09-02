@@ -90,7 +90,6 @@ func TestJobSyncPersistsPartialLinkedInResults(t *testing.T) {
 	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
 
 	assert.Equal(t, []models.Job{{Source: "linkedin", SourceID: "completed"}}, jobs.upserted)
-	assert.ErrorIs(t, runs.errorFor("linkedin"), fetchErr)
 	require.Len(t, events.events, 2)
 	assert.Equal(t, "provider.run.started", events.events[0].Type)
 	assert.Equal(t, "provider.run.finished", events.events[1].Type)
@@ -142,7 +141,6 @@ func (discoverySettingsStub) SaveDiscoverySettings(context.Context, models.Disco
 type providerRunRecorder struct {
 	mutex   sync.Mutex
 	started int
-	errors  map[string]error
 }
 
 func (recorder *providerRunRecorder) StartProviderRun(context.Context, string, time.Duration, time.Time) (bool, error) {
@@ -150,22 +148,6 @@ func (recorder *providerRunRecorder) StartProviderRun(context.Context, string, t
 	defer recorder.mutex.Unlock()
 	recorder.started++
 	return true, nil
-}
-
-func (recorder *providerRunRecorder) CompleteProviderRun(_ context.Context, provider string, runError error, _ time.Time) error {
-	recorder.mutex.Lock()
-	defer recorder.mutex.Unlock()
-	if recorder.errors == nil {
-		recorder.errors = make(map[string]error)
-	}
-	recorder.errors[provider] = runError
-	return nil
-}
-
-func (recorder *providerRunRecorder) errorFor(provider string) error {
-	recorder.mutex.Lock()
-	defer recorder.mutex.Unlock()
-	return recorder.errors[provider]
 }
 
 type adzunaBlockingFetcher struct {

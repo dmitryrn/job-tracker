@@ -19,7 +19,6 @@ type JobRepository interface {
 
 type ProviderRunRepository interface {
 	StartProviderRun(context.Context, string, time.Duration, time.Time) (bool, error)
-	CompleteProviderRun(context.Context, string, error, time.Time) error
 }
 
 type EventRepository interface {

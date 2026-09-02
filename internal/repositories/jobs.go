@@ -116,43 +116,15 @@ func (repository *SQLite) StartProviderRun(ctx context.Context, provider string,
 	}
 
 	if _, err := transaction.ExecContext(ctx, `
-		INSERT INTO provider_runs (provider, last_run_at, last_completed_at, status, last_error)
-		VALUES (?, ?, NULL, 'running', NULL)
-		ON CONFLICT(provider) DO UPDATE SET
-			last_run_at = excluded.last_run_at,
-			last_completed_at = NULL,
-			status = excluded.status,
-			last_error = NULL`, provider, now.UTC().Format(time.RFC3339Nano)); err != nil {
+		INSERT INTO provider_runs (provider, last_run_at)
+		VALUES (?, ?)
+		ON CONFLICT(provider) DO UPDATE SET last_run_at = excluded.last_run_at`, provider, now.UTC().Format(time.RFC3339Nano)); err != nil {
 		return false, err
 	}
 	if err := transaction.Commit(); err != nil {
 		return false, err
 	}
 	return true, nil
-}
-
-func (repository *SQLite) CompleteProviderRun(ctx context.Context, provider string, runError error, completedAt time.Time) error {
-	status := "succeeded"
-	var lastError any
-	if runError != nil {
-		status = "failed"
-		lastError = runError.Error()
-	}
-	result, err := repository.db.ExecContext(ctx, `
-		UPDATE provider_runs
-		SET last_completed_at = ?, status = ?, last_error = ?
-		WHERE provider = ?`, completedAt.UTC().Format(time.RFC3339Nano), status, lastError, provider)
-	if err != nil {
-		return err
-	}
-	updated, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if updated != 1 {
-		return fmt.Errorf("provider run %s was not started", provider)
-	}
-	return nil
 }
 
 func (repository *SQLite) List(ctx context.Context, search models.JobSearch) ([]models.BrowseJob, error) {
