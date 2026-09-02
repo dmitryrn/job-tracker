@@ -22,6 +22,11 @@ type ProviderRunRepository interface {
 	CompleteProviderRun(context.Context, string, error, time.Time) error
 }
 
+type EventRepository interface {
+	RecordEvent(context.Context, models.Event) error
+	Events(context.Context, models.EventSearch) (models.EventPage, error)
+}
+
 type DiscoverySettingsRepository interface {
 	DiscoverySettings(context.Context) (models.DiscoverySettings, error)
 	SaveDiscoverySettings(context.Context, models.DiscoverySettings) (models.DiscoverySettings, error)
@@ -58,6 +63,10 @@ func NewJobRepository(sqlite *SQLite) JobRepository {
 }
 
 func NewProviderRunRepository(sqlite *SQLite) ProviderRunRepository {
+	return sqlite
+}
+
+func NewEventRepository(sqlite *SQLite) EventRepository {
 	return sqlite
 }
 

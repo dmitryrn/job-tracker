@@ -111,6 +111,22 @@ export type JobMatchSummary = {
 	label: string;
 };
 
+export type AppEvent = {
+  id: number;
+  occurredAt: string;
+  provider: string;
+  runId: string;
+  type: string;
+  level: "info" | "error";
+  message: string;
+  data: Record<string, unknown>;
+};
+
+export type EventPage = {
+  events: AppEvent[];
+  total: number;
+};
+
 export type JobAnalysis = {
   jobId: number;
   analyzerVersion: string;
@@ -166,6 +182,17 @@ export function fetchCompanies(search: string, signal: AbortSignal) {
     parameters.set("search", search.trim());
   }
   return request<{ companies: BrowseCompany[] }>(`companies?${parameters}`, { signal });
+}
+
+export function fetchEvents(provider: string, runId: string, limit: number, offset: number, signal: AbortSignal) {
+  const parameters = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (provider) {
+    parameters.set("provider", provider);
+  }
+  if (runId.trim()) {
+    parameters.set("runId", runId.trim());
+  }
+  return request<EventPage>(`events?${parameters}`, { signal });
 }
 
 export function fetchProfile(signal: AbortSignal) {

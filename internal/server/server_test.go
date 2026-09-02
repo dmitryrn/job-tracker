@@ -108,6 +108,30 @@ func TestDiscoverySettingsAPI(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestEventsAPIListsFilteredPaginatedEvents(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "linkedin", RunID: "run-1", Type: "provider.run.started", Level: "info", Message: "LinkedIn job sync started"}))
+	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "application", Type: "application.started", Level: "info", Message: "Application started"}))
+	handler := newTestServer(repository).http.Handler
+
+	response := request(handler, http.MethodGet, "/api/events?provider=linkedin&limit=1")
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var page models.EventPage
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&page))
+	assert.Equal(t, 1, page.Total)
+	require.Len(t, page.Events, 1)
+	assert.Equal(t, "run-1", page.Events[0].RunID)
+
+	response = request(handler, http.MethodGet, "/api/events?limit=0")
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
 func TestDiscoveryPreviewAPIRejectsUnknownProvider(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -295,6 +319,7 @@ func newTestServer(repository *repositories.SQLite) *Server {
 		config.Config{},
 		zap.NewNop(),
 		services.NewJobBrowse(repository),
+		services.NewEventLog(repository),
 		services.NewDiscoverySettingsService(repository),
 		services.NewProviderPreviewService(nil, nil, nil, nil),
 		services.NewUserProfileService(repository),

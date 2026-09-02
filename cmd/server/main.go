@@ -16,6 +16,7 @@ import (
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
 	"nice/internal/migrations"
+	"nice/internal/models"
 	"nice/internal/repositories"
 	"nice/internal/server"
 	"nice/internal/services"
@@ -36,6 +37,7 @@ func main() {
 			repositories.NewSQLite,
 			repositories.NewJobRepository,
 			repositories.NewProviderRunRepository,
+			repositories.NewEventRepository,
 			repositories.NewDiscoverySettingsRepository,
 			repositories.NewUserProfileRepository,
 			repositories.NewJobAnalysisRepository,
@@ -44,6 +46,7 @@ func main() {
 			services.NewJobSync,
 			services.NewLinkedInJobs,
 			services.NewJobBrowse,
+			services.NewEventLog,
 			services.NewDiscoverySettingsService,
 			services.NewProviderPreviewService,
 			services.NewUserProfileService,
@@ -83,12 +86,22 @@ func registerLifecycle(
 	lifecycle fx.Lifecycle,
 	db *sql.DB,
 	logger *zap.Logger,
+	events repositories.EventRepository,
 	server *server.Server,
 	sync *services.JobSync,
 	matchWorker *services.JobMatchWorker,
 ) {
 	lifecycle.Append(fx.Hook{
-		OnStop: func(context.Context) error {
+		OnStart: func(ctx context.Context) error {
+			if err := events.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.started", Level: "info", Message: "Application started"}); err != nil {
+				logger.Error("record application start event failed", zap.Error(err))
+			}
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			if eventErr := events.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.stopped", Level: "info", Message: "Application stopped"}); eventErr != nil {
+				logger.Error("record application stop event failed", zap.Error(eventErr))
+			}
 			err := db.Close()
 			_ = logger.Sync()
 			return err

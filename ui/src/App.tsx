@@ -3,6 +3,7 @@ import initSqlJs, { type Database } from "sql.js";
 import sqlWasm from "sql.js/dist/sql-wasm.wasm?url";
 import BrowseView, { type BrowseMode } from "./BrowseView";
 import DiscoverySettingsView from "./DiscoverySettingsView";
+import EventsView from "./EventsView";
 import JobDetailView from "./JobDetailView";
 import JobMatchesView from "./JobMatchesView";
 import MatchQueueView from "./MatchQueueView";
@@ -11,7 +12,7 @@ import { fetchJob, type BrowseJob } from "./api";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
 import "./styles.css";
 
-type View = BrowseMode | "explorer" | "matches" | "profile" | "match-queue" | "search-setup";
+type View = BrowseMode | "events" | "explorer" | "matches" | "profile" | "match-queue" | "search-setup";
 
 type Route = {
   view: View;
@@ -24,7 +25,7 @@ function readRoute(): Route {
   if (parts[0] === "jobs" && /^\d+$/.test(parts[1] ?? "")) {
     return { view: "jobs", jobID: Number(parts[1]), tab: parts[2] === "match" ? "match" : "post" };
   }
-  if (parts[0] === "companies" || parts[0] === "matches" || parts[0] === "profile" || parts[0] === "match-queue" || parts[0] === "search-setup" || parts[0] === "database") {
+  if (parts[0] === "companies" || parts[0] === "events" || parts[0] === "matches" || parts[0] === "profile" || parts[0] === "match-queue" || parts[0] === "search-setup" || parts[0] === "database") {
     return { view: parts[0] === "database" ? "explorer" : parts[0] };
   }
   return { view: "jobs" };
@@ -235,6 +236,7 @@ export default function App() {
           <button className={route.view === "match-queue" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "match-queue" })}>Match queue</button>
           <button className={route.view === "profile" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "profile" })}>Profile</button>
           <button className={route.view === "search-setup" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "search-setup" })}>Search setup</button>
+          <button className={route.view === "events" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "events" })}>Events</button>
           <button className={route.view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "explorer" })}>DB browser</button>
         </nav>
       </header>
@@ -268,6 +270,8 @@ export default function App() {
           <ProfileView />
         ) : route.view === "search-setup" ? (
           <DiscoverySettingsView />
+        ) : route.view === "events" ? (
+          <EventsView />
         ) : loading || !database ? (
           <p className="state browse-state">Downloading and opening the SQLite database...</p>
         ) : (

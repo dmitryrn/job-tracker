@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -21,7 +22,7 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -37,6 +38,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, sett
 	mux.HandleFunc("DELETE /api/match-queue/{id}", removeMatchQueueHandler(requests, logger))
 	mux.HandleFunc("GET /api/providers", providersHandler(browse, logger))
 	mux.HandleFunc("GET /api/companies", companiesHandler(browse, logger))
+	mux.HandleFunc("GET /api/events", eventsHandler(events, logger))
 	mux.HandleFunc("GET /api/discovery-settings", discoverySettingsHandler(settings, logger))
 	mux.HandleFunc("PUT /api/discovery-settings", saveDiscoverySettingsHandler(settings, logger))
 	mux.HandleFunc("POST /api/discovery-preview/{provider}", discoveryPreviewHandler(previews, logger))
@@ -51,6 +53,58 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, sett
 		},
 		logger: logger,
 	}
+}
+
+func eventsHandler(events *services.EventLog, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		limit, err := eventQueryInt(request, "limit", 50)
+		if err != nil {
+			logger.Warn("invalid events limit", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
+			return
+		}
+		offset, err := eventQueryInt(request, "offset", 0)
+		if err != nil {
+			logger.Warn("invalid events offset", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
+			return
+		}
+		page, err := events.Events(request.Context(), models.EventSearch{
+			Provider: strings.TrimSpace(request.URL.Query().Get("provider")),
+			RunID:    strings.TrimSpace(request.URL.Query().Get("runId")),
+			Limit:    limit,
+			Offset:   offset,
+		})
+		if errors.Is(err, services.ErrInvalidEventSearch) {
+			logger.Warn("invalid event search", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "invalid event search")
+			return
+		}
+		if err != nil {
+			logger.Error("list events failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load events")
+			return
+		}
+		writeJSON(writer, http.StatusOK, page)
+	}
+}
+
+func eventQueryInt(request *http.Request, name string, fallback int) (int, error) {
+	value := request.URL.Query().Get(name)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, err
+	}
+	if name == "limit" && (parsed < 1 || parsed > 100) {
+		return 0, errors.New("limit out of range")
+	}
+	if name == "offset" && parsed < 0 {
+		return 0, errors.New("negative offset")
+	}
+	return parsed, nil
 }
 
 type discoveryPreviewer interface {

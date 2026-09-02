@@ -23,7 +23,7 @@ type jobicyFetcher interface {
 }
 
 type linkedInFetcher interface {
-	Fetch(context.Context, models.LinkedInSearchSettings) ([]models.Job, error)
+	Fetch(context.Context, models.LinkedInSearchSettings, string, linkedInJobSaver) (LinkedInFetchResult, error)
 }
 
 type remotiveFetcher interface {
@@ -78,7 +78,8 @@ func (service *ProviderPreviewService) Preview(ctx context.Context, provider str
 		if settings.LinkedIn.Query == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 {
 			return nil, fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and 100", ErrInvalidDiscoverySettings)
 		}
-		return service.linkedin.Fetch(ctx, settings.LinkedIn)
+		result, err := service.linkedin.Fetch(ctx, settings.LinkedIn, "", nil)
+		return result.Jobs, err
 	default:
 		return nil, ErrUnknownDiscoveryProvider
 	}

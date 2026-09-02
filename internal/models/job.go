@@ -22,6 +22,29 @@ type JobSearch struct {
 	Fields   []string
 }
 
+type Event struct {
+	ID         int64          `json:"id"`
+	OccurredAt string         `json:"occurredAt"`
+	Provider   string         `json:"provider"`
+	RunID      string         `json:"runId"`
+	Type       string         `json:"type"`
+	Level      string         `json:"level"`
+	Message    string         `json:"message"`
+	Data       map[string]any `json:"data"`
+}
+
+type EventSearch struct {
+	Provider string
+	RunID    string
+	Limit    int
+	Offset   int
+}
+
+type EventPage struct {
+	Events []Event `json:"events"`
+	Total  int     `json:"total"`
+}
+
 type DiscoverySettings struct {
 	Adzuna   AdzunaSearchSettings   `json:"adzuna"`
 	Remotive RemotiveSearchSettings `json:"remotive"`

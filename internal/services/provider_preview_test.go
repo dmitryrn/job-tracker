@@ -76,7 +76,7 @@ type linkedInPreviewStub struct {
 	settings models.LinkedInSearchSettings
 }
 
-func (stub *linkedInPreviewStub) Fetch(_ context.Context, settings models.LinkedInSearchSettings) ([]models.Job, error) {
+func (stub *linkedInPreviewStub) Fetch(_ context.Context, settings models.LinkedInSearchSettings, _ string, _ linkedInJobSaver) (LinkedInFetchResult, error) {
 	stub.settings = settings
-	return stub.jobs, nil
+	return LinkedInFetchResult{Jobs: stub.jobs}, nil
 }

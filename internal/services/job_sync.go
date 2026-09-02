@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -23,6 +24,7 @@ type JobSync struct {
 	remotive         remotiveFetcher
 	jobs             repositories.JobRepository
 	providerRuns     repositories.ProviderRunRepository
+	events           repositories.EventRepository
 	settings         repositories.DiscoverySettingsRepository
 	adzunaInterval   time.Duration
 	jobicyInterval   time.Duration
@@ -34,7 +36,7 @@ type JobSync struct {
 	mutex            sync.Mutex
 }
 
-func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
+func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRepository, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:           adzunaClient,
 		jobicy:           jobicyClient,
@@ -42,6 +44,7 @@ func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jo
 		remotive:         remotiveClient,
 		jobs:             jobs,
 		providerRuns:     providerRuns,
+		events:           events,
 		settings:         settings,
 		adzunaInterval:   cfg.Providers.Adzuna.SyncInterval,
 		jobicyInterval:   cfg.Providers.Jobicy.SyncInterval,
@@ -131,27 +134,51 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 	if !syncer.startProviderRun(ctx, "linkedin", syncer.linkedinInterval) {
 		return
 	}
-	syncer.logger.Info("syncing LinkedIn jobs")
-	jobs, fetchErr := syncer.linkedin.Fetch(ctx, settings)
+	runID := fmt.Sprintf("linkedin-%d", time.Now().UTC().UnixNano())
+	syncer.recordLinkedInEvent(ctx, runID, "provider.run.started", "info", "LinkedIn job sync started", map[string]any{
+		"query": settings.Query, "location": settings.Location, "requestedLimit": settings.Limit,
+	})
+	syncer.logger.Info("syncing LinkedIn jobs", zap.String("run_id", runID))
+	fetch, fetchErr := syncer.linkedin.Fetch(ctx, settings, runID, func(ctx context.Context, job models.Job) error {
+		return syncer.jobs.Upsert(ctx, []models.Job{job})
+	})
 	if fetchErr != nil {
-		syncer.logger.Error("LinkedIn fetch incomplete", zap.Error(fetchErr), zap.Int("fetched_job_count", len(jobs)))
-	}
-	if len(jobs) > 0 {
-		if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
-			syncer.logger.Error("persist LinkedIn jobs failed", zap.Error(err))
-			syncer.completeProviderRun(ctx, "linkedin", err)
-			return
-		}
-		syncer.logger.Info("stored LinkedIn jobs", zap.Int("count", len(jobs)))
+		syncer.logger.Error("LinkedIn fetch incomplete", zap.String("run_id", runID), zap.Error(fetchErr), zap.Int("fetched_job_count", fetch.FetchedJobs))
 	}
 	if fetchErr != nil {
+		syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, fetchErr)
 		syncer.completeProviderRun(ctx, "linkedin", fetchErr)
 		return
 	}
-	if len(jobs) == 0 {
-		syncer.logger.Info("stored LinkedIn jobs", zap.Int("count", 0))
-	}
+	syncer.logger.Info("stored LinkedIn jobs", zap.String("run_id", runID), zap.Int("count", fetch.SavedJobs))
+	syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, nil)
 	syncer.completeProviderRun(ctx, "linkedin", nil)
+}
+
+func (syncer *JobSync) finishLinkedInRun(ctx context.Context, runID string, limit int, fetch LinkedInFetchResult, saved int, runError error) {
+	ctx, cancel := finalizationContext(ctx)
+	defer cancel()
+	level := "info"
+	message := "LinkedIn job sync finished"
+	data := map[string]any{
+		"requestedLimit": limit, "searchResultsFetched": fetch.SearchResults, "detailRequests": fetch.DetailRequests,
+		"jobsFetched": fetch.FetchedJobs, "savedJobs": saved,
+	}
+	if runError != nil {
+		level = "error"
+		message = "LinkedIn job sync failed"
+		data["error"] = runError.Error()
+	}
+	syncer.recordLinkedInEvent(ctx, runID, "provider.run.finished", level, message, data)
+}
+
+func (syncer *JobSync) recordLinkedInEvent(ctx context.Context, runID, eventType, level, message string, data map[string]any) {
+	if syncer.events == nil {
+		return
+	}
+	if err := syncer.events.RecordEvent(ctx, models.Event{Provider: "linkedin", RunID: runID, Type: eventType, Level: level, Message: message, Data: data}); err != nil {
+		syncer.logger.Error("record LinkedIn event failed", zap.String("run_id", runID), zap.String("event_type", eventType), zap.Error(err))
+	}
 }
 
 func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSearchSettings) {
@@ -239,7 +266,16 @@ func (syncer *JobSync) startProviderRun(ctx context.Context, provider string, in
 }
 
 func (syncer *JobSync) completeProviderRun(ctx context.Context, provider string, runError error) {
+	ctx, cancel := finalizationContext(ctx)
+	defer cancel()
 	if err := syncer.providerRuns.CompleteProviderRun(ctx, provider, runError, time.Now()); err != nil {
 		syncer.logger.Error("complete provider sync failed", zap.String("provider", provider), zap.Error(err))
 	}
+}
+
+func finalizationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx.Err() == nil {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(context.Background(), 5*time.Second)
 }
