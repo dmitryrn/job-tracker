@@ -279,7 +279,7 @@ tr:hover td { background: #fffbed; }
   .limit { text-align: left; }
   .filter { grid-template-columns: 1fr auto; }
   .filter label { grid-column: 1 / -1; }
-  .browse-header { gap: 18px; }
+  .browse-header { align-items: start; gap: 18px; }
   .browse-stat { border-left: 0; border-top: 1px solid #d6d5d0; padding: 12px 0 0; }
   .browse-search { grid-template-columns: auto minmax(0, 1fr); }
   .browse-search button { grid-column: 2; justify-self: start; }
