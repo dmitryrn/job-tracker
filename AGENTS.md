@@ -29,6 +29,7 @@ changing a unit definition. Read recent service logs with
 - add spacing between code blocks as per clean code, for readability
 - handlers should log all errors, including service errors
 - worker execution paths should log all outcomes, including early returns, successes, and errors, with relevant IDs and context
+- clients should be dumb and application-agnostic where possible; retries and application policy belong to callers, though clients may use application models when needed
 - tests should assert behavior, not log output
 - run tests, build after making code changes
 - verify Go builds with `go build -o /dev/null ./cmd/server` to avoid build artifacts

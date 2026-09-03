@@ -10,6 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"nice/internal/clients/adzuna"
+	"nice/internal/clients/ipinfo"
 	"nice/internal/clients/jobicy"
 	"nice/internal/clients/linkedin"
 	"nice/internal/clients/openrouter"
@@ -29,6 +30,7 @@ func main() {
 			config.Load,
 			openDatabase,
 			adzuna.NewClient,
+			ipinfo.NewClient,
 			jobicy.NewClient,
 			linkedin.NewClient,
 			openrouter.NewClient,

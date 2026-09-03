@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"nice/internal/clients/ipinfo"
 	"nice/internal/models"
 )
 
@@ -37,6 +38,7 @@ func TestJobSyncRunsProvidersConcurrently(t *testing.T) {
 	release := make(chan struct{})
 	syncer := JobSync{
 		adzuna:       adzunaBlockingFetcher{starts: starts, release: release},
+		ipInfo:       ipInfoLookupStub{info: ipinfo.Info{Country: "DE"}},
 		jobicy:       jobicyBlockingFetcher{starts: starts, release: release},
 		linkedin:     linkedInBlockingFetcher{starts: starts, release: release},
 		remotive:     remotiveBlockingFetcher{starts: starts, release: release},
@@ -81,6 +83,7 @@ func TestJobSyncPersistsPartialLinkedInResults(t *testing.T) {
 			jobs: []models.Job{{Source: "linkedin", SourceID: "completed"}},
 			err:  fetchErr,
 		},
+		ipInfo:       ipInfoLookupStub{info: ipinfo.Info{Country: "DE"}},
 		jobs:         jobs,
 		providerRuns: runs,
 		events:       events,
@@ -90,11 +93,13 @@ func TestJobSyncPersistsPartialLinkedInResults(t *testing.T) {
 	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
 
 	assert.Equal(t, []models.Job{{Source: "linkedin", SourceID: "completed"}}, jobs.upserted)
-	require.Len(t, events.events, 2)
-	assert.Equal(t, "provider.run.started", events.events[0].Type)
-	assert.Equal(t, "provider.run.finished", events.events[1].Type)
-	assert.Equal(t, events.events[0].RunID, events.events[1].RunID)
-	assert.Equal(t, 1, events.events[1].Data["savedJobs"])
+	require.Len(t, events.events, 3)
+	assert.Equal(t, "linkedin.ip_info.resolved", events.events[0].Type)
+	assert.Equal(t, "DE", events.events[0].Data["country"])
+	assert.Equal(t, "provider.run.started", events.events[1].Type)
+	assert.Equal(t, "provider.run.finished", events.events[2].Type)
+	assert.Equal(t, events.events[1].RunID, events.events[2].RunID)
+	assert.Equal(t, 1, events.events[2].Data["savedJobs"])
 }
 
 func TestJobSyncFinalizesLinkedInEventsAfterCancellation(t *testing.T) {
@@ -114,6 +119,7 @@ func TestJobSyncSavesLinkedInJobsIndividually(t *testing.T) {
 	jobs := &jobRepositoryRecorder{}
 	syncer := JobSync{
 		linkedin:     linkedInFetcherStub{jobs: []models.Job{{SourceID: "first"}, {SourceID: "second"}}},
+		ipInfo:       ipInfoLookupStub{info: ipinfo.Info{Country: "DE"}},
 		jobs:         jobs,
 		providerRuns: &providerRunRecorder{},
 		logger:       zap.NewNop(),
@@ -124,6 +130,44 @@ func TestJobSyncSavesLinkedInJobsIndividually(t *testing.T) {
 	require.Len(t, jobs.batches, 2)
 	assert.Equal(t, []models.Job{{SourceID: "first"}}, jobs.batches[0])
 	assert.Equal(t, []models.Job{{SourceID: "second"}}, jobs.batches[1])
+}
+
+func TestJobSyncBlocksLinkedInWhenEgressIsInSerbia(t *testing.T) {
+	fetcher := &linkedInFetcherRecorder{}
+	events := &eventRepositoryRecorder{}
+	syncer := JobSync{
+		linkedin:     fetcher,
+		ipInfo:       ipInfoLookupStub{info: ipinfo.Info{Country: "rs"}},
+		providerRuns: &providerRunRecorder{},
+		events:       events,
+		logger:       zap.NewNop(),
+	}
+
+	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
+
+	assert.Zero(t, fetcher.calls)
+	require.Len(t, events.events, 2)
+	assert.Equal(t, "linkedin.ip_info.resolved", events.events[0].Type)
+	assert.Equal(t, "RS", events.events[0].Data["country"])
+	assert.Equal(t, "linkedin.ip_info.blocked", events.events[1].Type)
+}
+
+func TestJobSyncBlocksLinkedInWhenIPInfoLookupFails(t *testing.T) {
+	fetcher := &linkedInFetcherRecorder{}
+	events := &eventRepositoryRecorder{}
+	syncer := JobSync{
+		linkedin:     fetcher,
+		ipInfo:       ipInfoLookupStub{err: errors.New("IPinfo unavailable")},
+		providerRuns: &providerRunRecorder{},
+		events:       events,
+		logger:       zap.NewNop(),
+	}
+
+	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
+
+	assert.Zero(t, fetcher.calls)
+	require.Len(t, events.events, 1)
+	assert.Equal(t, "linkedin.ip_info.failed", events.events[0].Type)
 }
 
 type discoverySettingsStub struct {
@@ -197,6 +241,24 @@ func (fetcher remotiveBlockingFetcher) Fetch(context.Context, models.RemotiveSea
 type linkedInFetcherStub struct {
 	jobs []models.Job
 	err  error
+}
+
+type ipInfoLookupStub struct {
+	info ipinfo.Info
+	err  error
+}
+
+func (stub ipInfoLookupStub) Lookup(context.Context) (ipinfo.Info, error) {
+	return stub.info, stub.err
+}
+
+type linkedInFetcherRecorder struct {
+	calls int
+}
+
+func (fetcher *linkedInFetcherRecorder) Fetch(context.Context, models.LinkedInSearchSettings, string, linkedInJobSaver) (LinkedInFetchResult, error) {
+	fetcher.calls++
+	return LinkedInFetchResult{}, nil
 }
 
 func (stub linkedInFetcherStub) Fetch(ctx context.Context, _ models.LinkedInSearchSettings, _ string, save linkedInJobSaver) (LinkedInFetchResult, error) {

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"nice/internal/clients/adzuna"
+	"nice/internal/clients/ipinfo"
 	"nice/internal/clients/jobicy"
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
@@ -19,6 +21,7 @@ import (
 
 type JobSync struct {
 	adzuna           adzunaFetcher
+	ipInfo           ipInfoLookup
 	jobicy           jobicyFetcher
 	linkedin         linkedInFetcher
 	remotive         remotiveFetcher
@@ -36,9 +39,10 @@ type JobSync struct {
 	mutex            sync.Mutex
 }
 
-func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRecorder, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
+func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, ipInfoClient *ipinfo.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRecorder, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:           adzunaClient,
+		ipInfo:           ipInfoClient,
 		jobicy:           jobicyClient,
 		linkedin:         linkedInJobs,
 		remotive:         remotiveClient,
@@ -135,6 +139,9 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 		return
 	}
 	runID := fmt.Sprintf("linkedin-%d", time.Now().UTC().UnixNano())
+	if !syncer.allowLinkedInSync(ctx, runID) {
+		return
+	}
 	syncer.recordLinkedInEvent(ctx, runID, "provider.run.started", "info", "LinkedIn job sync started", map[string]any{
 		"query": settings.Query, "location": settings.Location, "requestedLimit": settings.Limit,
 	})
@@ -151,6 +158,28 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 	}
 	syncer.logger.Info("stored LinkedIn jobs", zap.String("run_id", runID), zap.Int("count", fetch.SavedJobs))
 	syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, nil)
+}
+
+type ipInfoLookup interface {
+	Lookup(context.Context) (ipinfo.Info, error)
+}
+
+func (syncer *JobSync) allowLinkedInSync(ctx context.Context, runID string) bool {
+	info, err := syncer.ipInfo.Lookup(ctx)
+	if err != nil {
+		syncer.recordLinkedInEvent(ctx, runID, "linkedin.ip_info.failed", "error", "LinkedIn IP info lookup failed; sync blocked", map[string]any{"error": err.Error()})
+		syncer.logger.Error("LinkedIn IP info lookup failed; sync blocked", zap.String("run_id", runID), zap.Error(err))
+		return false
+	}
+	country := strings.ToUpper(strings.TrimSpace(info.Country))
+	syncer.recordLinkedInEvent(ctx, runID, "linkedin.ip_info.resolved", "info", "LinkedIn IP info resolved", map[string]any{"country": country})
+	syncer.logger.Info("LinkedIn IP info resolved", zap.String("run_id", runID), zap.String("country", country))
+	if country == "RS" {
+		syncer.recordLinkedInEvent(ctx, runID, "linkedin.ip_info.blocked", "error", "LinkedIn job sync blocked: egress country is Serbia", map[string]any{"country": country})
+		syncer.logger.Error("LinkedIn job sync blocked: egress country is Serbia", zap.String("run_id", runID), zap.String("country", country))
+		return false
+	}
+	return true
 }
 
 func (syncer *JobSync) finishLinkedInRun(ctx context.Context, runID string, limit int, fetch LinkedInFetchResult, saved int, runError error) {
