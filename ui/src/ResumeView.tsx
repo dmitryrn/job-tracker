@@ -107,17 +107,14 @@ export default function ResumeView() {
               <label>Email<input type="email" value={resume.email} onChange={(event) => updateHeader("email", event.target.value)} /></label>
               <label>Phone<input type="tel" value={resume.phone} onChange={(event) => updateHeader("phone", event.target.value)} /></label>
             </div>
-              <div className="resume-bullets">
-                <div className="resume-bullet-heading"><div><strong>Professional summary</strong><p>Use separate paragraphs for distinct parts of your introduction.</p></div><button type="button" className="secondary-action" onClick={() => setResume((current) => ({ ...current, summaryParagraphs: [...current.summaryParagraphs, ""] }))}>Add paragraph</button></div>
-                {resume.summaryParagraphs.map((paragraph, index) => <div className="resume-bullet-row" key={index}><textarea aria-label={`Professional summary paragraph ${index + 1}`} value={paragraph} onChange={(event) => setResume((current) => ({ ...current, summaryParagraphs: current.summaryParagraphs.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} rows={4} placeholder="Describe your experience, strengths, or target role." /><RemoveButton label="Remove" onClick={() => setResume((current) => ({ ...current, summaryParagraphs: current.summaryParagraphs.filter((_, itemIndex) => itemIndex !== index) }))} /></div>)}
-              </div>
-             <div className="resume-photo-upload">
-               <div><strong>Resume photo</strong><p>Optional JPEG or PNG, up to 5 MB. Save the resume before uploading.</p></div>
-               {resume.hasPhoto && <img src={`${resumePhotoURL()}?updatedAt=${encodeURIComponent(resume.updatedAt)}`} alt="Resume" />}
-               <label className="secondary-action">{uploadingPhoto ? "Uploading..." : "Upload photo"}<input type="file" accept="image/jpeg,image/png" disabled={uploadingPhoto} onChange={(event) => void uploadPhoto(event)} /></label>
-             </div>
+            <div className="resume-photo-upload">
+              <div><strong>Resume photo</strong><p>Optional JPEG or PNG, up to 5 MB. Save the resume before uploading.</p></div>
+              {resume.hasPhoto && <img src={`${resumePhotoURL()}?updatedAt=${encodeURIComponent(resume.updatedAt)}`} alt="Resume" />}
+              <label className="secondary-action">{uploadingPhoto ? "Uploading..." : "Upload photo"}<input type="file" accept="image/jpeg,image/png" disabled={uploadingPhoto} onChange={(event) => void uploadPhoto(event)} /></label>
+            </div>
           </section>
 
+          <SummarySection resume={resume} setResume={setResume} />
           <LinksSection resume={resume} setResume={setResume} />
           <SkillsSection resume={resume} setResume={setResume} />
           <CompetenciesSection resume={resume} setResume={setResume} />
@@ -134,6 +131,16 @@ export default function ResumeView() {
       )}
     </section>
   );
+}
+
+function SummarySection({ resume, setResume }: ResumeSectionProps) {
+  return <section className="profile-section">
+    <SectionHeading title="Professional summary" description="Each field renders as a separate paragraph in the PDF." action="Add paragraph" onAdd={() => setResume((current) => ({ ...current, summaryParagraphs: [...current.summaryParagraphs, ""] }))} />
+    {resume.summaryParagraphs.length === 0 ? <Empty message="No summary paragraphs yet." /> : <div className="resume-summary-editor">{resume.summaryParagraphs.map((paragraph, index) => <div className="resume-summary-row" key={index}>
+      <label>Paragraph {index + 1}<textarea aria-label={`Professional summary paragraph ${index + 1}`} value={paragraph} onChange={(event) => setResume((current) => ({ ...current, summaryParagraphs: current.summaryParagraphs.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} rows={4} placeholder="Describe your experience, strengths, or target role." /></label>
+      <RemoveButton label="Remove paragraph" onClick={() => setResume((current) => ({ ...current, summaryParagraphs: current.summaryParagraphs.filter((_, itemIndex) => itemIndex !== index) }))} />
+    </div>)}</div>}
+  </section>;
 }
 
 function LinksSection({ resume, setResume }: ResumeSectionProps) {

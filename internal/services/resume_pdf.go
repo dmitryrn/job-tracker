@@ -138,7 +138,7 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
     {{if .Resume.Links}}<p class="links">{{range $index, $link := .Resume.Links}}{{if $index}}<span></span>{{end}}<span><a href="{{$link.URL}}">{{$link.Label}}</a></span>{{end}}</p>{{end}}
   </section>
 
-  {{if .Resume.Skills}}<section><h2>Key Competences</h2><p class="skills">{{range $index, $skill := .Resume.Skills}}{{if $index}}<span></span>{{end}}<span>{{$skill.Name}}</span>{{end}}</p></section>{{end}}
+  {{if .Resume.Skills}}<section><h2>Key Competences</h2><p class="skills">{{range .Resume.Skills}}<span>{{.Name}}</span>{{end}}</p></section>{{end}}
 
   {{if .Resume.Competencies}}<section><h2>Competencies</h2>{{range .Resume.Competencies}}<div class="section"><h3>{{.Title}}</h3>{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.}}</li>{{end}}</ul>{{end}}</div>{{end}}</section>{{end}}
 

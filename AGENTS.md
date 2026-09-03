@@ -30,6 +30,8 @@ changing a unit definition. Read recent service logs with
 - handlers should log all errors, including service errors
 - worker execution paths should log all outcomes, including early returns, successes, and errors, with relevant IDs and context
 - clients should be dumb and application-agnostic where possible; retries and application policy belong to callers, though clients may use application models when needed
+- keep each repository interface and its persistence implementation in one dedicated file under `internal/repositories`; do not combine unrelated repositories in one file
+- use Squirrel builders for all new SQL queries
 - tests should assert behavior, not log output
 - run tests, build after making code changes
 - verify Go builds with `go build -o /dev/null ./cmd/server` to avoid build artifacts

@@ -138,13 +138,14 @@ button { cursor: pointer; }
 .json-body[open] > summary .json-string { display: inline; }
 .json-body pre { background: #fff; border: 1px solid #e4e1d9; color: #304860; font: inherit; margin: 8px 0 0; max-height: 360px; overflow: auto; padding: 10px; white-space: pre-wrap; word-break: break-word; }
 .profile-actions span { color: #65758a; font-size: 12px; }
-.resume-link-editor, .resume-skill-editor, .resume-bullets { display: grid; gap: 12px; margin-top: 18px; }
+.resume-link-editor, .resume-skill-editor, .resume-bullets, .resume-summary-editor { display: grid; gap: 12px; margin-top: 18px; }
 .resume-link-row, .resume-skill-row { align-items: end; background: #f8f8f5; border: 1px solid #e4e1d9; display: grid; gap: 10px; padding: 12px; }
 .resume-link-row { grid-template-columns: minmax(120px, .7fr) minmax(220px, 2fr) auto; }
 .resume-skill-row { grid-template-columns: minmax(140px, 1fr) minmax(160px, 1fr) auto; }
 .resume-bullet-heading { align-items: center; color: #4b6075; display: flex; font-size: 12px; justify-content: space-between; }
 .resume-bullet-heading .secondary-action { font-size: 12px; padding: 7px 9px; }
 .resume-bullet-row { align-items: start; display: grid; gap: 10px; grid-template-columns: 1fr auto; }
+.resume-summary-row { align-items: end; background: #f8f8f5; border: 1px solid #e4e1d9; display: grid; gap: 10px; grid-template-columns: 1fr auto; padding: 12px; }
 .resume-current { align-items: center; color: #4b6075; display: flex !important; font-size: 12px; gap: 7px; }
 .resume-current input { accent-color: #263d56; height: 16px; margin: 0; padding: 0; width: 16px; }
 .resume-photo-upload { align-items: center; background: #f8f8f5; border: 1px solid #e4e1d9; display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px; padding: 12px; }
