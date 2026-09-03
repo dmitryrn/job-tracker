@@ -60,6 +60,11 @@ type JobMatchRepository interface {
 	JobMatches(context.Context) ([]models.JobMatchSummary, error)
 }
 
+type JobMatchChatRepository interface {
+	JobMatchChatMessages(context.Context, int64) ([]models.JobMatchChatMessage, error)
+	CreateJobMatchChatMessage(context.Context, models.JobMatchChatMessage) (models.JobMatchChatMessage, error)
+}
+
 type MatchQueueRepository interface {
 	MatchQueue(context.Context) ([]models.BrowseJob, error)
 	QueueJobMatch(context.Context, int64, bool) (bool, error)
@@ -98,6 +103,10 @@ func NewJobAnalysisRepository(sqlite *SQLite) JobAnalysisRepository {
 }
 
 func NewJobMatchRepository(sqlite *SQLite) JobMatchRepository {
+	return sqlite
+}
+
+func NewJobMatchChatRepository(sqlite *SQLite) JobMatchChatRepository {
 	return sqlite
 }
 

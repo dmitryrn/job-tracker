@@ -18,13 +18,13 @@ type View = BrowseMode | "events" | "explorer" | "matches" | "profile" | "resume
 type Route = {
   view: View;
   jobID?: number;
-  tab?: "post" | "match";
+	tab?: "post" | "match" | "chat";
 };
 
 function readRoute(): Route {
   const parts = window.location.pathname.split("/").filter(Boolean);
   if (parts[0] === "jobs" && /^\d+$/.test(parts[1] ?? "")) {
-    return { view: "jobs", jobID: Number(parts[1]), tab: parts[2] === "match" ? "match" : "post" };
+		return { view: "jobs", jobID: Number(parts[1]), tab: parts[2] === "match" || parts[2] === "chat" ? parts[2] : "post" };
   }
   if (parts[0] === "companies" || parts[0] === "events" || parts[0] === "matches" || parts[0] === "profile" || parts[0] === "resume" || parts[0] === "match-queue" || parts[0] === "search-setup" || parts[0] === "database") {
     return { view: parts[0] === "database" ? "explorer" : parts[0] };
@@ -34,7 +34,7 @@ function readRoute(): Route {
 
 function routePath(route: Route) {
   if (route.jobID) {
-    return `/jobs/${route.jobID}${route.tab === "match" ? "/match" : ""}`;
+		return `/jobs/${route.jobID}${route.tab === "post" ? "" : `/${route.tab ?? "post"}`}`;
   }
   return route.view === "explorer" ? "/database" : `/${route.view}`;
 }

@@ -113,6 +113,14 @@ type JobMatchRecord struct {
 	CreatedAt  string              `json:"createdAt"`
 }
 
+type JobMatchChatMessage struct {
+	ID        int64  `json:"id"`
+	JobID     int64  `json:"jobId"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	CreatedAt string `json:"createdAt"`
+}
+
 type JobMatchAssessment struct {
 	MatcherVersion   string   `json:"matcherVersion"`
 	Model            string   `json:"model"`

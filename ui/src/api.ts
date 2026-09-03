@@ -144,6 +144,14 @@ export type JobMatch = {
   createdAt: string;
 };
 
+export type JobMatchChatMessage = {
+  id: number;
+  jobId: number;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+
 export type JobMatchAssessment = {
   matcherVersion: string;
   model: string;
@@ -307,6 +315,18 @@ export function uploadResumePhoto(photo: File) {
 
 export function fetchJobMatch(id: number, signal: AbortSignal) {
 	return request<{ match: JobMatch | null; analysis: JobAnalysis | null }>(`jobs/${id}/match`, { signal });
+}
+
+export function fetchJobMatchChat(id: number, signal: AbortSignal) {
+  return request<{ messages: JobMatchChatMessage[] }>(`jobs/${id}/match/chat`, { signal });
+}
+
+export function sendJobMatchChatMessage(id: number, content: string) {
+  return request<{ message: JobMatchChatMessage }>(`jobs/${id}/match/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
 }
 
 export function fetchJobMatches(signal: AbortSignal) {

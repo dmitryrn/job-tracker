@@ -15,6 +15,10 @@ reasoning_effort = "low"
 model = "glm-5.2"
 reasoning_effort = "low"
 
+[llm.job_chat]
+model = "openai/gpt-5.6-terra"
+reasoning_effort = "high"
+
 [job_match]
 run_interval = "2m"
 

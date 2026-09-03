@@ -38,6 +38,7 @@ type LLMConfig struct {
 	APIKey         string
 	JobAnalysis    LLMTaskConfig
 	ProfileMatcher LLMTaskConfig
+	JobChat        LLMTaskConfig
 }
 
 type LLMTaskConfig struct {
@@ -100,6 +101,7 @@ type fileLLMConfig struct {
 	BaseURL        string            `toml:"base_url" validate:"notblank,url"`
 	JobAnalysis    fileLLMTaskConfig `toml:"job_analysis"`
 	ProfileMatcher fileLLMTaskConfig `toml:"profile_matcher"`
+	JobChat        fileLLMTaskConfig `toml:"job_chat"`
 }
 
 type fileLLMTaskConfig struct {
@@ -236,6 +238,10 @@ func Load() (Config, error) {
 			ProfileMatcher: LLMTaskConfig{
 				Model:           source.LLM.ProfileMatcher.Model,
 				ReasoningEffort: source.LLM.ProfileMatcher.ReasoningEffort,
+			},
+			JobChat: LLMTaskConfig{
+				Model:           source.LLM.JobChat.Model,
+				ReasoningEffort: source.LLM.JobChat.ReasoningEffort,
 			},
 		},
 		JobMatch:   JobMatchConfig{RunInterval: jobMatchRunInterval},

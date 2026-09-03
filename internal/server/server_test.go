@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
 
+	"nice/internal/clients/openrouter"
 	"nice/internal/config"
 	"nice/internal/migrations"
 	"nice/internal/models"
@@ -317,6 +318,51 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Equal(t, []int64{1, 2}, []int64{queueResponse.Jobs[0].ID, queueResponse.Jobs[1].ID})
 }
 
+func TestJobMatchChatAPI(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.Ping())
+	require.NoError(t, migrations.Apply(db))
+	require.NoError(t, enableForeignKeys(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "remotive", SourceID: "chat-job", SourceURL: "https://example.com/chat-job", Title: "Engineer", BodyText: "Build reliable services.", Workplace: "remote", MetadataJSON: "{}",
+	}}))
+	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "Strong match"))
+	handler := newTestServer(repository).http.Handler
+
+	response := request(handler, http.MethodGet, "/api/jobs/1/match/chat")
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
+
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?"}`)
+	require.Equal(t, http.StatusCreated, response.Code)
+	var reply struct {
+		Message models.JobMatchChatMessage `json:"message"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&reply))
+	assert.Equal(t, "assistant", reply.Message.Role)
+	assert.Equal(t, "Test chat reply.", reply.Message.Content)
+
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
+	require.Equal(t, http.StatusOK, response.Code)
+	var history struct {
+		Messages []models.JobMatchChatMessage `json:"messages"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
+	require.Len(t, history.Messages, 2)
+	assert.Equal(t, "user", history.Messages[0].Role)
+	assert.Equal(t, "assistant", history.Messages[1].Role)
+
+	response = request(handler, http.MethodPost, "/api/jobs/1/match/redo")
+	require.Equal(t, http.StatusAccepted, response.Code)
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
+}
+
 func TestResumeAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -428,7 +474,13 @@ func newTestServer(repository *repositories.SQLite) *Server {
 		services.NewResumePDFService(services.NewResumeService(repository)),
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),
+		services.NewJobMatchChat(repository, repository, repository, repository, repository, noOpJobCompletionClient{}, "test-model", "low"),
 	)
+}
+
+func enableForeignKeys(db *sql.DB) error {
+	_, err := db.Exec("PRAGMA foreign_keys = ON")
+	return err
 }
 
 type noOpJobAnalysisService struct{}
@@ -441,6 +493,12 @@ type noOpProfileJobMatcher struct{}
 
 func (noOpProfileJobMatcher) Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (models.JobMatchAssessment, error) {
 	return models.JobMatchAssessment{}, nil
+}
+
+type noOpJobCompletionClient struct{}
+
+func (noOpJobCompletionClient) Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+	return openrouter.ChatResponse{Model: "test-model", Content: "Test chat reply."}, nil
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {

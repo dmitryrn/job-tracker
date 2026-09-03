@@ -47,6 +47,7 @@ func main() {
 			repositories.NewResumeRepository,
 			repositories.NewJobAnalysisRepository,
 			repositories.NewJobMatchRepository,
+			repositories.NewJobMatchChatRepository,
 			repositories.NewMatchQueueRepository,
 			services.NewJobSync,
 			services.NewLinkedInJobs,
@@ -63,6 +64,7 @@ func main() {
 			newJobMatchWorker,
 			services.NewJobMatches,
 			services.NewJobMatchRequests,
+			newJobMatchChat,
 			server.New,
 		),
 		fx.Invoke(registerLifecycle),
@@ -83,6 +85,10 @@ func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisS
 
 func newProfileJobMatcher(client services.JobCompletionClient, cfg config.Config) services.ProfileJobMatcher {
 	return services.NewLLMProfileJobMatcher(client, cfg.LLM.ProfileMatcher.Model, cfg.LLM.ProfileMatcher.ReasoningEffort)
+}
+
+func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, client services.JobCompletionClient, cfg config.Config) *services.JobMatchChat {
+	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, client, cfg.LLM.JobChat.Model, cfg.LLM.JobChat.ReasoningEffort)
 }
 
 func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {

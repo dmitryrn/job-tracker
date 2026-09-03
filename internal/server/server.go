@@ -23,7 +23,7 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, matches *services.JobMatches, requests *services.JobMatchRequests, chat *services.JobMatchChat) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -32,6 +32,8 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
+	mux.HandleFunc("GET /api/jobs/{id}/match/chat", jobMatchChatMessagesHandler(chat, logger))
+	mux.HandleFunc("POST /api/jobs/{id}/match/chat", jobMatchChatReplyHandler(chat, logger))
 	mux.HandleFunc("GET /api/matches", jobMatchesHandler(matches, logger))
 	mux.HandleFunc("GET /api/match-queue", matchQueueHandler(requests, logger))
 	mux.HandleFunc("POST /api/match-queue", queueUnmatchedJobMatchesHandler(requests, logger))
@@ -424,6 +426,60 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]any{"matches": listed})
+	}
+}
+
+func jobMatchChatMessagesHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID for match chat", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		messages, err := chat.Messages(request.Context(), id)
+		if err != nil {
+			logger.Error("load job match chat messages failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load match chat")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"messages": messages})
+	}
+}
+
+func jobMatchChatReplyHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID for match chat", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		var body struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			logger.Warn("invalid job match chat message", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "message must be valid JSON")
+			return
+		}
+		message, err := chat.Reply(request.Context(), id, body.Content)
+		if errors.Is(err, services.ErrEmptyJobMatchChatMessage) {
+			logger.Warn("empty job match chat message", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, services.ErrJobMatchChatUnavailable) {
+			logger.Warn("job match chat unavailable", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusConflict, err.Error())
+			return
+		}
+		if err != nil {
+			logger.Error("reply to job match chat failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not reply to match chat")
+			return
+		}
+		writeJSON(writer, http.StatusCreated, map[string]any{"message": message})
 	}
 }
 

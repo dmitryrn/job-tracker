@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
-import { deleteJob, fetchJobMatch, queueJobMatch, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment } from "./api";
+import { type FormEvent, useEffect, useState } from "react";
+import { deleteJob, fetchJobMatch, fetchJobMatchChat, queueJobMatch, sendJobMatchChatMessage, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatMessage } from "./api";
 
 type JobDetailViewProps = {
   job: BrowseJob;
-  tab: "post" | "match";
-  onTabChange: (tab: "post" | "match") => void;
+	tab: "post" | "match" | "chat";
+	onTabChange: (tab: "post" | "match" | "chat") => void;
   onBack: () => void;
   onDeleted: () => void;
 };
@@ -98,6 +98,71 @@ function JobMatchAssessmentPanel({ assessment }: { assessment: JobMatchAssessmen
   );
 }
 
+function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | null | undefined }) {
+  const [messages, setMessages] = useState<JobMatchChatMessage[]>();
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      setMessages(undefined);
+      try {
+        const result = await fetchJobMatchChat(jobID, controller.signal);
+        if (!controller.signal.aborted) {
+          setMessages(result.messages);
+          setError("");
+        }
+      } catch (reason) {
+        if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+          setError(reason instanceof Error ? reason.message : "Could not load chat");
+        }
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [jobID]);
+
+  async function send(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = draft.trim();
+    if (!content || sending) {
+      return;
+    }
+    setSending(true);
+    try {
+      const result = await sendJobMatchChatMessage(jobID, content);
+      setMessages((current) => [...(current ?? []), { id: -Date.now(), jobId: jobID, role: "user", content, createdAt: new Date().toISOString() }, result.message]);
+      setDraft("");
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not send chat message");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (match === undefined) {
+    return <p className="analysis-loading">Loading match...</p>;
+  }
+  if (match === null) {
+    return <section className="match-chat"><p>Create a match before starting a chat about this role.</p></section>;
+  }
+
+  return <section className="match-chat">
+    <header className="match-chat-header"><div><p className="eyebrow">Match chat</p><h2>Discuss this opportunity</h2></div><p>Uses the job post, current match, profile, and base resume.</p></header>
+    {error && <p className="query-error">{error}</p>}
+    {messages === undefined ? <p className="analysis-loading">Loading chat...</p> : <div className="match-chat-messages" aria-live="polite">
+      {messages.length === 0 ? <p className="match-chat-empty">Ask about fit, gaps, interview preparation, or how to tailor your application.</p> : messages.map((message) => <article className={`match-chat-message ${message.role}`} key={message.id}><p>{message.role === "user" ? "You" : "AI"}</p><div>{message.content}</div></article>)}
+    </div>}
+    <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
+      <label>Message<textarea value={draft} onChange={(event) => setDraft(event.target.value)} disabled={sending} placeholder="Ask about this job and your fit..." rows={3} /></label>
+      <button className="primary-action" type="submit" disabled={sending || !draft.trim()}>{sending ? "Thinking..." : "Send"}</button>
+    </form>
+  </section>;
+}
+
 export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted }: JobDetailViewProps) {
   const [match, setMatch] = useState<JobMatch | null>();
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
@@ -176,9 +241,10 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       <nav className="detail-tabs" aria-label="Job details">
         <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("post")}>Job post</button>
         <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>
+        <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
       </nav>
       {error && <p className="query-error">{error}</p>}
-      {tab === "post" ? <p className="job-post">{plainText(job.bodyText)}</p> : (
+      {tab === "post" ? <p className="job-post">{plainText(job.bodyText)}</p> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
         <>
           <section className="match-panel">
             <p className="eyebrow">Current match</p>

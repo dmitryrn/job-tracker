@@ -28,6 +28,8 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "high", cfg.LLM.JobAnalysis.ReasoningEffort)
 	assert.Equal(t, "profile-matcher-model", cfg.LLM.ProfileMatcher.Model)
 	assert.Equal(t, "medium", cfg.LLM.ProfileMatcher.ReasoningEffort)
+	assert.Equal(t, "job-chat-model", cfg.LLM.JobChat.Model)
+	assert.Equal(t, "high", cfg.LLM.JobChat.ReasoningEffort)
 	assert.Equal(t, 2*time.Minute, cfg.JobMatch.RunInterval)
 	assert.Equal(t, 1000, cfg.Events.QueueSize)
 	assert.Equal(t, 100, cfg.Events.BatchSize)
@@ -99,6 +101,10 @@ reasoning_effort = "high"
 [llm.profile_matcher]
 model = "profile-matcher-model"
 reasoning_effort = "medium"
+
+[llm.job_chat]
+model = "job-chat-model"
+reasoning_effort = "high"
 
 [job_match]
 run_interval = "2m"
