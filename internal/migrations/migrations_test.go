@@ -32,6 +32,10 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('resume_skills') WHERE name = 'level'`).Scan(&levelColumns))
 	assert.Zero(t, levelColumns)
 
+	var requestIDColumns int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('job_match_chat_messages') WHERE name = 'request_id'`).Scan(&requestIDColumns))
+	assert.Equal(t, 1, requestIDColumns)
+
 	var ftsTables int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))
 	assert.Zero(t, ftsTables)

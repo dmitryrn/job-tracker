@@ -36,6 +36,13 @@ function formatAnalysisDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+function chatRequestID() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("").replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+}
+
 function JobAnalysisPanel({ record }: { record: JobAnalysis }) {
   const draft = record.analysis;
   return (
@@ -101,6 +108,7 @@ function JobMatchAssessmentPanel({ assessment }: { assessment: JobMatchAssessmen
 function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | null | undefined }) {
   const [messages, setMessages] = useState<JobMatchChatMessage[]>();
   const [draft, setDraft] = useState("");
+  const [requestID, setRequestID] = useState<string>();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
@@ -132,13 +140,21 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     }
     setSending(true);
     try {
-      const result = await sendJobMatchChatMessage(jobID, content);
-      setMessages((current) => [...(current ?? []), { id: -Date.now(), jobId: jobID, role: "user", content, createdAt: new Date().toISOString() }, result.message]);
+      const currentRequestID = requestID ?? chatRequestID();
+      setRequestID(currentRequestID);
+      await sendJobMatchChatMessage(jobID, content, currentRequestID);
       setDraft("");
+      setRequestID(undefined);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not send chat message");
     } finally {
+      try {
+        const result = await fetchJobMatchChat(jobID, new AbortController().signal);
+        setMessages(result.messages);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Could not load chat");
+      }
       setSending(false);
     }
   }
@@ -157,7 +173,7 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
       {messages.length === 0 ? <p className="match-chat-empty">Ask about fit, gaps, interview preparation, or how to tailor your application.</p> : messages.map((message) => <article className={`match-chat-message ${message.role}`} key={message.id}><p>{message.role === "user" ? "You" : "AI"}</p><div>{message.content}</div></article>)}
     </div>}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
-      <label>Message<textarea value={draft} onChange={(event) => setDraft(event.target.value)} disabled={sending} placeholder="Ask about this job and your fit..." rows={3} /></label>
+      <label>Message<textarea value={draft} onChange={(event) => { setDraft(event.target.value); setRequestID(undefined); }} disabled={sending} placeholder="Ask about this job and your fit..." rows={3} /></label>
       <button className="primary-action" type="submit" disabled={sending || !draft.trim()}>{sending ? "Thinking..." : "Send"}</button>
     </form>
   </section>;

@@ -321,11 +321,11 @@ export function fetchJobMatchChat(id: number, signal: AbortSignal) {
   return request<{ messages: JobMatchChatMessage[] }>(`jobs/${id}/match/chat`, { signal });
 }
 
-export function sendJobMatchChatMessage(id: number, content: string) {
+export function sendJobMatchChatMessage(id: number, content: string, requestId: string) {
   return request<{ message: JobMatchChatMessage }>(`jobs/${id}/match/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, requestId }),
   });
 }
 

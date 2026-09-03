@@ -119,6 +119,7 @@ type JobMatchChatMessage struct {
 	Role      string `json:"role"`
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
+	RequestID string `json:"requestId,omitempty"`
 }
 
 type JobMatchAssessment struct {

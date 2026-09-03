@@ -456,15 +456,16 @@ func jobMatchChatReplyHandler(chat *services.JobMatchChat, logger *zap.Logger) h
 			return
 		}
 		var body struct {
-			Content string `json:"content"`
+			Content   string `json:"content"`
+			RequestID string `json:"requestId"`
 		}
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			logger.Warn("invalid job match chat message", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "message must be valid JSON")
 			return
 		}
-		message, err := chat.Reply(request.Context(), id, body.Content)
-		if errors.Is(err, services.ErrEmptyJobMatchChatMessage) {
+		message, err := chat.Reply(request.Context(), id, body.Content, body.RequestID)
+		if errors.Is(err, services.ErrEmptyJobMatchChatMessage) || errors.Is(err, services.ErrMissingJobMatchChatRequestID) {
 			logger.Warn("empty job match chat message", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return

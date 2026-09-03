@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	ErrJobMatchChatUnavailable  = errors.New("a current match is required to start a chat")
-	ErrEmptyJobMatchChatMessage = errors.New("message must not be empty")
+	ErrJobMatchChatUnavailable      = errors.New("a current match is required to start a chat")
+	ErrEmptyJobMatchChatMessage     = errors.New("message must not be empty")
+	ErrMissingJobMatchChatRequestID = errors.New("message request ID is required")
 )
 
 const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, and their base resume. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. Ask clarifying questions when useful.`
@@ -39,10 +40,14 @@ func (service *JobMatchChat) Messages(ctx context.Context, jobID int64) ([]model
 	return service.messages.JobMatchChatMessages(ctx, jobID)
 }
 
-func (service *JobMatchChat) Reply(ctx context.Context, jobID int64, content string) (models.JobMatchChatMessage, error) {
+func (service *JobMatchChat) Reply(ctx context.Context, jobID int64, content, requestID string) (models.JobMatchChatMessage, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return models.JobMatchChatMessage{}, ErrEmptyJobMatchChatMessage
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return models.JobMatchChatMessage{}, ErrMissingJobMatchChatRequestID
 	}
 
 	match, err := service.matches.JobMatch(ctx, jobID)
@@ -52,12 +57,20 @@ func (service *JobMatchChat) Reply(ctx context.Context, jobID int64, content str
 	if match == nil {
 		return models.JobMatchChatMessage{}, ErrJobMatchChatUnavailable
 	}
+	existingAssistantMessage, err := service.messages.JobMatchChatMessageByRequestID(ctx, jobID, requestID, "assistant")
+	if err != nil {
+		return models.JobMatchChatMessage{}, fmt.Errorf("load existing assistant chat message: %w", err)
+	}
+	if existingAssistantMessage != nil {
+		return *existingAssistantMessage, nil
+	}
 
 	_, err = service.messages.CreateJobMatchChatMessage(ctx, models.JobMatchChatMessage{
 		JobID:     jobID,
 		Role:      "user",
 		Content:   content,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		RequestID: requestID,
 	})
 	if err != nil {
 		return models.JobMatchChatMessage{}, fmt.Errorf("save user chat message: %w", err)
@@ -109,6 +122,7 @@ func (service *JobMatchChat) Reply(ctx context.Context, jobID int64, content str
 		Role:      "assistant",
 		Content:   strings.TrimSpace(response.Content),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		RequestID: requestID,
 	})
 	if err != nil {
 		return models.JobMatchChatMessage{}, fmt.Errorf("save assistant chat message: %w", err)

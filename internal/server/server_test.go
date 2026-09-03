@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"mime/multipart"
@@ -337,7 +338,7 @@ func TestJobMatchChatAPI(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
 
-	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?"}`)
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"chat-request"}`)
 	require.Equal(t, http.StatusCreated, response.Code)
 	var reply struct {
 		Message models.JobMatchChatMessage `json:"message"`
@@ -345,6 +346,9 @@ func TestJobMatchChatAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&reply))
 	assert.Equal(t, "assistant", reply.Message.Role)
 	assert.Equal(t, "Test chat reply.", reply.Message.Content)
+
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"chat-request"}`)
+	require.Equal(t, http.StatusCreated, response.Code)
 
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
@@ -361,6 +365,40 @@ func TestJobMatchChatAPI(t *testing.T) {
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
+}
+
+func TestJobMatchChatAPIDoesNotDuplicateUserMessageAfterFailedReply(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "remotive", SourceID: "failed-chat-job", SourceURL: "https://example.com/failed-chat-job", Title: "Engineer", BodyText: "Build reliable services.", Workplace: "remote", MetadataJSON: "{}",
+	}}))
+	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "Strong match"))
+	handler := newTestServerWithJobCompletionClient(repository, failingJobCompletionClient{}).http.Handler
+
+	response := requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"failed-chat-request"}`)
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
+	require.Equal(t, http.StatusOK, response.Code)
+	var history struct {
+		Messages []models.JobMatchChatMessage `json:"messages"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
+	require.Len(t, history.Messages, 1)
+	assert.Equal(t, "user", history.Messages[0].Role)
+	assert.Equal(t, "How should I approach this role?", history.Messages[0].Content)
+
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"failed-chat-request"}`)
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
+	require.Len(t, history.Messages, 1)
 }
 
 func TestResumeAPI(t *testing.T) {
@@ -461,6 +499,10 @@ func (stub resumePDFStub) Generate(context.Context) ([]byte, error) {
 }
 
 func newTestServer(repository *repositories.SQLite) *Server {
+	return newTestServerWithJobCompletionClient(repository, noOpJobCompletionClient{})
+}
+
+func newTestServerWithJobCompletionClient(repository *repositories.SQLite, client services.JobCompletionClient) *Server {
 	worker := services.NewJobMatchWorker(repository, repository, repository, repository, repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
 	return New(
 		config.Config{},
@@ -474,7 +516,7 @@ func newTestServer(repository *repositories.SQLite) *Server {
 		services.NewResumePDFService(services.NewResumeService(repository)),
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),
-		services.NewJobMatchChat(repository, repository, repository, repository, repository, noOpJobCompletionClient{}, "test-model", "low"),
+		services.NewJobMatchChat(repository, repository, repository, repository, repository, client, "test-model", "low"),
 	)
 }
 
@@ -499,6 +541,12 @@ type noOpJobCompletionClient struct{}
 
 func (noOpJobCompletionClient) Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error) {
 	return openrouter.ChatResponse{Model: "test-model", Content: "Test chat reply."}, nil
+}
+
+type failingJobCompletionClient struct{}
+
+func (failingJobCompletionClient) Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+	return openrouter.ChatResponse{}, errors.New("LLM unavailable")
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {
