@@ -41,6 +41,27 @@ func (repository *SQLite) JobMatchChatMessages(ctx context.Context, jobID int64)
 	return messages, nil
 }
 
+func (repository *SQLite) JobMatchChatMessage(ctx context.Context, jobID, messageID int64) (*models.JobMatchChatMessage, error) {
+	query, arguments, err := sqlBuilder.
+		Select("id", "job_id", "role", "content", "created_at", "COALESCE(request_id, '')").
+		From("job_match_chat_messages").
+		Where(squirrel.Eq{"job_id": jobID, "id": messageID}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get job match chat message query: %w", err)
+	}
+
+	var message models.JobMatchChatMessage
+	err = repository.db.QueryRowContext(ctx, query, arguments...).Scan(&message.ID, &message.JobID, &message.Role, &message.Content, &message.CreatedAt, &message.RequestID)
+	if err == nil {
+		return &message, nil
+	}
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("get job match chat message: %w", err)
+}
+
 func (repository *SQLite) JobMatchChatMessageByRequestID(ctx context.Context, jobID int64, requestID, role string) (*models.JobMatchChatMessage, error) {
 	query, arguments, err := sqlBuilder.
 		Select("id", "job_id", "role", "content", "created_at", "COALESCE(request_id, '')").
@@ -96,6 +117,27 @@ func (repository *SQLite) CreateJobMatchChatMessage(ctx context.Context, message
 		return models.JobMatchChatMessage{}, fmt.Errorf("get job match chat message ID: %w", err)
 	}
 	return message, nil
+}
+
+func (repository *SQLite) DeleteJobMatchChatMessagesFrom(ctx context.Context, jobID, messageID int64) (bool, error) {
+	query, arguments, err := sqlBuilder.
+		Delete("job_match_chat_messages").
+		Where(squirrel.Eq{"job_id": jobID}).
+		Where(squirrel.GtOrEq{"id": messageID}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build delete job match chat messages query: %w", err)
+	}
+
+	result, err := repository.db.ExecContext(ctx, query, arguments...)
+	if err != nil {
+		return false, fmt.Errorf("delete job match chat messages: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("check job match chat message deletion: %w", err)
+	}
+	return deleted > 0, nil
 }
 
 func nullableString(value string) any {

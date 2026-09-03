@@ -376,3 +376,11 @@ export async function deleteJob(id: number) {
     throw new Error(body?.error || `Could not delete job (${response.status})`);
   }
 }
+
+export async function revertJobMatchChat(id: number, messageID: number) {
+  const response = await fetch(apiURL(`jobs/${id}/match/chat/${messageID}`), { method: "DELETE" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => undefined) as { error?: string } | undefined;
+    throw new Error(body?.error || `Could not revert match chat (${response.status})`);
+  }
+}

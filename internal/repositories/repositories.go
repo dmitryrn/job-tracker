@@ -62,8 +62,10 @@ type JobMatchRepository interface {
 
 type JobMatchChatRepository interface {
 	JobMatchChatMessages(context.Context, int64) ([]models.JobMatchChatMessage, error)
+	JobMatchChatMessage(context.Context, int64, int64) (*models.JobMatchChatMessage, error)
 	JobMatchChatMessageByRequestID(context.Context, int64, string, string) (*models.JobMatchChatMessage, error)
 	CreateJobMatchChatMessage(context.Context, models.JobMatchChatMessage) (models.JobMatchChatMessage, error)
+	DeleteJobMatchChatMessagesFrom(context.Context, int64, int64) (bool, error)
 }
 
 type MatchQueueRepository interface {

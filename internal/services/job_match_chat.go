@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	ErrJobMatchChatUnavailable      = errors.New("a current match is required to start a chat")
-	ErrEmptyJobMatchChatMessage     = errors.New("message must not be empty")
-	ErrMissingJobMatchChatRequestID = errors.New("message request ID is required")
+	ErrJobMatchChatUnavailable         = errors.New("a current match is required to start a chat")
+	ErrEmptyJobMatchChatMessage        = errors.New("message must not be empty")
+	ErrMissingJobMatchChatRequestID    = errors.New("message request ID is required")
+	ErrJobMatchChatUserMessageNotFound = errors.New("user chat message not found")
 )
 
 const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, and their base resume. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. Ask clarifying questions when useful.`
@@ -38,6 +39,24 @@ func NewJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMa
 
 func (service *JobMatchChat) Messages(ctx context.Context, jobID int64) ([]models.JobMatchChatMessage, error) {
 	return service.messages.JobMatchChatMessages(ctx, jobID)
+}
+
+func (service *JobMatchChat) Revert(ctx context.Context, jobID, messageID int64) error {
+	message, err := service.messages.JobMatchChatMessage(ctx, jobID, messageID)
+	if err != nil {
+		return fmt.Errorf("load user chat message to revert: %w", err)
+	}
+	if message == nil || message.Role != "user" {
+		return ErrJobMatchChatUserMessageNotFound
+	}
+	deleted, err := service.messages.DeleteJobMatchChatMessagesFrom(ctx, jobID, messageID)
+	if err != nil {
+		return fmt.Errorf("delete chat messages to revert: %w", err)
+	}
+	if !deleted {
+		return ErrJobMatchChatUserMessageNotFound
+	}
+	return nil
 }
 
 func (service *JobMatchChat) Reply(ctx context.Context, jobID int64, content, requestID string) (models.JobMatchChatMessage, error) {

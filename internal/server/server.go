@@ -34,6 +34,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
 	mux.HandleFunc("GET /api/jobs/{id}/match/chat", jobMatchChatMessagesHandler(chat, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match/chat", jobMatchChatReplyHandler(chat, logger))
+	mux.HandleFunc("DELETE /api/jobs/{id}/match/chat/{messageID}", jobMatchChatRevertHandler(chat, logger))
 	mux.HandleFunc("GET /api/matches", jobMatchesHandler(matches, logger))
 	mux.HandleFunc("GET /api/match-queue", matchQueueHandler(requests, logger))
 	mux.HandleFunc("POST /api/match-queue", queueUnmatchedJobMatchesHandler(requests, logger))
@@ -481,6 +482,34 @@ func jobMatchChatReplyHandler(chat *services.JobMatchChat, logger *zap.Logger) h
 			return
 		}
 		writeJSON(writer, http.StatusCreated, map[string]any{"message": message})
+	}
+}
+
+func jobMatchChatRevertHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		jobID, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || jobID < 1 {
+			logger.Warn("invalid job ID for match chat revert", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		messageID, err := strconv.ParseInt(request.PathValue("messageID"), 10, 64)
+		if err != nil || messageID < 1 {
+			logger.Warn("invalid message ID for match chat revert", zap.Int64("job_id", jobID), zap.String("message_id", request.PathValue("messageID")))
+			writeError(writer, http.StatusBadRequest, "message ID must be a positive integer")
+			return
+		}
+		if err := chat.Revert(request.Context(), jobID, messageID); err != nil {
+			if errors.Is(err, services.ErrJobMatchChatUserMessageNotFound) {
+				logger.Warn("user chat message not found for revert", zap.Int64("job_id", jobID), zap.Int64("message_id", messageID), zap.Error(err))
+				writeError(writer, http.StatusNotFound, err.Error())
+				return
+			}
+			logger.Error("revert job match chat failed", zap.Int64("job_id", jobID), zap.Int64("message_id", messageID), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not revert match chat")
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
 	}
 }
 

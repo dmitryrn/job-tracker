@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { deleteJob, fetchJobMatch, fetchJobMatchChat, queueJobMatch, sendJobMatchChatMessage, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatMessage } from "./api";
+import { deleteJob, fetchJobMatch, fetchJobMatchChat, queueJobMatch, revertJobMatchChat, sendJobMatchChatMessage, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatMessage } from "./api";
 
 type JobDetailViewProps = {
   job: BrowseJob;
@@ -110,6 +110,7 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
   const [draft, setDraft] = useState("");
   const [requestID, setRequestID] = useState<string>();
   const [sending, setSending] = useState(false);
+  const [reverting, setReverting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -159,6 +160,24 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     }
   }
 
+  async function revert(message: JobMatchChatMessage) {
+    if (sending || reverting) {
+      return;
+    }
+    setReverting(true);
+    try {
+      await revertJobMatchChat(jobID, message.id);
+      setMessages((current) => current?.filter((item) => item.id < message.id));
+      setDraft(message.content);
+      setRequestID(undefined);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not revert chat");
+    } finally {
+      setReverting(false);
+    }
+  }
+
   if (match === undefined) {
     return <p className="analysis-loading">Loading match...</p>;
   }
@@ -170,11 +189,14 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     <header className="match-chat-header"><div><p className="eyebrow">Match chat</p><h2>Discuss this opportunity</h2></div><p>Uses the job post, current match, profile, and base resume.</p></header>
     {error && <p className="query-error">{error}</p>}
     {messages === undefined ? <p className="analysis-loading">Loading chat...</p> : <div className="match-chat-messages" aria-live="polite">
-      {messages.length === 0 ? <p className="match-chat-empty">Ask about fit, gaps, interview preparation, or how to tailor your application.</p> : messages.map((message) => <article className={`match-chat-message ${message.role}`} key={message.id}><p>{message.role === "user" ? "You" : "AI"}</p><div>{message.content}</div></article>)}
+      {messages.length === 0 ? <p className="match-chat-empty">Ask about fit, gaps, interview preparation, or how to tailor your application.</p> : messages.map((message) => <article className={`match-chat-message ${message.role}`} key={message.id}>
+        <header><p>{message.role === "user" ? "You" : "AI"}</p>{message.role === "user" && <button type="button" className="match-chat-revert" onClick={() => void revert(message)} disabled={sending || reverting} aria-label="Revert to this message" title="Revert to this message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5M4 12h9a6 6 0 0 1 6 6" /></svg></button>}</header>
+        <div>{message.content}</div>
+      </article>)}
     </div>}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
-      <label>Message<textarea value={draft} onChange={(event) => { setDraft(event.target.value); setRequestID(undefined); }} disabled={sending} placeholder="Ask about this job and your fit..." rows={3} /></label>
-      <button className="primary-action" type="submit" disabled={sending || !draft.trim()}>{sending ? "Thinking..." : "Send"}</button>
+      <label>Message<textarea value={draft} onChange={(event) => { setDraft(event.target.value); setRequestID(undefined); }} disabled={sending || reverting} placeholder="Ask about this job and your fit..." rows={3} /></label>
+      <button className="primary-action" type="submit" disabled={sending || reverting || !draft.trim()}>{sending ? "Thinking..." : "Send"}</button>
     </form>
   </section>;
 }

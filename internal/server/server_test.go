@@ -360,6 +360,15 @@ func TestJobMatchChatAPI(t *testing.T) {
 	assert.Equal(t, "user", history.Messages[0].Role)
 	assert.Equal(t, "assistant", history.Messages[1].Role)
 
+	response = request(handler, http.MethodDelete, "/api/jobs/1/match/chat/2")
+	require.Equal(t, http.StatusNotFound, response.Code)
+
+	response = request(handler, http.MethodDelete, "/api/jobs/1/match/chat/1")
+	require.Equal(t, http.StatusNoContent, response.Code)
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
+
 	response = request(handler, http.MethodPost, "/api/jobs/1/match/redo")
 	require.Equal(t, http.StatusAccepted, response.Code)
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
