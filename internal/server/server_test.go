@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/config"
 	"nice/internal/migrations"
 	"nice/internal/models"
@@ -539,14 +539,14 @@ func (noOpProfileJobMatcher) Match(context.Context, models.BrowseJob, models.Job
 
 type noOpJobCompletionClient struct{}
 
-func (noOpJobCompletionClient) Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error) {
-	return openrouter.ChatResponse{Model: "test-model", Content: "Test chat reply."}, nil
+func (noOpJobCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
+	return openai.ChatResponse{Model: "test-model", Content: "Test chat reply."}, nil
 }
 
 type failingJobCompletionClient struct{}
 
-func (failingJobCompletionClient) Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error) {
-	return openrouter.ChatResponse{}, errors.New("LLM unavailable")
+func (failingJobCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
+	return openai.ChatResponse{}, errors.New("LLM unavailable")
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {

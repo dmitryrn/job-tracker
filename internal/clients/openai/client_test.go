@@ -1,4 +1,4 @@
-package openrouter
+package openai
 
 import (
 	"context"
@@ -59,6 +59,13 @@ func TestRequestForEndpointSendsProviderPreferencesToOpenRouter(t *testing.T) {
 
 	require.NotNil(t, request.Provider)
 	assert.True(t, request.Provider.RequireParameters)
+}
+
+func TestNewClient(t *testing.T) {
+	client := NewClient("proxy-key", "http://127.0.0.1:8080/v1/chat/completions")
+
+	assert.Equal(t, "proxy-key", client.apiKey)
+	assert.Equal(t, "http://127.0.0.1:8080/v1/chat/completions", client.baseURL)
 }
 
 func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {

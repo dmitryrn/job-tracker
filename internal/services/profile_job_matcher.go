@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/models"
 )
 
@@ -57,8 +57,8 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 	}
 
 	temperature := 0.2
-	response, err := matcher.client.Complete(ctx, matcher.model, newLLMSessionID(), openrouter.ChatRequest{
-		Messages: []openrouter.Message{
+	response, err := matcher.client.Complete(ctx, matcher.model, newLLMSessionID(), openai.ChatRequest{
+		Messages: []openai.Message{
 			{Role: "system", Content: profileJobMatchInstructions},
 			{Role: "user", Content: "Assess this job against this profile.\n\n<input>\n" + string(input) + "\n</input>"},
 		},
@@ -66,7 +66,7 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 		MaxTokens:       profileMatchMaxTokens,
 		Temperature:     &temperature,
 		ReasoningEffort: matcher.reasoningEffort,
-		Provider:        &openrouter.ProviderPreferences{RequireParameters: true},
+		Provider:        &openai.ProviderPreferences{RequireParameters: true},
 	})
 	if err != nil {
 		return models.JobMatchAssessment{}, fmt.Errorf("match profile to job: %w", err)

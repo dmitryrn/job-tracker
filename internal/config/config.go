@@ -20,7 +20,8 @@ type Config struct {
 	HTTPAddress  string
 	DatabasePath string
 	Providers    ProviderConfig
-	LLM          LLMConfig
+	OpenCode     OpenCodeConfig
+	OpenAI       OpenAIConfig
 	JobMatch     JobMatchConfig
 	Events       EventConfig
 	OpenRouter   OpenRouterConfig
@@ -33,15 +34,20 @@ type ProviderConfig struct {
 	Remotive RemotiveConfig
 }
 
-type LLMConfig struct {
+type OpenCodeConfig struct {
 	BaseURL        string
 	APIKey         string
-	JobAnalysis    LLMTaskConfig
-	ProfileMatcher LLMTaskConfig
-	JobChat        LLMTaskConfig
+	JobAnalysis    TaskConfig
+	ProfileMatcher TaskConfig
 }
 
-type LLMTaskConfig struct {
+type OpenAIConfig struct {
+	BaseURL string
+	APIKey  string
+	JobChat TaskConfig
+}
+
+type TaskConfig struct {
 	Model           string
 	ReasoningEffort string
 }
@@ -86,7 +92,8 @@ type fileConfig struct {
 	Database struct {
 		Path string `toml:"path" validate:"notblank"`
 	} `toml:"database"`
-	LLM       fileLLMConfig      `toml:"llm"`
+	OpenCode  fileOpenCodeConfig `toml:"opencode"`
+	OpenAI    fileOpenAIConfig   `toml:"openai"`
 	JobMatch  fileJobMatchConfig `toml:"job_match"`
 	Events    fileEventConfig    `toml:"events"`
 	Providers struct {
@@ -97,14 +104,18 @@ type fileConfig struct {
 	} `toml:"providers"`
 }
 
-type fileLLMConfig struct {
-	BaseURL        string            `toml:"base_url" validate:"notblank,url"`
-	JobAnalysis    fileLLMTaskConfig `toml:"job_analysis"`
-	ProfileMatcher fileLLMTaskConfig `toml:"profile_matcher"`
-	JobChat        fileLLMTaskConfig `toml:"job_chat"`
+type fileOpenCodeConfig struct {
+	BaseURL        string         `toml:"base_url" validate:"notblank,url"`
+	JobAnalysis    fileTaskConfig `toml:"job_analysis"`
+	ProfileMatcher fileTaskConfig `toml:"profile_matcher"`
 }
 
-type fileLLMTaskConfig struct {
+type fileOpenAIConfig struct {
+	BaseURL string         `toml:"base_url" validate:"notblank,url"`
+	JobChat fileTaskConfig `toml:"job_chat"`
+}
+
+type fileTaskConfig struct {
 	Model           string `toml:"model" validate:"notblank"`
 	ReasoningEffort string `toml:"reasoning_effort" validate:"oneof=low medium high"`
 }
@@ -173,6 +184,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	codexProxyAPIKey, err := requiredString(tokens["CODEX_PROXY_KEY"], "CODEX_PROXY_KEY")
+	if err != nil {
+		return Config{}, err
+	}
 	adzunaInterval, err := time.ParseDuration(source.Providers.Adzuna.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.adzuna.sync_interval: %w", err)
@@ -228,20 +243,24 @@ func Load() (Config, error) {
 				RequestInterval: linkedInRequestInterval,
 			},
 		},
-		LLM: LLMConfig{
-			BaseURL: source.LLM.BaseURL,
+		OpenCode: OpenCodeConfig{
+			BaseURL: source.OpenCode.BaseURL,
 			APIKey:  llmAPIKey,
-			JobAnalysis: LLMTaskConfig{
-				Model:           source.LLM.JobAnalysis.Model,
-				ReasoningEffort: source.LLM.JobAnalysis.ReasoningEffort,
+			JobAnalysis: TaskConfig{
+				Model:           source.OpenCode.JobAnalysis.Model,
+				ReasoningEffort: source.OpenCode.JobAnalysis.ReasoningEffort,
 			},
-			ProfileMatcher: LLMTaskConfig{
-				Model:           source.LLM.ProfileMatcher.Model,
-				ReasoningEffort: source.LLM.ProfileMatcher.ReasoningEffort,
+			ProfileMatcher: TaskConfig{
+				Model:           source.OpenCode.ProfileMatcher.Model,
+				ReasoningEffort: source.OpenCode.ProfileMatcher.ReasoningEffort,
 			},
-			JobChat: LLMTaskConfig{
-				Model:           source.LLM.JobChat.Model,
-				ReasoningEffort: source.LLM.JobChat.ReasoningEffort,
+		},
+		OpenAI: OpenAIConfig{
+			BaseURL: source.OpenAI.BaseURL,
+			APIKey:  codexProxyAPIKey,
+			JobChat: TaskConfig{
+				Model:           source.OpenAI.JobChat.Model,
+				ReasoningEffort: source.OpenAI.JobChat.ReasoningEffort,
 			},
 		},
 		JobMatch:   JobMatchConfig{RunInterval: jobMatchRunInterval},

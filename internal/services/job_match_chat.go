@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/models"
 	"nice/internal/repositories"
 )
@@ -105,12 +105,12 @@ func (service *JobMatchChat) Reply(ctx context.Context, jobID int64, content, re
 	if err != nil {
 		return models.JobMatchChatMessage{}, fmt.Errorf("encode job match chat context: %w", err)
 	}
-	request := openrouter.ChatRequest{
-		Messages:        []openrouter.Message{{Role: "system", Content: jobMatchChatInstructions + "\n\nCurrent context:\n" + string(contextContent)}},
+	request := openai.ChatRequest{
+		Messages:        []openai.Message{{Role: "system", Content: jobMatchChatInstructions + "\n\nCurrent context:\n" + string(contextContent)}},
 		ReasoningEffort: service.reasoning,
 	}
 	for _, message := range history {
-		request.Messages = append(request.Messages, openrouter.Message{Role: message.Role, Content: message.Content})
+		request.Messages = append(request.Messages, openai.Message{Role: message.Role, Content: message.Content})
 	}
 	response, err := service.client.Complete(ctx, service.model, newLLMSessionID(), request)
 	if err != nil {

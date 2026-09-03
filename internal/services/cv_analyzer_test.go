@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 )
 
 func TestCVAnalyzerReturnsVersionedEvidenceBackedProfile(t *testing.T) {
-	client := &fakeCVCompletionClient{response: openrouter.ChatResponse{
+	client := &fakeCVCompletionClient{response: openai.ChatResponse{
 		Model: "test-model",
 		Content: `{
 			"name":"Riley Morgan",
@@ -45,7 +45,7 @@ Looking for a permanent senior backend or platform role.`)
 }
 
 func TestCVAnalyzerRejectsClaimsWithoutEvidence(t *testing.T) {
-	analyzer := NewCVAnalyzer(&fakeCVCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewCVAnalyzer(&fakeCVCompletionClient{response: openai.ChatResponse{
 		Content: `{"name":"","headline":"","location":"","workAuthorization":[],"experience":[],"skills":[{"name":"Go","concept":"go","experienceIds":[],"evidence":[]}],"constraints":[],"unknowns":[]}`,
 	}}, "cv-test-model")
 
@@ -54,7 +54,7 @@ func TestCVAnalyzerRejectsClaimsWithoutEvidence(t *testing.T) {
 }
 
 func TestCVAnalyzerRejectsSkillWithAnInvalidExperienceLink(t *testing.T) {
-	analyzer := NewCVAnalyzer(&fakeCVCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewCVAnalyzer(&fakeCVCompletionClient{response: openai.ChatResponse{
 		Content: `{
 			"name":"","headline":"","location":"","workAuthorization":[],
 			"experience":[{"id":"experience-1","company":"","title":"Backend Engineer","startDate":"","endDate":"","evidence":["Built Go APIs."]}],
@@ -80,14 +80,14 @@ func TestDecodeCVProfileAcceptsJSONWithPreamble(t *testing.T) {
 }
 
 type fakeCVCompletionClient struct {
-	response openrouter.ChatResponse
+	response openai.ChatResponse
 	err      error
 	model    string
 	session  string
-	request  openrouter.ChatRequest
+	request  openai.ChatRequest
 }
 
-func (client *fakeCVCompletionClient) Complete(_ context.Context, model, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+func (client *fakeCVCompletionClient) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	client.model = model
 	client.session = session
 	client.request = request

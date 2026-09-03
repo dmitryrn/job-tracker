@@ -4,19 +4,22 @@ http_address = ":8080"
 [database]
 path = "jobs.db"
 
-[llm]
+[opencode]
 base_url = "https://opencode.ai/zen/go/v1/chat/completions"
 
-[llm.job_analysis]
-model = "glm-5.2"
-reasoning_effort = "low"
+[openai]
+base_url = "http://127.0.0.1:8080/v1/chat/completions"
 
-[llm.profile_matcher]
+[opencode.job_analysis]
 model = "glm-5.2"
-reasoning_effort = "low"
+reasoning_effort = "high"
 
-[llm.job_chat]
-model = "openai/gpt-5.6-terra"
+[opencode.profile_matcher]
+model = "glm-5.2"
+reasoning_effort = "high"
+
+[openai.job_chat]
+model = "gpt-5.6-terra"
 reasoning_effort = "high"
 
 [job_match]

@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/config"
 )
 
@@ -43,8 +43,8 @@ func TestAnalyzeJobFixtures(t *testing.T) {
 	resultsDirectory := filepath.Join(root, "jobs", "results")
 	require.NoError(t, os.MkdirAll(resultsDirectory, 0o755))
 
-	for _, model := range configuredJobAnalyzerModels(t, configuration.LLM.JobAnalysis.Model) {
-		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openrouter.NewClient(configuration), model: model}, model, configuration.LLM.JobAnalysis.ReasoningEffort)
+	for _, model := range configuredJobAnalyzerModels(t, configuration.OpenCode.JobAnalysis.Model) {
+		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openai.NewClient(configuration.OpenCode.APIKey, configuration.OpenCode.BaseURL), model: model}, model, configuration.OpenCode.JobAnalysis.ReasoningEffort)
 		for _, fixture := range fixtures {
 			t.Run(model+"/"+filepath.Base(fixture), func(t *testing.T) {
 				job := loadJobFixture(t, filepath.Base(fixture))
@@ -142,6 +142,6 @@ type fixedModelCompletionClient struct {
 	model  string
 }
 
-func (client fixedModelCompletionClient) Complete(ctx context.Context, _ string, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+func (client fixedModelCompletionClient) Complete(ctx context.Context, _ string, session string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	return client.client.Complete(ctx, client.model, session, request)
 }

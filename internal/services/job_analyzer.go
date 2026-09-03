@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/models"
 )
 
@@ -113,7 +113,7 @@ var jobResponseSchema = json.RawMessage(`{
 }`)
 
 type JobCompletionClient interface {
-	Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error)
+	Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error)
 }
 
 type JobAnalyzer struct {
@@ -144,8 +144,8 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 	input := canonicalJobInput(job, normalizedDescription)
 
 	temperature := 0.0
-	request := openrouter.ChatRequest{
-		Messages: []openrouter.Message{
+	request := openai.ChatRequest{
+		Messages: []openai.Message{
 			{Role: "system", Content: jobExtractionInstructions},
 			{Role: "user", Content: "Analyze this job posting.\n\n<job>\n" + input + "\n</job>"},
 		},
@@ -153,7 +153,7 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 		MaxTokens:       jobAnalysisMaxTokens,
 		Temperature:     &temperature,
 		ReasoningEffort: analyzer.reasoningEffort,
-		Provider:        &openrouter.ProviderPreferences{RequireParameters: true},
+		Provider:        &openai.ProviderPreferences{RequireParameters: true},
 	}
 	response, err := analyzer.client.Complete(ctx, analyzer.model, newLLMSessionID(), request)
 	if err != nil {

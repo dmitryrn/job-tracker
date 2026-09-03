@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/models"
 )
 
 func TestJobAnalyzerReturnsVersionedEvidenceBackedAnalysis(t *testing.T) {
-	client := &fakeJobCompletionClient{response: openrouter.ChatResponse{
+	client := &fakeJobCompletionClient{response: openai.ChatResponse{
 		Model: "test-model",
 		Content: `{
 			"role":{"family":"Full-Stack Software Engineer","seniority":"senior","seniorityConfidence":"high"},
@@ -55,7 +55,7 @@ Experience with Kubernetes is a plus.`,
 }
 
 func TestJobAnalyzerRejectsClaimsWithoutPostingQuotes(t *testing.T) {
-	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openai.ChatResponse{
 		Content: `{
 			"role":{"family":"backend_engineering","seniority":"senior","seniorityConfidence":"high"},
 			"constraints":[],
@@ -71,7 +71,7 @@ func TestJobAnalyzerRejectsClaimsWithoutPostingQuotes(t *testing.T) {
 }
 
 func TestJobAnalyzerAcceptsLabeledAuthoritativeFieldQuote(t *testing.T) {
-	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openai.ChatResponse{
 		Model: "test-model",
 		Content: `{
 			"role":{"family":"backend_engineering","seniority":"unknown","seniorityConfidence":"low"},
@@ -114,7 +114,7 @@ func TestCanonicalJobRequirementID(t *testing.T) {
 }
 
 func TestJobAnalyzerDowngradesAnImplicitMustHave(t *testing.T) {
-	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openai.ChatResponse{
 		Content: `{
 			"role":{"family":"backend engineering","seniority":"senior","seniorityConfidence":"high"},
 			"constraints":[],
@@ -131,7 +131,7 @@ func TestJobAnalyzerDowngradesAnImplicitMustHave(t *testing.T) {
 }
 
 func TestJobAnalyzerReclassifiesANonOptionalPreference(t *testing.T) {
-	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openai.ChatResponse{
 		Content: `{
 			"role":{"family":"backend engineering","seniority":"senior","seniorityConfidence":"high"},
 			"constraints":[],
@@ -150,7 +150,7 @@ func TestJobAnalyzerReclassifiesANonOptionalPreference(t *testing.T) {
 }
 
 func TestJobAnalyzerRejectsAnEmptyExtraction(t *testing.T) {
-	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openai.ChatResponse{
 		Content: `{
 			"role":{"family":"backend_engineering","seniority":"senior","seniorityConfidence":"high"},
 			"constraints":[],
@@ -175,14 +175,14 @@ func TestNormalizeJobDescriptionPreservesHeadingsAndListItems(t *testing.T) {
 }
 
 type fakeJobCompletionClient struct {
-	response openrouter.ChatResponse
+	response openai.ChatResponse
 	err      error
 	model    string
 	session  string
-	request  openrouter.ChatRequest
+	request  openai.ChatRequest
 }
 
-func (client *fakeJobCompletionClient) Complete(_ context.Context, model, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+func (client *fakeJobCompletionClient) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	client.model = model
 	client.session = session
 	client.request = request

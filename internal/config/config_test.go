@@ -22,14 +22,16 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, 24*time.Hour, cfg.Providers.Jobicy.SyncInterval)
 	assert.Equal(t, 48*time.Hour, cfg.Providers.LinkedIn.SyncInterval)
 	assert.Equal(t, 30*time.Second, cfg.Providers.LinkedIn.RequestInterval)
-	assert.Equal(t, "https://llm.example.com/v1/chat/completions", cfg.LLM.BaseURL)
-	assert.Equal(t, "test-go-key", cfg.LLM.APIKey)
-	assert.Equal(t, "job-analysis-model", cfg.LLM.JobAnalysis.Model)
-	assert.Equal(t, "high", cfg.LLM.JobAnalysis.ReasoningEffort)
-	assert.Equal(t, "profile-matcher-model", cfg.LLM.ProfileMatcher.Model)
-	assert.Equal(t, "medium", cfg.LLM.ProfileMatcher.ReasoningEffort)
-	assert.Equal(t, "job-chat-model", cfg.LLM.JobChat.Model)
-	assert.Equal(t, "high", cfg.LLM.JobChat.ReasoningEffort)
+	assert.Equal(t, "https://opencode.example.com/v1/chat/completions", cfg.OpenCode.BaseURL)
+	assert.Equal(t, "test-go-key", cfg.OpenCode.APIKey)
+	assert.Equal(t, "job-analysis-model", cfg.OpenCode.JobAnalysis.Model)
+	assert.Equal(t, "high", cfg.OpenCode.JobAnalysis.ReasoningEffort)
+	assert.Equal(t, "profile-matcher-model", cfg.OpenCode.ProfileMatcher.Model)
+	assert.Equal(t, "medium", cfg.OpenCode.ProfileMatcher.ReasoningEffort)
+	assert.Equal(t, "http://127.0.0.1:8080/v1/chat/completions", cfg.OpenAI.BaseURL)
+	assert.Equal(t, "test-codex-proxy-key", cfg.OpenAI.APIKey)
+	assert.Equal(t, "job-chat-model", cfg.OpenAI.JobChat.Model)
+	assert.Equal(t, "high", cfg.OpenAI.JobChat.ReasoningEffort)
 	assert.Equal(t, 2*time.Minute, cfg.JobMatch.RunInterval)
 	assert.Equal(t, 1000, cfg.Events.QueueSize)
 	assert.Equal(t, 100, cfg.Events.BatchSize)
@@ -91,18 +93,21 @@ http_address = ":8080"
 [database]
 path = "jobs.db"
 
-[llm]
-base_url = "https://llm.example.com/v1/chat/completions"
+[opencode]
+base_url = "https://opencode.example.com/v1/chat/completions"
 
-[llm.job_analysis]
+[openai]
+base_url = "http://127.0.0.1:8080/v1/chat/completions"
+
+[opencode.job_analysis]
 model = "job-analysis-model"
 reasoning_effort = "high"
 
-[llm.profile_matcher]
+[opencode.profile_matcher]
 model = "profile-matcher-model"
 reasoning_effort = "medium"
 
-[llm.job_chat]
+[openai.job_chat]
 model = "job-chat-model"
 reasoning_effort = "high"
 
@@ -132,5 +137,5 @@ request_interval = "30s"
 func writeTestConfigContent(t *testing.T, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(configFile, []byte(content), 0o600))
-	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\nOPENROUTER_API_KEY=test\nOPENCODE_GO_KEY_4=test-go-key\n"), 0o600))
+	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\nOPENROUTER_API_KEY=test\nOPENCODE_GO_KEY_4=test-go-key\nCODEX_PROXY_KEY=test-codex-proxy-key\n"), 0o600))
 }

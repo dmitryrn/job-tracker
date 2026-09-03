@@ -13,7 +13,7 @@ import (
 	"nice/internal/clients/ipinfo"
 	"nice/internal/clients/jobicy"
 	"nice/internal/clients/linkedin"
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/clients/remotive"
 	"nice/internal/config"
 	"nice/internal/migrations"
@@ -33,9 +33,10 @@ func main() {
 			ipinfo.NewClient,
 			jobicy.NewClient,
 			linkedin.NewClient,
-			openrouter.NewClient,
+			fx.Annotate(newOpenCodeClient, fx.ResultTags(`name:"opencode"`)),
+			fx.Annotate(newOpenAIClient, fx.ResultTags(`name:"openai"`)),
 			remotive.NewClient,
-			newJobCompletionClient,
+			fx.Annotate(newJobCompletionClient, fx.ParamTags(`name:"opencode"`)),
 			repositories.NewSQLite,
 			repositories.NewJobRepository,
 			repositories.NewProviderRunRepository,
@@ -64,19 +65,27 @@ func main() {
 			newJobMatchWorker,
 			services.NewJobMatches,
 			services.NewJobMatchRequests,
-			newJobMatchChat,
+			fx.Annotate(newJobMatchChat, fx.ParamTags("", "", "", "", "", `name:"openai"`, "")),
 			server.New,
 		),
 		fx.Invoke(registerLifecycle),
 	).Run()
 }
 
-func newJobCompletionClient(client *openrouter.Client) services.JobCompletionClient {
+func newOpenCodeClient(cfg config.Config) *openai.Client {
+	return openai.NewClient(cfg.OpenCode.APIKey, cfg.OpenCode.BaseURL)
+}
+
+func newOpenAIClient(cfg config.Config) *openai.Client {
+	return openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.BaseURL)
+}
+
+func newJobCompletionClient(client *openai.Client) services.JobCompletionClient {
 	return client
 }
 
 func newJobAnalyzer(client services.JobCompletionClient, cfg config.Config) *services.JobAnalyzer {
-	return services.NewJobAnalyzer(client, cfg.LLM.JobAnalysis.Model, cfg.LLM.JobAnalysis.ReasoningEffort)
+	return services.NewJobAnalyzer(client, cfg.OpenCode.JobAnalysis.Model, cfg.OpenCode.JobAnalysis.ReasoningEffort)
 }
 
 func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisService {
@@ -84,11 +93,11 @@ func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisS
 }
 
 func newProfileJobMatcher(client services.JobCompletionClient, cfg config.Config) services.ProfileJobMatcher {
-	return services.NewLLMProfileJobMatcher(client, cfg.LLM.ProfileMatcher.Model, cfg.LLM.ProfileMatcher.ReasoningEffort)
+	return services.NewLLMProfileJobMatcher(client, cfg.OpenCode.ProfileMatcher.Model, cfg.OpenCode.ProfileMatcher.ReasoningEffort)
 }
 
-func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, client services.JobCompletionClient, cfg config.Config) *services.JobMatchChat {
-	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, client, cfg.LLM.JobChat.Model, cfg.LLM.JobChat.ReasoningEffort)
+func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, client *openai.Client, cfg config.Config) *services.JobMatchChat {
+	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, client, cfg.OpenAI.JobChat.Model, cfg.OpenAI.JobChat.ReasoningEffort)
 }
 
 func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {

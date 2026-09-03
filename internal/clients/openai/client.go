@@ -1,4 +1,4 @@
-package openrouter
+package openai
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"nice/internal/config"
 )
 
 const (
@@ -70,8 +68,8 @@ type Client struct {
 	usesOpenCode                bool
 }
 
-func NewClient(cfg config.Config) *Client {
-	return newClient(cfg.LLM.APIKey, &http.Client{Timeout: 120 * time.Second}, cfg.LLM.BaseURL)
+func NewClient(apiKey, baseURL string) *Client {
+	return newClient(apiKey, &http.Client{Timeout: 120 * time.Second}, baseURL)
 }
 
 func newClient(apiKey string, httpClient *http.Client, baseURL string) *Client {

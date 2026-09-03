@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/models"
 )
 
@@ -93,7 +93,7 @@ var profileResponseSchema = json.RawMessage(`{
 }`)
 
 type CVCompletionClient interface {
-	Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error)
+	Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error)
 }
 
 type CVAnalyzer struct {
@@ -120,15 +120,15 @@ func (analyzer *CVAnalyzer) Analyze(ctx context.Context, resume string) (CVAnaly
 		return CVAnalysis{}, fmt.Errorf("CV text is required")
 	}
 	temperature := 0.0
-	request := openrouter.ChatRequest{
-		Messages: []openrouter.Message{
+	request := openai.ChatRequest{
+		Messages: []openai.Message{
 			{Role: "system", Content: cvExtractionInstructions},
 			{Role: "user", Content: "Extract a profile draft from this CV.\n\n<cv>\n" + resume + "\n</cv>"},
 		},
 		ResponseFormat: profileResponseSchema,
 		MaxTokens:      2000,
 		Temperature:    &temperature,
-		Provider:       &openrouter.ProviderPreferences{RequireParameters: true},
+		Provider:       &openai.ProviderPreferences{RequireParameters: true},
 	}
 	response, err := analyzer.client.Complete(ctx, analyzer.model, newLLMSessionID(), request)
 	if err != nil {

@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nice/internal/clients/openrouter"
+	"nice/internal/clients/openai"
 	"nice/internal/models"
 )
 
 func TestLLMProfileJobMatcherReturnsValidatedAssessment(t *testing.T) {
-	client := &recordingMatchCompletionClient{response: openrouter.ChatResponse{
+	client := &recordingMatchCompletionClient{response: openai.ChatResponse{
 		Model: "test-model",
 		Content: `{
 			"score":84,
@@ -44,7 +44,7 @@ func TestLLMProfileJobMatcherReturnsValidatedAssessment(t *testing.T) {
 }
 
 func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
-	client := &recordingMatchCompletionClient{response: openrouter.ChatResponse{Model: "test-model", Content: `{
+	client := &recordingMatchCompletionClient{response: openai.ChatResponse{Model: "test-model", Content: `{
 		"score":101,
 		"summary":"Too high.",
 		"strengths":[],
@@ -58,7 +58,7 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 }
 
 func TestLLMProfileJobMatcherAcceptsAJSONCodeFence(t *testing.T) {
-	client := &recordingMatchCompletionClient{response: openrouter.ChatResponse{Model: "test-model", Content: "```json\n{\"score\":84,\"summary\":\"Strong fit.\",\"strengths\":[],\"gaps\":[],\"questions\":[],\"applicationAngle\":\"Highlight Go experience.\"}\n```"}}
+	client := &recordingMatchCompletionClient{response: openai.ChatResponse{Model: "test-model", Content: "```json\n{\"score\":84,\"summary\":\"Strong fit.\",\"strengths\":[],\"gaps\":[],\"questions\":[],\"applicationAngle\":\"Highlight Go experience.\"}\n```"}}
 
 	assessment, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "low").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
 
@@ -75,14 +75,14 @@ func TestMatchScoreLabel(t *testing.T) {
 }
 
 type recordingMatchCompletionClient struct {
-	response openrouter.ChatResponse
+	response openai.ChatResponse
 	err      error
 	model    string
 	session  string
-	request  openrouter.ChatRequest
+	request  openai.ChatRequest
 }
 
-func (client *recordingMatchCompletionClient) Complete(_ context.Context, model, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+func (client *recordingMatchCompletionClient) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	client.model = model
 	client.session = session
 	client.request = request
