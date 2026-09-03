@@ -22,7 +22,7 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -44,6 +44,8 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("POST /api/discovery-preview/{provider}", discoveryPreviewHandler(previews, logger))
 	mux.HandleFunc("GET /api/profile", profileHandler(profile, logger))
 	mux.HandleFunc("PUT /api/profile", saveProfileHandler(profile, logger))
+	mux.HandleFunc("GET /api/resume", resumeHandler(resume, logger))
+	mux.HandleFunc("PUT /api/resume", saveResumeHandler(resume, logger))
 	mux.HandleFunc("OPTIONS /api/{path...}", optionsHandler)
 
 	return &Server{
@@ -203,6 +205,36 @@ func saveProfileHandler(profile *services.UserProfileService, logger *zap.Logger
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]any{"profile": savedProfile})
+	}
+}
+
+func resumeHandler(resume *services.ResumeService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		value, err := resume.Resume(request.Context())
+		if err != nil {
+			logger.Error("load base resume failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load resume")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"resume": value})
+	}
+}
+
+func saveResumeHandler(resume *services.ResumeService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var value models.Resume
+		if err := json.NewDecoder(request.Body).Decode(&value); err != nil {
+			logger.Warn("invalid base resume", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "resume must be valid JSON")
+			return
+		}
+		saved, err := resume.Save(request.Context(), value)
+		if err != nil {
+			logger.Error("save base resume failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not save resume")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"resume": saved})
 	}
 }
 

@@ -34,6 +34,58 @@ type UserProfileEducation struct {
 	Body        string `json:"body"`
 }
 
+type Resume struct {
+	ID           int64              `json:"id"`
+	FullName     string             `json:"fullName"`
+	Headline     string             `json:"headline"`
+	Location     string             `json:"location"`
+	Email        string             `json:"email"`
+	Phone        string             `json:"phone"`
+	Summary      string             `json:"summary"`
+	Links        []ResumeLink       `json:"links"`
+	Skills       []ResumeSkill      `json:"skills"`
+	Competencies []ResumeCompetency `json:"competencies"`
+	Experience   []ResumeExperience `json:"experience"`
+	Education    []ResumeEducation  `json:"education"`
+	UpdatedAt    string             `json:"updatedAt"`
+}
+
+type ResumeLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
+type ResumeSkill struct {
+	Name  string `json:"name"`
+	Level string `json:"level"`
+}
+
+type ResumeCompetency struct {
+	Title   string   `json:"title"`
+	Bullets []string `json:"bullets"`
+}
+
+type ResumeExperience struct {
+	Company   string   `json:"company"`
+	Title     string   `json:"title"`
+	Location  string   `json:"location"`
+	StartDate string   `json:"startDate"`
+	EndDate   string   `json:"endDate"`
+	IsCurrent bool     `json:"isCurrent"`
+	Stack     string   `json:"stack"`
+	Bullets   []string `json:"bullets"`
+}
+
+type ResumeEducation struct {
+	Institution  string `json:"institution"`
+	Location     string `json:"location"`
+	Degree       string `json:"degree"`
+	FieldOfStudy string `json:"fieldOfStudy"`
+	StartDate    string `json:"startDate"`
+	EndDate      string `json:"endDate"`
+	Details      string `json:"details"`
+}
+
 type CVProfileDraft struct {
 	Name              string              `json:"name"`
 	Headline          string              `json:"headline"`

@@ -41,6 +41,11 @@ type UserProfileRepository interface {
 	SaveUserProfile(context.Context, models.UserProfile) (models.UserProfile, error)
 }
 
+type ResumeRepository interface {
+	Resume(context.Context) (*models.Resume, error)
+	SaveResume(context.Context, models.Resume) (models.Resume, error)
+}
+
 type JobAnalysisRepository interface {
 	JobAnalysis(context.Context, int64) (*models.JobAnalysisRecord, error)
 	SaveJobAnalysis(context.Context, models.JobAnalysisRecord) error
@@ -79,6 +84,10 @@ func NewDiscoverySettingsRepository(sqlite *SQLite) DiscoverySettingsRepository 
 }
 
 func NewUserProfileRepository(sqlite *SQLite) UserProfileRepository {
+	return sqlite
+}
+
+func NewResumeRepository(sqlite *SQLite) ResumeRepository {
 	return sqlite
 }
 

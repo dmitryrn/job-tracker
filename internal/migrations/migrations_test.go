@@ -18,7 +18,11 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	require.NoError(t, Apply(db))
 	require.NoError(t, Apply(db))
 
-	for _, table := range []string{"companies", "jobs", "provider_runs", "user_profiles", "job_matches", "job_match_queue", "job_analyses"} {
+	for _, table := range []string{
+		"companies", "jobs", "provider_runs", "user_profiles", "job_matches", "job_match_queue", "job_analyses",
+		"resumes", "resume_links", "resume_skills", "resume_competencies", "resume_competency_bullets",
+		"resume_experience", "resume_experience_bullets", "resume_education",
+	} {
 		var count int
 		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count))
 		assert.Equal(t, 1, count, "table %s was not created", table)

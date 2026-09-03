@@ -313,6 +313,49 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Equal(t, []int64{1, 2}, []int64{queueResponse.Jobs[0].ID, queueResponse.Jobs[1].ID})
 }
 
+func TestResumeAPI(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	handler := newTestServer(repositories.NewSQLite(db)).http.Handler
+	response := request(handler, http.MethodGet, "/api/resume")
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.JSONEq(t, `{"resume":null}`, response.Body.String())
+
+	response = requestWithBody(handler, http.MethodPut, "/api/resume", `{
+		"fullName":" Ada Lovelace ","headline":" Backend engineer ","location":" Berlin ","email":" ada@example.com ","phone":" +49 123 ","summary":" Builds systems. ",
+		"links":[{"label":" GitHub ","url":" https://github.com/ada "},{"label":"","url":""}],
+		"skills":[{"name":" Go ","level":" Strong "},{"name":"","level":""}],
+		"competencies":[{"title":" Backend systems ","bullets":[" Built APIs ",""]}],
+		"experience":[{"company":" Acme ","title":" Engineer ","location":" Berlin ","startDate":"2023-01","endDate":"","isCurrent":true,"stack":" Go, PostgreSQL ","bullets":[" Shipped a service ",""]}],
+		"education":[{"institution":" University ","location":" Berlin ","degree":" MSc ","fieldOfStudy":" Computer science ","startDate":"2019","endDate":"2021","details":" Distributed systems "},{"institution":"","location":"","degree":"","fieldOfStudy":"","startDate":"","endDate":"","details":""}]
+	}`)
+	require.Equal(t, http.StatusOK, response.Code)
+
+	var result struct {
+		Resume models.Resume `json:"resume"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+	assert.Equal(t, int64(1), result.Resume.ID)
+	assert.Equal(t, "Ada Lovelace", result.Resume.FullName)
+	require.Len(t, result.Resume.Links, 1)
+	assert.Equal(t, "GitHub", result.Resume.Links[0].Label)
+	require.Len(t, result.Resume.Competencies, 1)
+	assert.Equal(t, []string{"Built APIs"}, result.Resume.Competencies[0].Bullets)
+	require.Len(t, result.Resume.Experience, 1)
+	assert.True(t, result.Resume.Experience[0].IsCurrent)
+	require.Len(t, result.Resume.Education, 1)
+	assert.Equal(t, "University", result.Resume.Education[0].Institution)
+
+	response = request(handler, http.MethodGet, "/api/resume")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+	assert.Equal(t, "Backend engineer", result.Resume.Headline)
+	assert.Equal(t, "Go, PostgreSQL", result.Resume.Experience[0].Stack)
+}
+
 func newTestServer(repository *repositories.SQLite) *Server {
 	worker := services.NewJobMatchWorker(repository, repository, repository, repository, repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
 	return New(
@@ -323,6 +366,7 @@ func newTestServer(repository *repositories.SQLite) *Server {
 		services.NewDiscoverySettingsService(repository),
 		services.NewProviderPreviewService(nil, nil, nil, nil),
 		services.NewUserProfileService(repository),
+		services.NewResumeService(repository),
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),
 	)

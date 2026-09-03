@@ -55,6 +55,58 @@ export type UserProfile = {
   updatedAt: string;
 };
 
+export type ResumeLink = {
+  label: string;
+  url: string;
+};
+
+export type ResumeSkill = {
+  name: string;
+  level: string;
+};
+
+export type ResumeCompetency = {
+  title: string;
+  bullets: string[];
+};
+
+export type ResumeExperience = {
+  company: string;
+  title: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  stack: string;
+  bullets: string[];
+};
+
+export type ResumeEducation = {
+  institution: string;
+  location: string;
+  degree: string;
+  fieldOfStudy: string;
+  startDate: string;
+  endDate: string;
+  details: string;
+};
+
+export type Resume = {
+  id: number;
+  fullName: string;
+  headline: string;
+  location: string;
+  email: string;
+  phone: string;
+  summary: string;
+  links: ResumeLink[];
+  skills: ResumeSkill[];
+  competencies: ResumeCompetency[];
+  experience: ResumeExperience[];
+  education: ResumeEducation[];
+  updatedAt: string;
+};
+
 export type DiscoverySettings = {
   adzuna: {
     enabled: boolean;
@@ -224,6 +276,18 @@ export function saveProfile(profile: UserProfile) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(profile),
+  });
+}
+
+export function fetchResume(signal: AbortSignal) {
+  return request<{ resume: Resume | null }>("resume", { signal });
+}
+
+export function saveResume(resume: Resume) {
+  return request<{ resume: Resume }>("resume", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(resume),
   });
 }
 

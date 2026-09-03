@@ -8,11 +8,12 @@ import JobDetailView from "./JobDetailView";
 import JobMatchesView from "./JobMatchesView";
 import MatchQueueView from "./MatchQueueView";
 import ProfileView from "./ProfileView";
+import ResumeView from "./ResumeView";
 import { fetchJob, type BrowseJob } from "./api";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
 import "./styles.css";
 
-type View = BrowseMode | "events" | "explorer" | "matches" | "profile" | "match-queue" | "search-setup";
+type View = BrowseMode | "events" | "explorer" | "matches" | "profile" | "resume" | "match-queue" | "search-setup";
 
 type Route = {
   view: View;
@@ -25,7 +26,7 @@ function readRoute(): Route {
   if (parts[0] === "jobs" && /^\d+$/.test(parts[1] ?? "")) {
     return { view: "jobs", jobID: Number(parts[1]), tab: parts[2] === "match" ? "match" : "post" };
   }
-  if (parts[0] === "companies" || parts[0] === "events" || parts[0] === "matches" || parts[0] === "profile" || parts[0] === "match-queue" || parts[0] === "search-setup" || parts[0] === "database") {
+  if (parts[0] === "companies" || parts[0] === "events" || parts[0] === "matches" || parts[0] === "profile" || parts[0] === "resume" || parts[0] === "match-queue" || parts[0] === "search-setup" || parts[0] === "database") {
     return { view: parts[0] === "database" ? "explorer" : parts[0] };
   }
   return { view: "jobs" };
@@ -234,7 +235,8 @@ export default function App() {
           <button className={route.view === "jobs" || route.view === "companies" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "jobs" })}>Jobs</button>
           <button className={route.view === "matches" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "matches" })}>Matches</button>
           <button className={route.view === "match-queue" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "match-queue" })}>Match queue</button>
-          <button className={route.view === "profile" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "profile" })}>Profile</button>
+           <button className={route.view === "profile" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "profile" })}>Profile</button>
+           <button className={route.view === "resume" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "resume" })}>Resume</button>
           <button className={route.view === "search-setup" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "search-setup" })}>Search setup</button>
           <button className={route.view === "events" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "events" })}>Events</button>
           <button className={route.view === "explorer" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "explorer" })}>DB browser</button>
@@ -266,8 +268,10 @@ export default function App() {
           <MatchQueueView onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "post" })} />
         ) : route.view === "matches" ? (
           <JobMatchesView onOpenMatch={(job) => navigate({ view: "jobs", jobID: job.id, tab: "match" })} />
-        ) : route.view === "profile" ? (
-          <ProfileView />
+         ) : route.view === "profile" ? (
+           <ProfileView />
+         ) : route.view === "resume" ? (
+           <ResumeView />
         ) : route.view === "search-setup" ? (
           <DiscoverySettingsView />
         ) : route.view === "events" ? (
