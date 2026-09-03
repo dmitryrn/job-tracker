@@ -35,7 +35,8 @@ func TestLLMProfileJobMatcherReturnsValidatedAssessment(t *testing.T) {
 	assert.Equal(t, "Strong fit", assessment.Label)
 	assert.Equal(t, LLMProfileJobMatcherVersion, assessment.MatcherVersion)
 	assert.Equal(t, "test-model", assessment.Model)
-	assert.Equal(t, "matcher-test-model", client.request.Model)
+	assert.Equal(t, "matcher-test-model", client.model)
+	assert.NotEmpty(t, client.session)
 	assert.Equal(t, "high", client.request.ReasoningEffort)
 	assert.Equal(t, profileMatchMaxTokens, client.request.MaxTokens)
 	assert.Contains(t, client.request.Messages[1].Content, `"title":"Senior Backend Engineer"`)
@@ -76,10 +77,14 @@ func TestMatchScoreLabel(t *testing.T) {
 type recordingMatchCompletionClient struct {
 	response openrouter.ChatResponse
 	err      error
+	model    string
+	session  string
 	request  openrouter.ChatRequest
 }
 
-func (client *recordingMatchCompletionClient) Complete(_ context.Context, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+func (client *recordingMatchCompletionClient) Complete(_ context.Context, model, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+	client.model = model
+	client.session = session
 	client.request = request
 	return client.response, client.err
 }

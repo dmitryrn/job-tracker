@@ -11,7 +11,7 @@ import (
 )
 
 func TestCVAnalyzerReturnsVersionedEvidenceBackedProfile(t *testing.T) {
-	analyzer := NewCVAnalyzer(fakeCVCompletionClient{response: openrouter.ChatResponse{
+	client := &fakeCVCompletionClient{response: openrouter.ChatResponse{
 		Model: "test-model",
 		Content: `{
 			"name":"Riley Morgan",
@@ -23,7 +23,8 @@ func TestCVAnalyzerReturnsVersionedEvidenceBackedProfile(t *testing.T) {
 			"constraints":[{"kind":"employment_type","value":"permanent","evidence":"Looking for a permanent senior backend or platform role."}],
 			"unknowns":["The CV does not state a target start date."]
 		}`,
-	}})
+	}}
+	analyzer := NewCVAnalyzer(client, "cv-test-model")
 
 	analysis, err := analyzer.Analyze(context.Background(), `Riley Morgan
 Senior Backend Engineer
@@ -34,6 +35,8 @@ Looking for a permanent senior backend or platform role.`)
 	assert.Equal(t, CVAnalyzerVersion, analysis.AnalyzerVersion)
 	assert.Equal(t, CVPromptVersion, analysis.PromptVersion)
 	assert.Equal(t, "test-model", analysis.Model)
+	assert.Equal(t, "cv-test-model", client.model)
+	assert.NotEmpty(t, client.session)
 	assert.NotEmpty(t, analysis.InputSHA256)
 	assert.NotEmpty(t, analysis.AnalyzedAt)
 	assert.Equal(t, "Go", analysis.Profile.Skills[0].Name)
@@ -42,30 +45,30 @@ Looking for a permanent senior backend or platform role.`)
 }
 
 func TestCVAnalyzerRejectsClaimsWithoutEvidence(t *testing.T) {
-	analyzer := NewCVAnalyzer(fakeCVCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewCVAnalyzer(&fakeCVCompletionClient{response: openrouter.ChatResponse{
 		Content: `{"name":"","headline":"","location":"","workAuthorization":[],"experience":[],"skills":[{"name":"Go","concept":"go","experienceIds":[],"evidence":[]}],"constraints":[],"unknowns":[]}`,
-	}})
+	}}, "cv-test-model")
 
 	_, err := analyzer.Analyze(context.Background(), "Go developer")
 	assert.ErrorContains(t, err, "skill without evidence")
 }
 
 func TestCVAnalyzerRejectsSkillWithAnInvalidExperienceLink(t *testing.T) {
-	analyzer := NewCVAnalyzer(fakeCVCompletionClient{response: openrouter.ChatResponse{
+	analyzer := NewCVAnalyzer(&fakeCVCompletionClient{response: openrouter.ChatResponse{
 		Content: `{
 			"name":"","headline":"","location":"","workAuthorization":[],
 			"experience":[{"id":"experience-1","company":"","title":"Backend Engineer","startDate":"","endDate":"","evidence":["Built Go APIs."]}],
 			"skills":[{"name":"Go","concept":"go","experienceIds":["experience-2"],"evidence":["Built Go APIs."]}],
 			"constraints":[],"unknowns":[]
 		}`,
-	}})
+	}}, "cv-test-model")
 
 	_, err := analyzer.Analyze(context.Background(), "Built Go APIs.")
 	assert.ErrorContains(t, err, "invalid experience link")
 }
 
 func TestCVAnalyzerRejectsBlankCV(t *testing.T) {
-	analyzer := NewCVAnalyzer(fakeCVCompletionClient{})
+	analyzer := NewCVAnalyzer(&fakeCVCompletionClient{}, "cv-test-model")
 	_, err := analyzer.Analyze(context.Background(), " \n ")
 	assert.ErrorContains(t, err, "CV text is required")
 }
@@ -79,8 +82,14 @@ func TestDecodeCVProfileAcceptsJSONWithPreamble(t *testing.T) {
 type fakeCVCompletionClient struct {
 	response openrouter.ChatResponse
 	err      error
+	model    string
+	session  string
+	request  openrouter.ChatRequest
 }
 
-func (client fakeCVCompletionClient) Complete(_ context.Context, _ openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+func (client *fakeCVCompletionClient) Complete(_ context.Context, model, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+	client.model = model
+	client.session = session
+	client.request = request
 	return client.response, client.err
 }

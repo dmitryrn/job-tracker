@@ -37,7 +37,7 @@ func TestAnalyzeCVFixtures(t *testing.T) {
 	t.Chdir(root)
 	configuration, err := config.Load()
 	require.NoError(t, err)
-	analyzer := NewCVAnalyzer(openrouter.NewClient(configuration))
+	analyzer := NewCVAnalyzer(openrouter.NewClient(configuration), configuration.LLM.JobAnalysis.Model)
 	fixtures := cvFixtures(t, root)
 	resultsDirectory := filepath.Join(root, "profiles", "results")
 	require.NoError(t, os.MkdirAll(resultsDirectory, 0o755))

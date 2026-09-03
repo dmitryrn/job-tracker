@@ -28,7 +28,6 @@ type ProviderPreferences struct {
 }
 
 type ChatRequest struct {
-	Model           string               `json:"model"`
 	Messages        []Message            `json:"messages"`
 	ResponseFormat  json.RawMessage      `json:"response_format,omitempty"`
 	MaxTokens       int                  `json:"max_tokens,omitempty"`
@@ -37,9 +36,30 @@ type ChatRequest struct {
 	Provider        *ProviderPreferences `json:"provider,omitempty"`
 }
 
+type chatCompletionPayload struct {
+	Model string `json:"model"`
+	ChatRequest
+}
+
 type ChatResponse struct {
 	Model   string
 	Content string
+}
+
+type chatCompletionResponse struct {
+	Model   string                 `json:"model"`
+	Choices []chatCompletionChoice `json:"choices"`
+}
+
+type chatCompletionChoice struct {
+	FinishReason       string                `json:"finish_reason"`
+	NativeFinishReason string                `json:"native_finish_reason"`
+	Message            chatCompletionMessage `json:"message"`
+}
+
+type chatCompletionMessage struct {
+	Content *string `json:"content"`
+	Refusal *string `json:"refusal"`
 }
 
 type Client struct {
@@ -47,6 +67,7 @@ type Client struct {
 	http                        *http.Client
 	baseURL                     string
 	supportsProviderPreferences bool
+	usesOpenCode                bool
 }
 
 func NewClient(cfg config.Config) *Client {
@@ -59,33 +80,47 @@ func newClient(apiKey string, httpClient *http.Client, baseURL string) *Client {
 		http:                        httpClient,
 		baseURL:                     baseURL,
 		supportsProviderPreferences: isOpenRouterURL(baseURL),
+		usesOpenCode:                isOpenCodeURL(baseURL),
 	}
 }
 
-func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResponse, error) {
+func (client *Client) Complete(ctx context.Context, model, sessionID string, input ChatRequest) (ChatResponse, error) {
 	if strings.TrimSpace(client.apiKey) == "" {
 		return ChatResponse{}, fmt.Errorf("LLM API key is required")
 	}
-	if strings.TrimSpace(input.Model) == "" {
+
+	model = strings.TrimSpace(model)
+	if model == "" {
 		return ChatResponse{}, fmt.Errorf("LLM model is required")
 	}
 
-	payload, err := json.Marshal(client.requestForEndpoint(input))
+	sessionID = strings.TrimSpace(sessionID)
+	if client.usesOpenCode && sessionID == "" {
+		return ChatResponse{}, fmt.Errorf("LLM session ID is required")
+	}
+
+	payload, err := json.Marshal(chatCompletionPayload{Model: model, ChatRequest: client.requestForEndpoint(input)})
 	if err != nil {
 		return ChatResponse{}, fmt.Errorf("encode LLM request: %w", err)
 	}
+
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, client.baseURL, bytes.NewReader(payload))
 	if err != nil {
 		return ChatResponse{}, fmt.Errorf("create LLM request: %w", err)
 	}
+
 	request.Header.Set("Authorization", "Bearer "+client.apiKey)
 	request.Header.Set("Content-Type", "application/json")
+	if client.usesOpenCode {
+		request.Header.Set("X-Opencode-Session", sessionID)
+	}
 
 	response, err := client.http.Do(request)
 	if err != nil {
 		return ChatResponse{}, fmt.Errorf("call LLM: %w", err)
 	}
 	defer response.Body.Close()
+
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		body, err := io.ReadAll(io.LimitReader(response.Body, maxErrorResponseBytes))
 		if err != nil {
@@ -97,24 +132,17 @@ func (client *Client) Complete(ctx context.Context, input ChatRequest) (ChatResp
 		return ChatResponse{}, fmt.Errorf("LLM returned %s", response.Status)
 	}
 
-	var body struct {
-		Model   string `json:"model"`
-		Choices []struct {
-			FinishReason       string `json:"finish_reason"`
-			NativeFinishReason string `json:"native_finish_reason"`
-			Message            struct {
-				Content *string `json:"content"`
-				Refusal *string `json:"refusal"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
+	var body chatCompletionResponse
+
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 2<<20))
 	if err := decoder.Decode(&body); err != nil {
 		return ChatResponse{}, fmt.Errorf("decode LLM response: %w", err)
 	}
+
 	if len(body.Choices) == 0 {
 		return ChatResponse{}, noCompletionContentError(body.Model, "")
 	}
+
 	choice := body.Choices[0]
 	if choice.Message.Content == nil || strings.TrimSpace(*choice.Message.Content) == "" {
 		reason := choice.NativeFinishReason
@@ -144,15 +172,28 @@ func isOpenRouterURL(baseURL string) bool {
 	if err != nil {
 		return false
 	}
+
 	hostname := strings.ToLower(endpoint.Hostname())
 	return hostname == "openrouter.ai" || strings.HasSuffix(hostname, ".openrouter.ai")
 }
 
+func isOpenCodeURL(baseURL string) bool {
+	endpoint, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+
+	hostname := strings.ToLower(endpoint.Hostname())
+	return hostname == "opencode.ai" || strings.HasSuffix(hostname, ".opencode.ai")
+}
+
 func noCompletionContentError(model, reason string) error {
 	message := "LLM returned no completion content"
+
 	if reason != "" {
 		message += " (" + reason + ")"
 	}
+
 	if strings.TrimSpace(model) != "" {
 		message += " from " + model
 	}

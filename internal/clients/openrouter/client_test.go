@@ -3,8 +3,10 @@ package openrouter
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,8 +19,12 @@ func TestCompleteOmitsProviderPreferencesForNonOpenRouterEndpoint(t *testing.T) 
 		assert.Equal(t, http.MethodPost, request.Method)
 		assert.Equal(t, "Bearer test-key", request.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", request.Header.Get("Content-Type"))
+		assert.Empty(t, request.Header.Get("X-Opencode-Session"))
 
-		var body ChatRequest
+		var body struct {
+			Model string `json:"model"`
+			ChatRequest
+		}
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&body))
 		assert.Equal(t, model, body.Model)
 		assert.Equal(t, []Message{{Role: "user", Content: "Extract this CV"}}, body.Messages)
@@ -34,8 +40,7 @@ func TestCompleteOmitsProviderPreferencesForNonOpenRouterEndpoint(t *testing.T) 
 
 	client := newClient("test-key", server.Client(), server.URL)
 	temperature := 0.0
-	response, err := client.Complete(context.Background(), ChatRequest{
-		Model:           model,
+	response, err := client.Complete(context.Background(), model, "session-123", ChatRequest{
 		Messages:        []Message{{Role: "user", Content: "Extract this CV"}},
 		Temperature:     &temperature,
 		ReasoningEffort: "high",
@@ -65,7 +70,7 @@ func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
 	defer server.Close()
 
 	client := newClient("test-key", server.Client(), server.URL)
-	_, err := client.Complete(context.Background(), ChatRequest{Model: "test-model", Messages: []Message{{Role: "user", Content: "CV"}}})
+	_, err := client.Complete(context.Background(), "test-model", "session-456", ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
 	assert.ErrorContains(t, err, "429 Too Many Requests")
 	assert.ErrorContains(t, err, `{"error":{"code":429,"message":"Daily free model quota exhausted"}}`)
 }
@@ -78,6 +83,41 @@ func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
 	defer server.Close()
 
 	client := newClient("test-key", server.Client(), server.URL)
-	_, err := client.Complete(context.Background(), ChatRequest{Model: "test-model", Messages: []Message{{Role: "user", Content: "CV"}}})
+	_, err := client.Complete(context.Background(), "test-model", "session-789", ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
 	assert.EqualError(t, err, "LLM returned no completion content (length) from provider/model")
+}
+
+func TestCompleteRejectsMissingSessionID(t *testing.T) {
+	client := newClient("test-key", http.DefaultClient, "https://opencode.ai/zen/go/v1/chat/completions")
+
+	_, err := client.Complete(context.Background(), "test-model", "", ChatRequest{})
+
+	assert.EqualError(t, err, "LLM session ID is required")
+}
+
+func TestCompleteSendsSessionIDToOpenCode(t *testing.T) {
+	client := newClient("test-key", &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "session-123", request.Header.Get("X-Opencode-Session"))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"model":"provider/model","choices":[{"message":{"content":"response"}}]}`)),
+		}, nil
+	})}, "https://opencode.ai/zen/go/v1/chat/completions")
+
+	_, err := client.Complete(context.Background(), "test-model", "session-123", ChatRequest{})
+
+	require.NoError(t, err)
+}
+
+func TestIsOpenCodeURL(t *testing.T) {
+	assert.True(t, isOpenCodeURL("https://opencode.ai/zen/go/v1/chat/completions"))
+	assert.True(t, isOpenCodeURL("https://api.opencode.ai/v1/chat/completions"))
+	assert.False(t, isOpenCodeURL("https://openrouter.ai/api/v1/chat/completions"))
+	assert.False(t, isOpenCodeURL("https://llm.example.com/v1/chat/completions"))
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
 }

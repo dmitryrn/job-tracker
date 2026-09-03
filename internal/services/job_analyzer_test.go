@@ -42,13 +42,14 @@ Experience with Kubernetes is a plus.`,
 	assert.Equal(t, JobAnalyzerVersion, analysis.AnalyzerVersion)
 	assert.Equal(t, JobPromptVersion, analysis.PromptVersion)
 	assert.Equal(t, "test-model", analysis.Model)
+	assert.Equal(t, "analyzer-test-model", client.model)
+	assert.NotEmpty(t, client.session)
 	assert.NotEmpty(t, analysis.InputSHA256)
 	assert.NotEmpty(t, analysis.AnalyzedAt)
 	assert.Equal(t, "go", analysis.Analysis.Requirements[0].Concept)
 	assert.Equal(t, "full_stack_software_engineer", analysis.Analysis.Role.Family)
 	assert.Contains(t, analysis.NormalizedDescription, "Must have 5 years of professional Golang experience.")
 	assert.Contains(t, client.request.Messages[1].Content, "Supplementary provider metadata:")
-	assert.Equal(t, "analyzer-test-model", client.request.Model)
 	assert.Equal(t, "high", client.request.ReasoningEffort)
 	assert.Equal(t, jobAnalysisMaxTokens, client.request.MaxTokens)
 }
@@ -176,10 +177,14 @@ func TestNormalizeJobDescriptionPreservesHeadingsAndListItems(t *testing.T) {
 type fakeJobCompletionClient struct {
 	response openrouter.ChatResponse
 	err      error
+	model    string
+	session  string
 	request  openrouter.ChatRequest
 }
 
-func (client *fakeJobCompletionClient) Complete(_ context.Context, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+func (client *fakeJobCompletionClient) Complete(_ context.Context, model, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+	client.model = model
+	client.session = session
 	client.request = request
 	return client.response, client.err
 }

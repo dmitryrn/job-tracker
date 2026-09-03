@@ -93,11 +93,12 @@ var profileResponseSchema = json.RawMessage(`{
 }`)
 
 type CVCompletionClient interface {
-	Complete(context.Context, openrouter.ChatRequest) (openrouter.ChatResponse, error)
+	Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error)
 }
 
 type CVAnalyzer struct {
 	client CVCompletionClient
+	model  string
 }
 
 type CVAnalysis struct {
@@ -109,8 +110,8 @@ type CVAnalysis struct {
 	Profile         models.CVProfileDraft `json:"profile"`
 }
 
-func NewCVAnalyzer(client CVCompletionClient) *CVAnalyzer {
-	return &CVAnalyzer{client: client}
+func NewCVAnalyzer(client CVCompletionClient, model string) *CVAnalyzer {
+	return &CVAnalyzer{client: client, model: model}
 }
 
 func (analyzer *CVAnalyzer) Analyze(ctx context.Context, resume string) (CVAnalysis, error) {
@@ -129,7 +130,7 @@ func (analyzer *CVAnalyzer) Analyze(ctx context.Context, resume string) (CVAnaly
 		Temperature:    &temperature,
 		Provider:       &openrouter.ProviderPreferences{RequireParameters: true},
 	}
-	response, err := analyzer.client.Complete(ctx, request)
+	response, err := analyzer.client.Complete(ctx, analyzer.model, newLLMSessionID(), request)
 	if err != nil {
 		return CVAnalysis{}, fmt.Errorf("extract CV profile: %w", err)
 	}

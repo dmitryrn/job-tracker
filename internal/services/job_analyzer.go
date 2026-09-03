@@ -113,7 +113,7 @@ var jobResponseSchema = json.RawMessage(`{
 }`)
 
 type JobCompletionClient interface {
-	Complete(context.Context, openrouter.ChatRequest) (openrouter.ChatResponse, error)
+	Complete(context.Context, string, string, openrouter.ChatRequest) (openrouter.ChatResponse, error)
 }
 
 type JobAnalyzer struct {
@@ -145,7 +145,6 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 
 	temperature := 0.0
 	request := openrouter.ChatRequest{
-		Model: analyzer.model,
 		Messages: []openrouter.Message{
 			{Role: "system", Content: jobExtractionInstructions},
 			{Role: "user", Content: "Analyze this job posting.\n\n<job>\n" + input + "\n</job>"},
@@ -156,7 +155,7 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 		ReasoningEffort: analyzer.reasoningEffort,
 		Provider:        &openrouter.ProviderPreferences{RequireParameters: true},
 	}
-	response, err := analyzer.client.Complete(ctx, request)
+	response, err := analyzer.client.Complete(ctx, analyzer.model, newLLMSessionID(), request)
 	if err != nil {
 		return JobAnalysis{}, fmt.Errorf("analyze job: %w", err)
 	}

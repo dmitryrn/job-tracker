@@ -142,7 +142,6 @@ type fixedModelCompletionClient struct {
 	model  string
 }
 
-func (client fixedModelCompletionClient) Complete(ctx context.Context, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
-	request.Model = client.model
-	return client.client.Complete(ctx, request)
+func (client fixedModelCompletionClient) Complete(ctx context.Context, _ string, session string, request openrouter.ChatRequest) (openrouter.ChatResponse, error) {
+	return client.client.Complete(ctx, client.model, session, request)
 }

@@ -57,8 +57,7 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 	}
 
 	temperature := 0.2
-	response, err := matcher.client.Complete(ctx, openrouter.ChatRequest{
-		Model: matcher.model,
+	response, err := matcher.client.Complete(ctx, matcher.model, newLLMSessionID(), openrouter.ChatRequest{
 		Messages: []openrouter.Message{
 			{Role: "system", Content: profileJobMatchInstructions},
 			{Role: "user", Content: "Assess this job against this profile.\n\n<input>\n" + string(input) + "\n</input>"},
