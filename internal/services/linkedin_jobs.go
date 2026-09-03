@@ -24,7 +24,7 @@ type linkedInClient interface {
 type LinkedInJobs struct {
 	client          linkedInClient
 	requestInterval time.Duration
-	events          repositories.EventRepository
+	events          repositories.EventRecorder
 	logger          *zap.Logger
 }
 
@@ -38,7 +38,7 @@ type LinkedInFetchResult struct {
 
 type linkedInJobSaver func(context.Context, models.Job) error
 
-func NewLinkedInJobs(cfg config.Config, client *linkedin.Client, events repositories.EventRepository, logger *zap.Logger) *LinkedInJobs {
+func NewLinkedInJobs(cfg config.Config, client *linkedin.Client, events repositories.EventRecorder, logger *zap.Logger) *LinkedInJobs {
 	return &LinkedInJobs{
 		client:          client,
 		requestInterval: cfg.Providers.LinkedIn.RequestInterval,

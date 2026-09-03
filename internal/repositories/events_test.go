@@ -38,3 +38,21 @@ func TestEventsFiltersAndPaginates(t *testing.T) {
 	require.Len(t, page.Events, 1)
 	assert.Equal(t, "engineer", page.Events[0].Data["query"])
 }
+
+func TestRecordEventsStoresBatchInSingleCall(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.RecordEvents(context.Background(), []models.Event{
+		{Provider: "linkedin", Type: "linkedin.search.started", Level: "info", Message: "Search started"},
+		{Provider: "linkedin", Type: "linkedin.search.succeeded", Level: "info", Message: "Search succeeded"},
+	}))
+
+	page, err := repository.Events(context.Background(), models.EventSearch{Provider: "linkedin", Limit: 10})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, page.Total)
+}

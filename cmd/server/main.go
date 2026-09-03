@@ -38,6 +38,8 @@ func main() {
 			repositories.NewJobRepository,
 			repositories.NewProviderRunRepository,
 			repositories.NewEventRepository,
+			services.NewEventWriter,
+			services.NewEventRecorder,
 			repositories.NewDiscoverySettingsRepository,
 			repositories.NewUserProfileRepository,
 			repositories.NewJobAnalysisRepository,
@@ -86,25 +88,31 @@ func registerLifecycle(
 	lifecycle fx.Lifecycle,
 	db *sql.DB,
 	logger *zap.Logger,
-	events repositories.EventRepository,
+	eventWriter *services.EventWriter,
 	server *server.Server,
 	sync *services.JobSync,
 	matchWorker *services.JobMatchWorker,
 ) {
 	lifecycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			err := db.Close()
+			_ = logger.Sync()
+			return err
+		},
+	})
+	eventWriter.Register(lifecycle)
+	lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			if err := events.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.started", Level: "info", Message: "Application started"}); err != nil {
+			if err := eventWriter.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.started", Level: "info", Message: "Application started"}); err != nil {
 				logger.Error("record application start event failed", zap.Error(err))
 			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			if eventErr := events.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.stopped", Level: "info", Message: "Application stopped"}); eventErr != nil {
+			if eventErr := eventWriter.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.stopped", Level: "info", Message: "Application stopped"}); eventErr != nil {
 				logger.Error("record application stop event failed", zap.Error(eventErr))
 			}
-			err := db.Close()
-			_ = logger.Sync()
-			return err
+			return nil
 		},
 	})
 	server.Register(lifecycle)

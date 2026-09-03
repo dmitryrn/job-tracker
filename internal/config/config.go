@@ -22,6 +22,7 @@ type Config struct {
 	Providers    ProviderConfig
 	LLM          LLMConfig
 	JobMatch     JobMatchConfig
+	Events       EventConfig
 	OpenRouter   OpenRouterConfig
 }
 
@@ -46,6 +47,12 @@ type LLMTaskConfig struct {
 
 type JobMatchConfig struct {
 	RunInterval time.Duration
+}
+
+type EventConfig struct {
+	QueueSize     int
+	BatchSize     int
+	FlushInterval time.Duration
 }
 
 type OpenRouterConfig struct {
@@ -80,6 +87,7 @@ type fileConfig struct {
 	} `toml:"database"`
 	LLM       fileLLMConfig      `toml:"llm"`
 	JobMatch  fileJobMatchConfig `toml:"job_match"`
+	Events    fileEventConfig    `toml:"events"`
 	Providers struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
 		Jobicy   fileJobicyConfig   `toml:"jobicy"`
@@ -101,6 +109,12 @@ type fileLLMTaskConfig struct {
 
 type fileJobMatchConfig struct {
 	RunInterval string `toml:"run_interval" validate:"notblank,duration"`
+}
+
+type fileEventConfig struct {
+	QueueSize     int    `toml:"queue_size" validate:"gte=1"`
+	BatchSize     int    `toml:"batch_size" validate:"gte=1"`
+	FlushInterval string `toml:"flush_interval" validate:"notblank,duration"`
 }
 
 type fileAdzunaConfig struct {
@@ -181,6 +195,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("parse job_match.run_interval: %w", err)
 	}
+	eventFlushInterval, err := time.ParseDuration(source.Events.FlushInterval)
+	if err != nil {
+		return Config{}, fmt.Errorf("parse events.flush_interval: %w", err)
+	}
 	if jobicyInterval < time.Hour {
 		return Config{}, fmt.Errorf("providers.jobicy.sync_interval must be at least 1h")
 	}
@@ -221,6 +239,7 @@ func Load() (Config, error) {
 			},
 		},
 		JobMatch:   JobMatchConfig{RunInterval: jobMatchRunInterval},
+		Events:     EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: eventFlushInterval},
 		OpenRouter: OpenRouterConfig{APIKey: openRouterAPIKey},
 	}, nil
 }

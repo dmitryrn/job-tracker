@@ -21,8 +21,13 @@ type ProviderRunRepository interface {
 	StartProviderRun(context.Context, string, time.Duration, time.Time) (bool, error)
 }
 
-type EventRepository interface {
+type EventRecorder interface {
 	RecordEvent(context.Context, models.Event) error
+}
+
+type EventRepository interface {
+	EventRecorder
+	RecordEvents(context.Context, []models.Event) error
 	Events(context.Context, models.EventSearch) (models.EventPage, error)
 }
 

@@ -18,6 +18,11 @@ reasoning_effort = "low"
 [job_match]
 run_interval = "2m"
 
+[events]
+queue_size = 1000
+batch_size = 100
+flush_interval = "1s"
+
 [providers.adzuna]
 sync_interval = "6h"
 

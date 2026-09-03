@@ -24,7 +24,7 @@ type JobSync struct {
 	remotive         remotiveFetcher
 	jobs             repositories.JobRepository
 	providerRuns     repositories.ProviderRunRepository
-	events           repositories.EventRepository
+	events           repositories.EventRecorder
 	settings         repositories.DiscoverySettingsRepository
 	adzunaInterval   time.Duration
 	jobicyInterval   time.Duration
@@ -36,7 +36,7 @@ type JobSync struct {
 	mutex            sync.Mutex
 }
 
-func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRepository, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
+func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRecorder, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:           adzunaClient,
 		jobicy:           jobicyClient,

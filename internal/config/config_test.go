@@ -29,6 +29,9 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "profile-matcher-model", cfg.LLM.ProfileMatcher.Model)
 	assert.Equal(t, "medium", cfg.LLM.ProfileMatcher.ReasoningEffort)
 	assert.Equal(t, 2*time.Minute, cfg.JobMatch.RunInterval)
+	assert.Equal(t, 1000, cfg.Events.QueueSize)
+	assert.Equal(t, 100, cfg.Events.BatchSize)
+	assert.Equal(t, time.Second, cfg.Events.FlushInterval)
 }
 
 func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
@@ -99,6 +102,11 @@ reasoning_effort = "medium"
 
 [job_match]
 run_interval = "2m"
+
+[events]
+queue_size = 1000
+batch_size = 100
+flush_interval = "1s"
 
 [providers.adzuna]
 sync_interval = %q

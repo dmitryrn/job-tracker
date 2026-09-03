@@ -12,22 +12,41 @@ import (
 )
 
 func (repository *SQLite) RecordEvent(ctx context.Context, event models.Event) error {
-	data := event.Data
-	if data == nil {
-		data = map[string]any{}
+	return repository.RecordEvents(ctx, []models.Event{event})
+}
+
+func (repository *SQLite) RecordEvents(ctx context.Context, events []models.Event) error {
+	if len(events) == 0 {
+		return nil
 	}
-	encoded, err := json.Marshal(data)
+	transaction, err := repository.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("encode event data: %w", err)
+		return fmt.Errorf("begin event transaction: %w", err)
 	}
-	event.OccurredAt = time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = repository.db.ExecContext(ctx, `
-		INSERT INTO app_events (occurred_at, provider, run_id, type, level, message, data_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		event.OccurredAt, event.Provider, event.RunID, event.Type, event.Level, event.Message, string(encoded),
-	)
-	if err != nil {
-		return fmt.Errorf("record event: %w", err)
+	defer transaction.Rollback()
+
+	for _, event := range events {
+		data := event.Data
+		if data == nil {
+			data = map[string]any{}
+		}
+		encoded, err := json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("encode event data: %w", err)
+		}
+		if event.OccurredAt == "" {
+			event.OccurredAt = time.Now().UTC().Format(time.RFC3339Nano)
+		}
+		if _, err := transaction.ExecContext(ctx, `
+			INSERT INTO app_events (occurred_at, provider, run_id, type, level, message, data_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			event.OccurredAt, event.Provider, event.RunID, event.Type, event.Level, event.Message, string(encoded),
+		); err != nil {
+			return fmt.Errorf("record event: %w", err)
+		}
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit event transaction: %w", err)
 	}
 	return nil
 }
