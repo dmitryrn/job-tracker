@@ -21,7 +21,7 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	for _, table := range []string{
 		"companies", "jobs", "provider_runs", "user_profiles", "job_matches", "job_match_queue", "job_analyses",
 		"resumes", "resume_links", "resume_skills", "resume_competencies", "resume_competency_bullets",
-		"resume_experience", "resume_experience_bullets", "resume_education",
+		"resume_experience", "resume_experience_bullets", "resume_education", "resume_summary_paragraphs",
 	} {
 		var count int
 		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count))
@@ -35,6 +35,37 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	var ftsTables int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))
 	assert.Zero(t, ftsTables)
+}
+
+func TestSummaryParagraphMigrationPreservesExistingParagraphs(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	goose.SetBaseFS(files)
+	require.NoError(t, goose.SetDialect("sqlite3"))
+	require.NoError(t, goose.UpTo(db, "sql", 16))
+	_, err = db.Exec(`
+		INSERT INTO resumes (id, title, base_resume, full_name, headline, location, email, phone, summary, created_at, updated_at)
+		VALUES (1, 'Base resume', 1, 'Ada Lovelace', '', '', '', '', 'First paragraph.' || CHAR(13) || CHAR(10) || CHAR(13) || CHAR(10) || 'Second paragraph.', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`)
+	require.NoError(t, err)
+
+	require.NoError(t, goose.Up(db, "sql"))
+	rows, err := db.Query(`SELECT content FROM resume_summary_paragraphs WHERE resume_id = 1 ORDER BY sort_order`)
+	require.NoError(t, err)
+	defer rows.Close()
+	paragraphs := make([]string, 0)
+	for rows.Next() {
+		var paragraph string
+		require.NoError(t, rows.Scan(&paragraph))
+		paragraphs = append(paragraphs, paragraph)
+	}
+	require.NoError(t, rows.Err())
+	assert.Equal(t, []string{"First paragraph.", "Second paragraph."}, paragraphs)
+
+	var summaryColumns int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('resumes') WHERE name = 'summary'`).Scan(&summaryColumns))
+	assert.Zero(t, summaryColumns)
 }
 
 func TestMigrationsCanBeAppliedAndRolledBackRepeatedly(t *testing.T) {

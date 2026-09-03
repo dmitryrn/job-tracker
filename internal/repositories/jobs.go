@@ -345,10 +345,10 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 	var resume models.Resume
 	err := repository.db.QueryRowContext(ctx, `
-		SELECT id, full_name, headline, location, email, phone, summary,
+		SELECT id, full_name, headline, location, email, phone,
 			CASE WHEN photo_data IS NULL THEN 0 ELSE 1 END, updated_at
 		FROM resumes WHERE base_resume = 1`,
-	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Location, &resume.Email, &resume.Phone, &resume.Summary, &resume.HasPhoto, &resume.UpdatedAt)
+	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Location, &resume.Email, &resume.Phone, &resume.HasPhoto, &resume.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -356,6 +356,9 @@ func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 		return nil, fmt.Errorf("get base resume: %w", err)
 	}
 
+	if resume.SummaryParagraphs, err = readResumeSummaryParagraphs(ctx, repository.db, resume.ID); err != nil {
+		return nil, err
+	}
 	if resume.Links, err = readResumeLinks(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
@@ -417,8 +420,8 @@ func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) 
 	resume.ID = 1
 	resume.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	if _, err := transaction.ExecContext(ctx, `
-		INSERT INTO resumes (id, title, base_resume, full_name, headline, location, email, phone, summary, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO resumes (id, title, base_resume, full_name, headline, location, email, phone, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title,
 			base_resume = excluded.base_resume,
@@ -427,9 +430,8 @@ func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) 
 			location = excluded.location,
 			email = excluded.email,
 			phone = excluded.phone,
-			summary = excluded.summary,
 			updated_at = excluded.updated_at`,
-		resume.ID, "Base resume", true, resume.FullName, resume.Headline, resume.Location, resume.Email, resume.Phone, resume.Summary, resume.UpdatedAt, resume.UpdatedAt,
+		resume.ID, "Base resume", true, resume.FullName, resume.Headline, resume.Location, resume.Email, resume.Phone, resume.UpdatedAt, resume.UpdatedAt,
 	); err != nil {
 		return models.Resume{}, fmt.Errorf("save base resume: %w", err)
 	}
@@ -450,6 +452,7 @@ func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) 
 
 func deleteResumeSections(ctx context.Context, transaction *sql.Tx, resumeID int64) error {
 	statements := []string{
+		`DELETE FROM resume_summary_paragraphs WHERE resume_id = ?`,
 		`DELETE FROM resume_competency_bullets WHERE competency_id IN (SELECT id FROM resume_competencies WHERE resume_id = ?)`,
 		`DELETE FROM resume_experience_bullets WHERE experience_id IN (SELECT id FROM resume_experience WHERE resume_id = ?)`,
 		`DELETE FROM resume_competencies WHERE resume_id = ?`,
@@ -467,6 +470,11 @@ func deleteResumeSections(ctx context.Context, transaction *sql.Tx, resumeID int
 }
 
 func insertResumeSections(ctx context.Context, transaction *sql.Tx, resume models.Resume) error {
+	for index, paragraph := range resume.SummaryParagraphs {
+		if _, err := transaction.ExecContext(ctx, `INSERT INTO resume_summary_paragraphs (resume_id, content, sort_order) VALUES (?, ?, ?)`, resume.ID, paragraph, index); err != nil {
+			return fmt.Errorf("save base resume summary paragraph: %w", err)
+		}
+	}
 	for index, link := range resume.Links {
 		if _, err := transaction.ExecContext(ctx, `INSERT INTO resume_links (resume_id, label, url, sort_order) VALUES (?, ?, ?, ?)`, resume.ID, link.Label, link.URL, index); err != nil {
 			return fmt.Errorf("save base resume link: %w", err)
@@ -521,6 +529,26 @@ func insertResumeSections(ctx context.Context, transaction *sql.Tx, resume model
 		}
 	}
 	return nil
+}
+
+func readResumeSummaryParagraphs(ctx context.Context, database *sql.DB, resumeID int64) ([]string, error) {
+	rows, err := database.QueryContext(ctx, `SELECT content FROM resume_summary_paragraphs WHERE resume_id = ? ORDER BY sort_order, id`, resumeID)
+	if err != nil {
+		return nil, fmt.Errorf("get base resume summary paragraphs: %w", err)
+	}
+	defer rows.Close()
+	paragraphs := make([]string, 0)
+	for rows.Next() {
+		var paragraph string
+		if err := rows.Scan(&paragraph); err != nil {
+			return nil, fmt.Errorf("scan base resume summary paragraph: %w", err)
+		}
+		paragraphs = append(paragraphs, paragraph)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate base resume summary paragraphs: %w", err)
+	}
+	return paragraphs, nil
 }
 
 func readResumeLinks(ctx context.Context, database *sql.DB, resumeID int64) ([]models.ResumeLink, error) {

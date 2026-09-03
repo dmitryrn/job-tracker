@@ -329,7 +329,7 @@ func TestResumeAPI(t *testing.T) {
 	assert.JSONEq(t, `{"resume":null}`, response.Body.String())
 
 	response = requestWithBody(handler, http.MethodPut, "/api/resume", `{
-		"fullName":" Ada Lovelace ","headline":" Backend engineer ","location":" Berlin ","email":" ada@example.com ","phone":" +49 123 ","summary":" Builds systems. ",
+		"fullName":" Ada Lovelace ","headline":" Backend engineer ","location":" Berlin ","email":" ada@example.com ","phone":" +49 123 ","summaryParagraphs":[" Builds systems. ",""," Delivers reliable software. "],
 		"links":[{"label":" GitHub ","url":" https://github.com/ada "},{"label":"","url":""}],
 		"skills":[{"name":" Go "},{"name":""}],
 		"competencies":[{"title":" Backend systems ","bullets":[" Built APIs ",""]}],
@@ -345,6 +345,7 @@ func TestResumeAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, int64(1), result.Resume.ID)
 	assert.Equal(t, "Ada Lovelace", result.Resume.FullName)
+	assert.Equal(t, []string{"Builds systems.", "Delivers reliable software."}, result.Resume.SummaryParagraphs)
 	require.Len(t, result.Resume.Skills, 1)
 	assert.Equal(t, "Go", result.Resume.Skills[0].Name)
 	require.Len(t, result.Resume.Links, 1)

@@ -35,20 +35,20 @@ type UserProfileEducation struct {
 }
 
 type Resume struct {
-	ID           int64              `json:"id"`
-	FullName     string             `json:"fullName"`
-	Headline     string             `json:"headline"`
-	Location     string             `json:"location"`
-	Email        string             `json:"email"`
-	Phone        string             `json:"phone"`
-	Summary      string             `json:"summary"`
-	Links        []ResumeLink       `json:"links"`
-	Skills       []ResumeSkill      `json:"skills"`
-	Competencies []ResumeCompetency `json:"competencies"`
-	Experience   []ResumeExperience `json:"experience"`
-	Education    []ResumeEducation  `json:"education"`
-	HasPhoto     bool               `json:"hasPhoto"`
-	UpdatedAt    string             `json:"updatedAt"`
+	ID                int64              `json:"id"`
+	FullName          string             `json:"fullName"`
+	Headline          string             `json:"headline"`
+	Location          string             `json:"location"`
+	Email             string             `json:"email"`
+	Phone             string             `json:"phone"`
+	SummaryParagraphs []string           `json:"summaryParagraphs"`
+	Links             []ResumeLink       `json:"links"`
+	Skills            []ResumeSkill      `json:"skills"`
+	Competencies      []ResumeCompetency `json:"competencies"`
+	Experience        []ResumeExperience `json:"experience"`
+	Education         []ResumeEducation  `json:"education"`
+	HasPhoto          bool               `json:"hasPhoto"`
+	UpdatedAt         string             `json:"updatedAt"`
 }
 
 type ResumePhoto struct {

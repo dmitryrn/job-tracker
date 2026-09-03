@@ -35,7 +35,7 @@ func (service *ResumeService) Save(ctx context.Context, resume models.Resume) (m
 	resume.Location = strings.TrimSpace(resume.Location)
 	resume.Email = strings.TrimSpace(resume.Email)
 	resume.Phone = strings.TrimSpace(resume.Phone)
-	resume.Summary = strings.TrimSpace(resume.Summary)
+	resume.SummaryParagraphs = cleanResumeParagraphs(resume.SummaryParagraphs)
 	resume.Links = cleanResumeLinks(resume.Links)
 	resume.Skills = cleanResumeSkills(resume.Skills)
 	resume.Competencies = cleanResumeCompetencies(resume.Competencies)
@@ -78,6 +78,16 @@ func cleanResumeLinks(links []models.ResumeLink) []models.ResumeLink {
 		link.URL = strings.TrimSpace(link.URL)
 		if link.Label != "" && link.URL != "" {
 			cleaned = append(cleaned, link)
+		}
+	}
+	return cleaned
+}
+
+func cleanResumeParagraphs(paragraphs []string) []string {
+	cleaned := make([]string, 0, len(paragraphs))
+	for _, paragraph := range paragraphs {
+		if paragraph = strings.TrimSpace(paragraph); paragraph != "" {
+			cleaned = append(cleaned, paragraph)
 		}
 	}
 	return cleaned

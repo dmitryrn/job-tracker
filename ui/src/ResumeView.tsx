@@ -8,7 +8,7 @@ const emptyResume: Resume = {
   location: "",
   email: "",
   phone: "",
-  summary: "",
+  summaryParagraphs: [],
   links: [],
   skills: [],
   competencies: [],
@@ -64,7 +64,7 @@ export default function ResumeView() {
     }
   }
 
-  function updateHeader(field: "fullName" | "headline" | "location" | "email" | "phone" | "summary", value: string) {
+  function updateHeader(field: "fullName" | "headline" | "location" | "email" | "phone", value: string) {
     setResume((current) => ({ ...current, [field]: value }));
   }
 
@@ -107,7 +107,10 @@ export default function ResumeView() {
               <label>Email<input type="email" value={resume.email} onChange={(event) => updateHeader("email", event.target.value)} /></label>
               <label>Phone<input type="tel" value={resume.phone} onChange={(event) => updateHeader("phone", event.target.value)} /></label>
             </div>
-             <label className="profile-summary">Professional summary<textarea value={resume.summary} onChange={(event) => updateHeader("summary", event.target.value)} rows={6} placeholder="A concise overview of your experience, strengths, and target role." /></label>
+              <div className="resume-bullets">
+                <div className="resume-bullet-heading"><div><strong>Professional summary</strong><p>Use separate paragraphs for distinct parts of your introduction.</p></div><button type="button" className="secondary-action" onClick={() => setResume((current) => ({ ...current, summaryParagraphs: [...current.summaryParagraphs, ""] }))}>Add paragraph</button></div>
+                {resume.summaryParagraphs.map((paragraph, index) => <div className="resume-bullet-row" key={index}><textarea aria-label={`Professional summary paragraph ${index + 1}`} value={paragraph} onChange={(event) => setResume((current) => ({ ...current, summaryParagraphs: current.summaryParagraphs.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} rows={4} placeholder="Describe your experience, strengths, or target role." /><RemoveButton label="Remove" onClick={() => setResume((current) => ({ ...current, summaryParagraphs: current.summaryParagraphs.filter((_, itemIndex) => itemIndex !== index) }))} /></div>)}
+              </div>
              <div className="resume-photo-upload">
                <div><strong>Resume photo</strong><p>Optional JPEG or PNG, up to 5 MB. Save the resume before uploading.</p></div>
                {resume.hasPhoto && <img src={`${resumePhotoURL()}?updatedAt=${encodeURIComponent(resume.updatedAt)}`} alt="Resume" />}

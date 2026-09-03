@@ -97,7 +97,7 @@ export type Resume = {
   location: string;
   email: string;
   phone: string;
-  summary: string;
+  summaryParagraphs: string[];
   links: ResumeLink[];
   skills: ResumeSkill[];
   competencies: ResumeCompetency[];
