@@ -94,10 +94,10 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
 <head>
 <meta charset="utf-8">
 <style>
-  @page { size: A4; margin: 0; }
+  @page { size: A4; margin: 15mm 16mm 18mm; }
   * { box-sizing: border-box; }
-  html, body { background: #050505; color: #f8f8f6; font-family: "Noto Sans", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; margin: 0; }
-  main { min-height: 297mm; padding: 15mm 16mm 18mm; }
+  html, body { background: #fff; color: #171717; font-family: "Noto Sans", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; margin: 0; }
+  main { min-height: 264mm; }
   h1, h2, h3, p { margin-top: 0; }
   h1, h2, h3, strong { font-weight: 800; }
   h1 { font-size: 34pt; letter-spacing: -.04em; line-height: 1; margin-bottom: 7mm; }
@@ -109,7 +109,7 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
   .contact { font-size: 12pt; font-weight: 800; margin-bottom: 9mm; }
   .contact span + span::before, .skills span + span::before { content: " | "; padding: 0 .15em; }
   .summary { font-size: 12pt; line-height: 1.42; margin-bottom: 7mm; white-space: pre-line; }
-  .links { color: #d7d7d3; font-size: 9.5pt; margin-bottom: 7mm; }
+  .links { color: #555; font-size: 9.5pt; margin-bottom: 7mm; }
   .links a { color: inherit; text-decoration: none; }
   .links span + span::before { content: " | "; padding: 0 .15em; }
   .skills { font-size: 12pt; font-weight: 800; line-height: 1.35; }
@@ -117,11 +117,11 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
   .section + .section { margin-top: 7mm; }
   ul { margin: 0; padding-left: 8mm; }
   li { margin: 0 0 2.4mm; padding-left: 1.8mm; }
-  .role { break-inside: avoid; margin: 0 0 9mm; }
+  .role { margin: 0 0 9mm; }
   .role-heading, .education-heading { align-items: baseline; display: flex; gap: 4mm; justify-content: space-between; }
   .role-heading h3, .education-heading h3 { margin-bottom: 3mm; }
   .dates { flex: 0 0 auto; font-size: 11pt; font-weight: 800; text-align: right; }
-  .location, .stack { color: #d7d7d3; margin: 0 0 3mm; }
+  .location, .stack { color: #555; margin: 0 0 3mm; }
   .stack { font-size: 10.5pt; }
   .education { break-inside: avoid; margin-bottom: 7mm; }
   .education p { margin-bottom: 2mm; }
