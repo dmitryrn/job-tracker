@@ -43,8 +43,8 @@ func TestAnalyzeJobFixtures(t *testing.T) {
 	resultsDirectory := filepath.Join(root, "jobs", "results")
 	require.NoError(t, os.MkdirAll(resultsDirectory, 0o755))
 
-	for _, model := range configuredJobAnalyzerModels(t, configuration.OpenCode.JobAnalysis.Model) {
-		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openai.NewClient(configuration.OpenCode.APIKey, configuration.OpenCode.BaseURL), model: model}, model, configuration.OpenCode.JobAnalysis.ReasoningEffort)
+	for _, model := range configuredJobAnalyzerModels(t, configuration.JobAnalysis.Model) {
+		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openai.NewClient(configuration.OpenCode.APIKey, configuration.OpenCode.BaseURL), model: model}, model, configuration.JobAnalysis.ReasoningEffort)
 		for _, fixture := range fixtures {
 			t.Run(model+"/"+filepath.Base(fixture), func(t *testing.T) {
 				job := loadJobFixture(t, filepath.Base(fixture))

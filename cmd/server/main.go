@@ -36,7 +36,7 @@ func main() {
 			fx.Annotate(newOpenCodeClient, fx.ResultTags(`name:"opencode"`)),
 			fx.Annotate(newOpenAIClient, fx.ResultTags(`name:"openai"`)),
 			remotive.NewClient,
-			fx.Annotate(newJobCompletionClient, fx.ParamTags(`name:"opencode"`)),
+			fx.Annotate(newCompletionClients, fx.ParamTags(`name:"opencode"`, `name:"openai"`)),
 			repositories.NewSQLite,
 			repositories.NewJobRepository,
 			repositories.NewProviderRunRepository,
@@ -65,7 +65,7 @@ func main() {
 			newJobMatchWorker,
 			services.NewJobMatches,
 			services.NewJobMatchRequests,
-			fx.Annotate(newJobMatchChat, fx.ParamTags("", "", "", "", "", `name:"openai"`, "")),
+			newJobMatchChat,
 			server.New,
 		),
 		fx.Invoke(registerLifecycle),
@@ -80,24 +80,52 @@ func newOpenAIClient(cfg config.Config) *openai.Client {
 	return openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.BaseURL)
 }
 
-func newJobCompletionClient(client *openai.Client) services.JobCompletionClient {
-	return client
+type completionClients struct {
+	openCode *openai.Client
+	openAI   *openai.Client
 }
 
-func newJobAnalyzer(client services.JobCompletionClient, cfg config.Config) *services.JobAnalyzer {
-	return services.NewJobAnalyzer(client, cfg.OpenCode.JobAnalysis.Model, cfg.OpenCode.JobAnalysis.ReasoningEffort)
+func newCompletionClients(openCode, openAI *openai.Client) completionClients {
+	return completionClients{openCode: openCode, openAI: openAI}
+}
+
+func (clients completionClients) forProvider(provider string) (services.JobCompletionClient, error) {
+	switch provider {
+	case "opencode":
+		return clients.openCode, nil
+	case "openai":
+		return clients.openAI, nil
+	default:
+		return nil, fmt.Errorf("unsupported completion provider %q", provider)
+	}
+}
+
+func newJobAnalyzer(clients completionClients, cfg config.Config) (*services.JobAnalyzer, error) {
+	client, err := clients.forProvider(cfg.JobAnalysis.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("select job analysis client: %w", err)
+	}
+	return services.NewJobAnalyzer(client, cfg.JobAnalysis.Model, cfg.JobAnalysis.ReasoningEffort), nil
 }
 
 func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisService {
 	return analyzer
 }
 
-func newProfileJobMatcher(client services.JobCompletionClient, cfg config.Config) services.ProfileJobMatcher {
-	return services.NewLLMProfileJobMatcher(client, cfg.OpenCode.ProfileMatcher.Model, cfg.OpenCode.ProfileMatcher.ReasoningEffort)
+func newProfileJobMatcher(clients completionClients, cfg config.Config) (services.ProfileJobMatcher, error) {
+	client, err := clients.forProvider(cfg.ProfileMatcher.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("select profile matcher client: %w", err)
+	}
+	return services.NewLLMProfileJobMatcher(client, cfg.ProfileMatcher.Model, cfg.ProfileMatcher.ReasoningEffort), nil
 }
 
-func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, client *openai.Client, cfg config.Config) *services.JobMatchChat {
-	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, client, cfg.OpenAI.JobChat.Model, cfg.OpenAI.JobChat.ReasoningEffort)
+func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, clients completionClients, cfg config.Config) (*services.JobMatchChat, error) {
+	client, err := clients.forProvider(cfg.JobChat.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("select job chat client: %w", err)
+	}
+	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort), nil
 }
 
 func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {

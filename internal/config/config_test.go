@@ -24,14 +24,17 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, 30*time.Second, cfg.Providers.LinkedIn.RequestInterval)
 	assert.Equal(t, "https://opencode.example.com/v1/chat/completions", cfg.OpenCode.BaseURL)
 	assert.Equal(t, "test-go-key", cfg.OpenCode.APIKey)
-	assert.Equal(t, "job-analysis-model", cfg.OpenCode.JobAnalysis.Model)
-	assert.Equal(t, "high", cfg.OpenCode.JobAnalysis.ReasoningEffort)
-	assert.Equal(t, "profile-matcher-model", cfg.OpenCode.ProfileMatcher.Model)
-	assert.Equal(t, "medium", cfg.OpenCode.ProfileMatcher.ReasoningEffort)
+	assert.Equal(t, "opencode", cfg.JobAnalysis.Provider)
+	assert.Equal(t, "job-analysis-model", cfg.JobAnalysis.Model)
+	assert.Equal(t, "high", cfg.JobAnalysis.ReasoningEffort)
+	assert.Equal(t, "opencode", cfg.ProfileMatcher.Provider)
+	assert.Equal(t, "profile-matcher-model", cfg.ProfileMatcher.Model)
+	assert.Equal(t, "medium", cfg.ProfileMatcher.ReasoningEffort)
 	assert.Equal(t, "http://127.0.0.1:8080/v1/chat/completions", cfg.OpenAI.BaseURL)
 	assert.Equal(t, "test-codex-proxy-key", cfg.OpenAI.APIKey)
-	assert.Equal(t, "job-chat-model", cfg.OpenAI.JobChat.Model)
-	assert.Equal(t, "high", cfg.OpenAI.JobChat.ReasoningEffort)
+	assert.Equal(t, "openai", cfg.JobChat.Provider)
+	assert.Equal(t, "job-chat-model", cfg.JobChat.Model)
+	assert.Equal(t, "high", cfg.JobChat.ReasoningEffort)
 	assert.Equal(t, 2*time.Minute, cfg.JobMatch.RunInterval)
 	assert.Equal(t, 1000, cfg.Events.QueueSize)
 	assert.Equal(t, 100, cfg.Events.BatchSize)
@@ -68,6 +71,10 @@ func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 			name:    "server section",
 			content: strings.Replace(config, "[server]\nhttp_address = \":8080\"\n\n", "", 1),
 		},
+		{
+			name:    "task provider",
+			content: strings.Replace(config, "provider = \"opencode\"", "provider = \"unsupported\"", 1),
+		},
 	}
 
 	for _, test := range tests {
@@ -99,15 +106,18 @@ base_url = "https://opencode.example.com/v1/chat/completions"
 [openai]
 base_url = "http://127.0.0.1:8080/v1/chat/completions"
 
-[opencode.job_analysis]
+[job_analysis]
+provider = "opencode"
 model = "job-analysis-model"
 reasoning_effort = "high"
 
-[opencode.profile_matcher]
+[profile_matcher]
+provider = "opencode"
 model = "profile-matcher-model"
 reasoning_effort = "medium"
 
-[openai.job_chat]
+[job_chat]
+provider = "openai"
 model = "job-chat-model"
 reasoning_effort = "high"
 

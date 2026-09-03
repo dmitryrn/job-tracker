@@ -17,14 +17,17 @@ const (
 )
 
 type Config struct {
-	HTTPAddress  string
-	DatabasePath string
-	Providers    ProviderConfig
-	OpenCode     OpenCodeConfig
-	OpenAI       OpenAIConfig
-	JobMatch     JobMatchConfig
-	Events       EventConfig
-	OpenRouter   OpenRouterConfig
+	HTTPAddress    string
+	DatabasePath   string
+	Providers      ProviderConfig
+	OpenCode       OpenCodeConfig
+	OpenAI         OpenAIConfig
+	JobAnalysis    TaskConfig
+	ProfileMatcher TaskConfig
+	JobChat        TaskConfig
+	JobMatch       JobMatchConfig
+	Events         EventConfig
+	OpenRouter     OpenRouterConfig
 }
 
 type ProviderConfig struct {
@@ -35,19 +38,17 @@ type ProviderConfig struct {
 }
 
 type OpenCodeConfig struct {
-	BaseURL        string
-	APIKey         string
-	JobAnalysis    TaskConfig
-	ProfileMatcher TaskConfig
+	BaseURL string
+	APIKey  string
 }
 
 type OpenAIConfig struct {
 	BaseURL string
 	APIKey  string
-	JobChat TaskConfig
 }
 
 type TaskConfig struct {
+	Provider        string
 	Model           string
 	ReasoningEffort string
 }
@@ -92,11 +93,14 @@ type fileConfig struct {
 	Database struct {
 		Path string `toml:"path" validate:"notblank"`
 	} `toml:"database"`
-	OpenCode  fileOpenCodeConfig `toml:"opencode"`
-	OpenAI    fileOpenAIConfig   `toml:"openai"`
-	JobMatch  fileJobMatchConfig `toml:"job_match"`
-	Events    fileEventConfig    `toml:"events"`
-	Providers struct {
+	OpenCode       fileOpenCodeConfig `toml:"opencode"`
+	OpenAI         fileOpenAIConfig   `toml:"openai"`
+	JobAnalysis    fileTaskConfig     `toml:"job_analysis"`
+	ProfileMatcher fileTaskConfig     `toml:"profile_matcher"`
+	JobChat        fileTaskConfig     `toml:"job_chat"`
+	JobMatch       fileJobMatchConfig `toml:"job_match"`
+	Events         fileEventConfig    `toml:"events"`
+	Providers      struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
 		Jobicy   fileJobicyConfig   `toml:"jobicy"`
 		LinkedIn fileLinkedInConfig `toml:"linkedin"`
@@ -105,17 +109,15 @@ type fileConfig struct {
 }
 
 type fileOpenCodeConfig struct {
-	BaseURL        string         `toml:"base_url" validate:"notblank,url"`
-	JobAnalysis    fileTaskConfig `toml:"job_analysis"`
-	ProfileMatcher fileTaskConfig `toml:"profile_matcher"`
+	BaseURL string `toml:"base_url" validate:"notblank,url"`
 }
 
 type fileOpenAIConfig struct {
-	BaseURL string         `toml:"base_url" validate:"notblank,url"`
-	JobChat fileTaskConfig `toml:"job_chat"`
+	BaseURL string `toml:"base_url" validate:"notblank,url"`
 }
 
 type fileTaskConfig struct {
+	Provider        string `toml:"provider" validate:"oneof=opencode openai"`
 	Model           string `toml:"model" validate:"notblank"`
 	ReasoningEffort string `toml:"reasoning_effort" validate:"oneof=low medium high"`
 }
@@ -246,26 +248,17 @@ func Load() (Config, error) {
 		OpenCode: OpenCodeConfig{
 			BaseURL: source.OpenCode.BaseURL,
 			APIKey:  llmAPIKey,
-			JobAnalysis: TaskConfig{
-				Model:           source.OpenCode.JobAnalysis.Model,
-				ReasoningEffort: source.OpenCode.JobAnalysis.ReasoningEffort,
-			},
-			ProfileMatcher: TaskConfig{
-				Model:           source.OpenCode.ProfileMatcher.Model,
-				ReasoningEffort: source.OpenCode.ProfileMatcher.ReasoningEffort,
-			},
 		},
 		OpenAI: OpenAIConfig{
 			BaseURL: source.OpenAI.BaseURL,
 			APIKey:  codexProxyAPIKey,
-			JobChat: TaskConfig{
-				Model:           source.OpenAI.JobChat.Model,
-				ReasoningEffort: source.OpenAI.JobChat.ReasoningEffort,
-			},
 		},
-		JobMatch:   JobMatchConfig{RunInterval: jobMatchRunInterval},
-		Events:     EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: eventFlushInterval},
-		OpenRouter: OpenRouterConfig{APIKey: openRouterAPIKey},
+		JobAnalysis:    TaskConfig{Provider: source.JobAnalysis.Provider, Model: source.JobAnalysis.Model, ReasoningEffort: source.JobAnalysis.ReasoningEffort},
+		ProfileMatcher: TaskConfig{Provider: source.ProfileMatcher.Provider, Model: source.ProfileMatcher.Model, ReasoningEffort: source.ProfileMatcher.ReasoningEffort},
+		JobChat:        TaskConfig{Provider: source.JobChat.Provider, Model: source.JobChat.Model, ReasoningEffort: source.JobChat.ReasoningEffort},
+		JobMatch:       JobMatchConfig{RunInterval: jobMatchRunInterval},
+		Events:         EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: eventFlushInterval},
+		OpenRouter:     OpenRouterConfig{APIKey: openRouterAPIKey},
 	}, nil
 }
 
