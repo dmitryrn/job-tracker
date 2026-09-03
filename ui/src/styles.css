@@ -16,12 +16,18 @@ button { cursor: pointer; }
 .app-nav { display: flex; flex-wrap: wrap; gap: 6px; }
 .app-nav-link { background: transparent; border: 1px solid transparent; border-radius: 4px; color: #9eafc7; font-size: 13px; padding: 8px 12px; }
 .app-nav-link:hover, .app-nav-link.active { background: #1f314a; border-color: #38516e; color: #fff; }
-.sidebar { background: #101a2b; border-right: 1px solid #2e4059; padding: 26px 16px; }
+.sidebar { background: #101a2b; border-right: 1px solid #2e4059; display: flex; flex-direction: column; min-height: 0; padding: 26px 16px; }
 .eyebrow, .limit { color: #9eafc7; }
 .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; margin: 0 0 9px; text-transform: uppercase; }
+.table-search { color: #9eafc7; display: grid; font-size: 11px; font-weight: 700; gap: 6px; letter-spacing: .04em; margin-bottom: 14px; text-transform: uppercase; }
+.table-search input { background: #17263b; border: 1px solid #38516e; border-radius: 4px; color: #eaf0fa; font-size: 13px; font-weight: 400; letter-spacing: normal; min-width: 0; padding: 9px 10px; text-transform: none; width: 100%; }
+.table-search input::placeholder { color: #7f91a9; }
+.table-search input:focus { border-color: #e5ac4c; outline: 2px solid rgb(229 172 76 / 22%); outline-offset: 1px; }
+.table-list { display: grid; gap: 2px; min-height: 0; overflow-y: auto; }
 .table-link { background: transparent; border: 0; border-radius: 6px; color: #d5dfed; display: flex; justify-content: space-between; margin: 2px 0; padding: 9px 10px; text-align: left; width: 100%; }
 .table-link:hover, .table-link.active { background: #1f314a; color: #fff; }
 .table-link.active { box-shadow: inset 3px 0 #e5ac4c; }
+.table-search-empty { color: #9eafc7; font-size: 13px; margin: 4px 10px; }
 .workspace { background: #f6f4ef; color: #1a2638; padding: 34px clamp(18px, 4vw, 58px); }
 .browse-page { margin: 0 auto; max-width: 1180px; }
 .browse-header { align-items: end; gap: 28px; }
@@ -305,8 +311,7 @@ tr:hover td { background: #fffbed; }
   .app-header { align-items: start; flex-direction: column; gap: 16px; padding: 18px; }
   .app-nav { gap: 2px; }
   .app-nav-link { font-size: 12px; padding: 6px 7px; }
-  .sidebar nav { display: flex; gap: 6px; overflow-x: auto; }
-  .table-link { flex: 0 0 auto; width: auto; }
+  .table-list { max-height: 260px; }
   .workspace { padding: 25px 16px; }
   header { align-items: start; flex-direction: column; gap: 12px; }
   .limit { text-align: left; }

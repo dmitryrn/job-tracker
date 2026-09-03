@@ -81,6 +81,7 @@ function formattedValue(value: unknown) {
 export default function App() {
   const [database, setDatabase] = useState<Database>();
   const [tables, setTables] = useState<Table[]>([]);
+  const [tableSearch, setTableSearch] = useState("");
   const [selectedTable, setSelectedTable] = useState<Table>();
   const [rows, setRows] = useState<Rows>({ columns: [], values: [] });
   const [filter, setFilter] = useState("");
@@ -224,6 +225,8 @@ export default function App() {
     );
   }
 
+  const visibleTables = tables.filter((table) => table.name.toLowerCase().includes(tableSearch.trim().toLowerCase()));
+
   if (route.view === "explorer" && !loading && (!database || error && !selectedTable)) {
     return <main className="state error">{error || "The database could not be opened."}</main>;
   }
@@ -244,9 +247,19 @@ export default function App() {
       </header>
       {route.view === "explorer" && database && (
         <aside className="sidebar">
-        <p className="eyebrow">Schema</p>
-        <nav aria-label="Database tables">
-          {tables.map((table) => (
+          <p className="eyebrow">Schema</p>
+          <label className="table-search" htmlFor="table-search">
+            <span>Search tables</span>
+            <input
+              id="table-search"
+              type="search"
+              value={tableSearch}
+              onChange={(event) => setTableSearch(event.target.value)}
+              placeholder="Table name"
+            />
+          </label>
+          <nav className="table-list" aria-label="Database tables">
+            {visibleTables.map((table) => (
             <button
               className={table.name === selectedTable?.name ? "table-link active" : "table-link"}
               key={table.name}
@@ -255,7 +268,8 @@ export default function App() {
               <span>{table.name}</span>
             </button>
           ))}
-        </nav>
+          </nav>
+          {visibleTables.length === 0 && <p className="table-search-empty">No tables match.</p>}
         </aside>
       )}
 
