@@ -120,10 +120,9 @@ function LinksSection({ resume, setResume }: ResumeSectionProps) {
 
 function SkillsSection({ resume, setResume }: ResumeSectionProps) {
   return <section className="profile-section">
-    <SectionHeading title="Key skills" description="These render as a compact, ATS-readable skills line." action="Add skill" onAdd={() => setResume((current) => ({ ...current, skills: [...current.skills, { name: "", level: "" }] }))} />
+    <SectionHeading title="Key competences" description="These render as a compact, ATS-readable skills line." action="Add competence" onAdd={() => setResume((current) => ({ ...current, skills: [...current.skills, { name: "" }] }))} />
     {resume.skills.length === 0 ? <Empty message="No skills yet." /> : <div className="resume-skill-editor">{resume.skills.map((skill, index) => <div className="resume-skill-row" key={index}>
       <label>Skill<input value={skill.name} onChange={(event) => setResume((current) => ({ ...current, skills: current.skills.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) }))} placeholder="Go" /></label>
-      <label>Level or context<input value={skill.level} onChange={(event) => setResume((current) => ({ ...current, skills: current.skills.map((item, itemIndex) => itemIndex === index ? { ...item, level: event.target.value } : item) }))} placeholder="C1, 5 years" /></label>
       <RemoveButton label="Remove" onClick={() => setResume((current) => ({ ...current, skills: current.skills.filter((_, itemIndex) => itemIndex !== index) }))} />
     </div>)}</div>}
   </section>;

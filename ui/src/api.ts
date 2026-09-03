@@ -62,7 +62,6 @@ export type ResumeLink = {
 
 export type ResumeSkill = {
   name: string;
-  level: string;
 };
 
 export type ResumeCompetency = {

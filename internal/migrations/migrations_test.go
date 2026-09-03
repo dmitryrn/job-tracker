@@ -28,6 +28,10 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 		assert.Equal(t, 1, count, "table %s was not created", table)
 	}
 
+	var levelColumns int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('resume_skills') WHERE name = 'level'`).Scan(&levelColumns))
+	assert.Zero(t, levelColumns)
+
 	var ftsTables int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))
 	assert.Zero(t, ftsTables)

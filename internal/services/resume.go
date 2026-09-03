@@ -51,7 +51,6 @@ func cleanResumeSkills(skills []models.ResumeSkill) []models.ResumeSkill {
 	cleaned := make([]models.ResumeSkill, 0, len(skills))
 	for _, skill := range skills {
 		skill.Name = strings.TrimSpace(skill.Name)
-		skill.Level = strings.TrimSpace(skill.Level)
 		if skill.Name != "" {
 			cleaned = append(cleaned, skill)
 		}

@@ -327,12 +327,13 @@ func TestResumeAPI(t *testing.T) {
 	response = requestWithBody(handler, http.MethodPut, "/api/resume", `{
 		"fullName":" Ada Lovelace ","headline":" Backend engineer ","location":" Berlin ","email":" ada@example.com ","phone":" +49 123 ","summary":" Builds systems. ",
 		"links":[{"label":" GitHub ","url":" https://github.com/ada "},{"label":"","url":""}],
-		"skills":[{"name":" Go ","level":" Strong "},{"name":"","level":""}],
+		"skills":[{"name":" Go "},{"name":""}],
 		"competencies":[{"title":" Backend systems ","bullets":[" Built APIs ",""]}],
 		"experience":[{"company":" Acme ","title":" Engineer ","location":" Berlin ","startDate":"2023-01","endDate":"","isCurrent":true,"stack":" Go, PostgreSQL ","bullets":[" Shipped a service ",""]}],
 		"education":[{"institution":" University ","location":" Berlin ","degree":" MSc ","fieldOfStudy":" Computer science ","startDate":"2019","endDate":"2021","details":" Distributed systems "},{"institution":"","location":"","degree":"","fieldOfStudy":"","startDate":"","endDate":"","details":""}]
 	}`)
 	require.Equal(t, http.StatusOK, response.Code)
+	assert.NotContains(t, response.Body.String(), `"level"`)
 
 	var result struct {
 		Resume models.Resume `json:"resume"`
@@ -340,6 +341,8 @@ func TestResumeAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, int64(1), result.Resume.ID)
 	assert.Equal(t, "Ada Lovelace", result.Resume.FullName)
+	require.Len(t, result.Resume.Skills, 1)
+	assert.Equal(t, "Go", result.Resume.Skills[0].Name)
 	require.Len(t, result.Resume.Links, 1)
 	assert.Equal(t, "GitHub", result.Resume.Links[0].Label)
 	require.Len(t, result.Resume.Competencies, 1)

@@ -436,7 +436,7 @@ func insertResumeSections(ctx context.Context, transaction *sql.Tx, resume model
 		}
 	}
 	for index, skill := range resume.Skills {
-		if _, err := transaction.ExecContext(ctx, `INSERT INTO resume_skills (resume_id, name, level, sort_order) VALUES (?, ?, ?, ?)`, resume.ID, skill.Name, skill.Level, index); err != nil {
+		if _, err := transaction.ExecContext(ctx, `INSERT INTO resume_skills (resume_id, name, sort_order) VALUES (?, ?, ?)`, resume.ID, skill.Name, index); err != nil {
 			return fmt.Errorf("save base resume skill: %w", err)
 		}
 	}
@@ -504,7 +504,7 @@ func readResumeLinks(ctx context.Context, database *sql.DB, resumeID int64) ([]m
 }
 
 func readResumeSkills(ctx context.Context, database *sql.DB, resumeID int64) ([]models.ResumeSkill, error) {
-	rows, err := database.QueryContext(ctx, `SELECT name, level FROM resume_skills WHERE resume_id = ? ORDER BY sort_order, id`, resumeID)
+	rows, err := database.QueryContext(ctx, `SELECT name FROM resume_skills WHERE resume_id = ? ORDER BY sort_order, id`, resumeID)
 	if err != nil {
 		return nil, fmt.Errorf("get base resume skills: %w", err)
 	}
@@ -512,7 +512,7 @@ func readResumeSkills(ctx context.Context, database *sql.DB, resumeID int64) ([]
 	skills := make([]models.ResumeSkill, 0)
 	for rows.Next() {
 		var skill models.ResumeSkill
-		if err := rows.Scan(&skill.Name, &skill.Level); err != nil {
+		if err := rows.Scan(&skill.Name); err != nil {
 			return nil, fmt.Errorf("scan base resume skill: %w", err)
 		}
 		skills = append(skills, skill)

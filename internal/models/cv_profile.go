@@ -56,8 +56,7 @@ type ResumeLink struct {
 }
 
 type ResumeSkill struct {
-	Name  string `json:"name"`
-	Level string `json:"level"`
+	Name string `json:"name"`
 }
 
 type ResumeCompetency struct {
