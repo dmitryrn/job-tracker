@@ -1,5 +1,5 @@
-import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import { fetchResume, saveResume, type Resume } from "./api";
+import { useEffect, useState, type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { fetchResume, resumePDFURL, resumePhotoURL, saveResume, uploadResumePhoto, type Resume } from "./api";
 
 const emptyResume: Resume = {
   id: 1,
@@ -14,6 +14,7 @@ const emptyResume: Resume = {
   competencies: [],
   experience: [],
   education: [],
+  hasPhoto: false,
   updatedAt: "",
 };
 
@@ -21,6 +22,7 @@ export default function ResumeView() {
   const [resume, setResume] = useState<Resume>(emptyResume);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState("");
 
@@ -66,6 +68,24 @@ export default function ResumeView() {
     setResume((current) => ({ ...current, [field]: value }));
   }
 
+  async function uploadPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const photo = event.target.files?.[0];
+    event.target.value = "";
+    if (!photo) {
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const result = await uploadResumePhoto(photo);
+      setResume((current) => ({ ...current, hasPhoto: result.resume.hasPhoto, updatedAt: result.resume.updatedAt }));
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not upload resume photo");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   return (
     <section className="profile-page">
       <header className="profile-header">
@@ -87,7 +107,12 @@ export default function ResumeView() {
               <label>Email<input type="email" value={resume.email} onChange={(event) => updateHeader("email", event.target.value)} /></label>
               <label>Phone<input type="tel" value={resume.phone} onChange={(event) => updateHeader("phone", event.target.value)} /></label>
             </div>
-            <label className="profile-summary">Professional summary<textarea value={resume.summary} onChange={(event) => updateHeader("summary", event.target.value)} rows={6} placeholder="A concise overview of your experience, strengths, and target role." /></label>
+             <label className="profile-summary">Professional summary<textarea value={resume.summary} onChange={(event) => updateHeader("summary", event.target.value)} rows={6} placeholder="A concise overview of your experience, strengths, and target role." /></label>
+             <div className="resume-photo-upload">
+               <div><strong>Resume photo</strong><p>Optional JPEG or PNG, up to 5 MB. Save the resume before uploading.</p></div>
+               {resume.hasPhoto && <img src={`${resumePhotoURL()}?updatedAt=${encodeURIComponent(resume.updatedAt)}`} alt="Resume" />}
+               <label className="secondary-action">{uploadingPhoto ? "Uploading..." : "Upload photo"}<input type="file" accept="image/jpeg,image/png" disabled={uploadingPhoto} onChange={(event) => void uploadPhoto(event)} /></label>
+             </div>
           </section>
 
           <LinksSection resume={resume} setResume={setResume} />
@@ -97,8 +122,9 @@ export default function ResumeView() {
           <EducationSection resume={resume} setResume={setResume} />
 
           {error && <p className="query-error">{error}</p>}
-          <div className="profile-actions">
-            <button className="save-profile" disabled={saving}>{saving ? "Saving..." : "Save base resume"}</button>
+           <div className="profile-actions">
+             <button className="save-profile" disabled={saving}>{saving ? "Saving..." : "Save base resume"}</button>
+             {resume.updatedAt && <a className="download-resume" href={resumePDFURL()}>Download PDF</a>}
             {(savedAt || resume.updatedAt) && <span>Saved {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(savedAt || resume.updatedAt))}</span>}
           </div>
         </form>

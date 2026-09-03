@@ -56,6 +56,7 @@ func main() {
 			services.NewProviderPreviewService,
 			services.NewUserProfileService,
 			services.NewResumeService,
+			services.NewResumePDFService,
 			newJobAnalyzer,
 			newJobAnalysisService,
 			newProfileJobMatcher,

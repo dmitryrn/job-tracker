@@ -1,9 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"image"
+	"image/png"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -359,6 +363,56 @@ func TestResumeAPI(t *testing.T) {
 	assert.Equal(t, "Go, PostgreSQL", result.Resume.Experience[0].Stack)
 }
 
+func TestResumePhotoAPI(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	handler := newTestServer(repositories.NewSQLite(db)).http.Handler
+	response := requestWithBody(handler, http.MethodPut, "/api/resume", `{"fullName":"Ada Lovelace"}`)
+	require.Equal(t, http.StatusOK, response.Code)
+
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	file, err := form.CreateFormFile("photo", "photo.png")
+	require.NoError(t, err)
+	require.NoError(t, png.Encode(file, image.NewRGBA(image.Rect(0, 0, 1, 1))))
+	require.NoError(t, form.Close())
+	photoRequest := httptest.NewRequest(http.MethodPost, "/api/resume/photo", &body)
+	photoRequest.Header.Set("Content-Type", form.FormDataContentType())
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, photoRequest)
+	require.Equal(t, http.StatusOK, response.Code)
+
+	response = request(handler, http.MethodGet, "/api/resume/photo")
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "image/png", response.Header().Get("Content-Type"))
+	assert.NotEmpty(t, response.Body.Bytes())
+}
+
+func TestResumePDFHandler(t *testing.T) {
+	handler := resumePDFHandler(resumePDFStub{content: []byte("pdf")}, zap.NewNop())
+	response := request(handler, http.MethodGet, "/api/resume.pdf")
+
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "application/pdf", response.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="resume.pdf"`, response.Header().Get("Content-Disposition"))
+	assert.Equal(t, []byte("pdf"), response.Body.Bytes())
+
+	response = request(resumePDFHandler(resumePDFStub{err: services.ErrResumeNotFound}, zap.NewNop()), http.MethodGet, "/api/resume.pdf")
+	assert.Equal(t, http.StatusNotFound, response.Code)
+}
+
+type resumePDFStub struct {
+	content []byte
+	err     error
+}
+
+func (stub resumePDFStub) Generate(context.Context) ([]byte, error) {
+	return stub.content, stub.err
+}
+
 func newTestServer(repository *repositories.SQLite) *Server {
 	worker := services.NewJobMatchWorker(repository, repository, repository, repository, repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
 	return New(
@@ -370,6 +424,7 @@ func newTestServer(repository *repositories.SQLite) *Server {
 		services.NewProviderPreviewService(nil, nil, nil, nil),
 		services.NewUserProfileService(repository),
 		services.NewResumeService(repository),
+		services.NewResumePDFService(services.NewResumeService(repository)),
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),
 	)

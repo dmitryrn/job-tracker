@@ -103,6 +103,7 @@ export type Resume = {
   competencies: ResumeCompetency[];
   experience: ResumeExperience[];
   education: ResumeEducation[];
+  hasPhoto: boolean;
   updatedAt: string;
 };
 
@@ -288,6 +289,20 @@ export function saveResume(resume: Resume) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(resume),
   });
+}
+
+export function resumePDFURL() {
+  return apiURL("resume.pdf");
+}
+
+export function resumePhotoURL() {
+  return apiURL("resume/photo");
+}
+
+export function uploadResumePhoto(photo: File) {
+  const form = new FormData();
+  form.append("photo", photo);
+  return request<{ resume: Resume }>("resume/photo", { method: "POST", body: form });
 }
 
 export function fetchJobMatch(id: number, signal: AbortSignal) {

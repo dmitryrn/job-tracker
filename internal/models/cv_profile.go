@@ -47,7 +47,13 @@ type Resume struct {
 	Competencies []ResumeCompetency `json:"competencies"`
 	Experience   []ResumeExperience `json:"experience"`
 	Education    []ResumeEducation  `json:"education"`
+	HasPhoto     bool               `json:"hasPhoto"`
 	UpdatedAt    string             `json:"updatedAt"`
+}
+
+type ResumePhoto struct {
+	ContentType string
+	Data        []byte
 }
 
 type ResumeLink struct {

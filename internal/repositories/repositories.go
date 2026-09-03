@@ -44,6 +44,8 @@ type UserProfileRepository interface {
 type ResumeRepository interface {
 	Resume(context.Context) (*models.Resume, error)
 	SaveResume(context.Context, models.Resume) (models.Resume, error)
+	ResumePhoto(context.Context) (*models.ResumePhoto, error)
+	SaveResumePhoto(context.Context, models.ResumePhoto) error
 }
 
 type JobAnalysisRepository interface {

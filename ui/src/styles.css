@@ -147,6 +147,14 @@ button { cursor: pointer; }
 .resume-bullet-row { align-items: start; display: grid; gap: 10px; grid-template-columns: 1fr auto; }
 .resume-current { align-items: center; color: #4b6075; display: flex !important; font-size: 12px; gap: 7px; }
 .resume-current input { accent-color: #263d56; height: 16px; margin: 0; padding: 0; width: 16px; }
+.resume-photo-upload { align-items: center; background: #f8f8f5; border: 1px solid #e4e1d9; display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px; padding: 12px; }
+.resume-photo-upload strong { color: #304860; font-size: 13px; }
+.resume-photo-upload p { margin: 3px 0 0; }
+.resume-photo-upload img { height: 72px; object-fit: cover; width: 72px; }
+.resume-photo-upload .secondary-action { margin-left: auto; }
+.resume-photo-upload input { display: none; }
+.download-resume { background: #e5ac4c; border-radius: 4px; color: #1a2638; font-size: 13px; font-weight: 700; padding: 9px 12px; text-decoration: none; }
+.download-resume:hover { background: #d99a38; }
 .back-link { background: transparent; border: 0; color: #a26d20; font-weight: 700; margin: 0 0 18px; padding: 0; }
 .back-link:hover { text-decoration: underline; }
 .job-page-header h1 { margin-top: 0; }
@@ -304,6 +312,8 @@ tr:hover td { background: #fffbed; }
   .provider-section-actions { justify-content: start; }
   .profile-actions { align-items: end; flex-direction: column; }
   .resume-link-row, .resume-skill-row { grid-template-columns: 1fr; }
+  .resume-photo-upload { align-items: start; flex-direction: column; }
+  .resume-photo-upload .secondary-action { margin-left: 0; }
   .match-queue-item { align-items: start; flex-direction: column; }
   .matches-header { align-items: start; flex-direction: column; }
   .events-header { align-items: start; flex-direction: column; }

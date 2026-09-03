@@ -1,12 +1,21 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"strings"
 
 	"nice/internal/models"
 	"nice/internal/repositories"
 )
+
+const MaxResumePhotoBytes = 5 << 20
+
+var ErrInvalidResumePhoto = errors.New("resume photo must be a JPEG or PNG smaller than 5 MB")
 
 type ResumeService struct {
 	repository repositories.ResumeRepository
@@ -33,6 +42,33 @@ func (service *ResumeService) Save(ctx context.Context, resume models.Resume) (m
 	resume.Experience = cleanResumeExperience(resume.Experience)
 	resume.Education = cleanResumeEducation(resume.Education)
 	return service.repository.SaveResume(ctx, resume)
+}
+
+func (service *ResumeService) Photo(ctx context.Context) (*models.ResumePhoto, error) {
+	return service.repository.ResumePhoto(ctx)
+}
+
+func (service *ResumeService) SavePhoto(ctx context.Context, data []byte) (*models.Resume, error) {
+	if len(data) == 0 || len(data) > MaxResumePhotoBytes {
+		return nil, ErrInvalidResumePhoto
+	}
+	config, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || config.Width < 1 || config.Height < 1 || config.Width > 6000 || config.Height > 6000 {
+		return nil, ErrInvalidResumePhoto
+	}
+	contentType := ""
+	switch format {
+	case "jpeg":
+		contentType = "image/jpeg"
+	case "png":
+		contentType = "image/png"
+	default:
+		return nil, ErrInvalidResumePhoto
+	}
+	if err := service.repository.SaveResumePhoto(ctx, models.ResumePhoto{ContentType: contentType, Data: data}); err != nil {
+		return nil, err
+	}
+	return service.Resume(ctx)
 }
 
 func cleanResumeLinks(links []models.ResumeLink) []models.ResumeLink {

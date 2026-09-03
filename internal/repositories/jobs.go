@@ -345,9 +345,10 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 	var resume models.Resume
 	err := repository.db.QueryRowContext(ctx, `
-		SELECT id, full_name, headline, location, email, phone, summary, updated_at
+		SELECT id, full_name, headline, location, email, phone, summary,
+			CASE WHEN photo_data IS NULL THEN 0 ELSE 1 END, updated_at
 		FROM resumes WHERE base_resume = 1`,
-	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Location, &resume.Email, &resume.Phone, &resume.Summary, &resume.UpdatedAt)
+	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Location, &resume.Email, &resume.Phone, &resume.Summary, &resume.HasPhoto, &resume.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -371,6 +372,39 @@ func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 		return nil, err
 	}
 	return &resume, nil
+}
+
+func (repository *SQLite) ResumePhoto(ctx context.Context) (*models.ResumePhoto, error) {
+	var photo models.ResumePhoto
+	err := repository.db.QueryRowContext(ctx, `
+		SELECT photo_content_type, photo_data
+		FROM resumes
+		WHERE base_resume = 1 AND photo_data IS NOT NULL`,
+	).Scan(&photo.ContentType, &photo.Data)
+	if err != nil {
+		return nil, fmt.Errorf("get base resume photo: %w", err)
+	}
+	return &photo, nil
+}
+
+func (repository *SQLite) SaveResumePhoto(ctx context.Context, photo models.ResumePhoto) error {
+	result, err := repository.db.ExecContext(ctx, `
+		UPDATE resumes
+		SET photo_content_type = ?, photo_data = ?, updated_at = ?
+		WHERE base_resume = 1`,
+		photo.ContentType, photo.Data, time.Now().UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("save base resume photo: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check base resume photo update: %w", err)
+	}
+	if updated == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) (models.Resume, error) {
@@ -407,6 +441,9 @@ func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) 
 	}
 	if err := transaction.Commit(); err != nil {
 		return models.Resume{}, fmt.Errorf("commit base resume: %w", err)
+	}
+	if err := repository.db.QueryRowContext(ctx, `SELECT photo_data IS NOT NULL FROM resumes WHERE id = ?`, resume.ID).Scan(&resume.HasPhoto); err != nil {
+		return models.Resume{}, fmt.Errorf("check base resume photo: %w", err)
 	}
 	return resume, nil
 }

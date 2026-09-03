@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, matches *services.JobMatches, requests *services.JobMatchRequests) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -46,6 +47,9 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("PUT /api/profile", saveProfileHandler(profile, logger))
 	mux.HandleFunc("GET /api/resume", resumeHandler(resume, logger))
 	mux.HandleFunc("PUT /api/resume", saveResumeHandler(resume, logger))
+	mux.HandleFunc("GET /api/resume.pdf", resumePDFHandler(resumePDF, logger))
+	mux.HandleFunc("GET /api/resume/photo", resumePhotoHandler(resume, logger))
+	mux.HandleFunc("POST /api/resume/photo", saveResumePhotoHandler(resume, logger))
 	mux.HandleFunc("OPTIONS /api/{path...}", optionsHandler)
 
 	return &Server{
@@ -54,6 +58,90 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 			Handler: cors(mux),
 		},
 		logger: logger,
+	}
+}
+
+type resumePDFGenerator interface {
+	Generate(context.Context) ([]byte, error)
+}
+
+func resumePDFHandler(pdf resumePDFGenerator, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		content, err := pdf.Generate(request.Context())
+		if errors.Is(err, services.ErrResumeNotFound) {
+			logger.Warn("generate base resume PDF without a resume", zap.Error(err))
+			writeError(writer, http.StatusNotFound, "base resume not found")
+			return
+		}
+		if err != nil {
+			logger.Error("generate base resume PDF failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not generate resume PDF")
+			return
+		}
+		writer.Header().Set("Cache-Control", "no-store")
+		writer.Header().Set("Content-Disposition", `attachment; filename="resume.pdf"`)
+		writer.Header().Set("Content-Type", "application/pdf")
+		writer.WriteHeader(http.StatusOK)
+		if _, err := writer.Write(content); err != nil {
+			logger.Error("write base resume PDF failed", zap.Error(err))
+		}
+	}
+}
+
+func resumePhotoHandler(resume *services.ResumeService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		photo, err := resume.Photo(request.Context())
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.Warn("load base resume photo without a photo", zap.Error(err))
+			writeError(writer, http.StatusNotFound, "resume photo not found")
+			return
+		}
+		if err != nil {
+			logger.Error("load base resume photo failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load resume photo")
+			return
+		}
+		writer.Header().Set("Cache-Control", "no-store")
+		writer.Header().Set("Content-Type", photo.ContentType)
+		if _, err := writer.Write(photo.Data); err != nil {
+			logger.Error("write base resume photo failed", zap.Error(err))
+		}
+	}
+}
+
+func saveResumePhotoHandler(resume *services.ResumeService, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		request.Body = http.MaxBytesReader(writer, request.Body, services.MaxResumePhotoBytes+1024)
+		file, _, err := request.FormFile("photo")
+		if err != nil {
+			logger.Warn("read base resume photo failed", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "photo is required and must be smaller than 5 MB")
+			return
+		}
+		defer file.Close()
+		data, err := io.ReadAll(file)
+		if err != nil {
+			logger.Error("read base resume photo data failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not read resume photo")
+			return
+		}
+		saved, err := resume.SavePhoto(request.Context(), data)
+		if errors.Is(err, services.ErrInvalidResumePhoto) {
+			logger.Warn("invalid base resume photo", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.Warn("save base resume photo without a resume", zap.Error(err))
+			writeError(writer, http.StatusNotFound, "base resume not found")
+			return
+		}
+		if err != nil {
+			logger.Error("save base resume photo failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not save resume photo")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"resume": saved})
 	}
 }
 
