@@ -12,10 +12,10 @@ import (
 func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 	var resume models.Resume
 	err := repository.db.QueryRowContext(ctx, `
-		SELECT id, full_name, headline, location, email, phone,
+		SELECT id, full_name, headline, town, country, email, phone,
 			CASE WHEN photo_data IS NULL THEN 0 ELSE 1 END, updated_at
 		FROM resumes WHERE base_resume = 1`,
-	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Location, &resume.Email, &resume.Phone, &resume.HasPhoto, &resume.UpdatedAt)
+	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Town, &resume.Country, &resume.Email, &resume.Phone, &resume.HasPhoto, &resume.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -87,18 +87,19 @@ func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) 
 	resume.ID = 1
 	resume.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	if _, err := transaction.ExecContext(ctx, `
-		INSERT INTO resumes (id, title, base_resume, full_name, headline, location, email, phone, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO resumes (id, title, base_resume, full_name, headline, town, country, email, phone, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title,
 			base_resume = excluded.base_resume,
 			full_name = excluded.full_name,
 			headline = excluded.headline,
-			location = excluded.location,
+			town = excluded.town,
+			country = excluded.country,
 			email = excluded.email,
 			phone = excluded.phone,
 			updated_at = excluded.updated_at`,
-		resume.ID, "Base resume", true, resume.FullName, resume.Headline, resume.Location, resume.Email, resume.Phone, resume.UpdatedAt, resume.UpdatedAt,
+		resume.ID, "Base resume", true, resume.FullName, resume.Headline, resume.Town, resume.Country, resume.Email, resume.Phone, resume.UpdatedAt, resume.UpdatedAt,
 	); err != nil {
 		return models.Resume{}, fmt.Errorf("save base resume: %w", err)
 	}

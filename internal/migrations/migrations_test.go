@@ -40,9 +40,42 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('user_profiles') WHERE name = 'location'`).Scan(&profileLocationColumns))
 	assert.Zero(t, profileLocationColumns)
 
+	var resumeLocationColumns int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('resumes') WHERE name = 'location'`).Scan(&resumeLocationColumns))
+	assert.Zero(t, resumeLocationColumns)
+
+	var resumeLocationParts int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('resumes') WHERE name IN ('town', 'country')`).Scan(&resumeLocationParts))
+	assert.Equal(t, 2, resumeLocationParts)
+
 	var ftsTables int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))
 	assert.Zero(t, ftsTables)
+}
+
+func TestResumeLocationMigrationSplitsTownAndCountry(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	goose.SetBaseFS(files)
+	require.NoError(t, goose.SetDialect("sqlite3"))
+	require.NoError(t, goose.UpTo(db, "sql", 23))
+	_, err = db.Exec(`
+		INSERT INTO resumes (id, title, base_resume, full_name, headline, location, email, phone, created_at, updated_at)
+		VALUES
+			(1, 'Base resume', 1, '', '', 'Berlin, Germany', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+			(2, 'Other resume', 0, '', '', 'London', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`)
+	require.NoError(t, err)
+
+	require.NoError(t, goose.Up(db, "sql"))
+	var town, country string
+	require.NoError(t, db.QueryRow(`SELECT town, country FROM resumes WHERE id = 1`).Scan(&town, &country))
+	assert.Equal(t, "Berlin", town)
+	assert.Equal(t, "Germany", country)
+	require.NoError(t, db.QueryRow(`SELECT town, country FROM resumes WHERE id = 2`).Scan(&town, &country))
+	assert.Equal(t, "London", town)
+	assert.Empty(t, country)
 }
 
 func TestSummaryParagraphMigrationPreservesExistingParagraphs(t *testing.T) {

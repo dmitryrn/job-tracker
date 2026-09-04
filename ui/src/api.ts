@@ -103,7 +103,8 @@ export type Resume = {
   id: number;
   fullName: string;
   headline: string;
-  location: string;
+  town: string;
+  country: string;
   email: string;
   phone: string;
   summaryParagraphs: ResumeText[];

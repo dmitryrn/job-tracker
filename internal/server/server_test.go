@@ -473,7 +473,7 @@ func TestResumeAPI(t *testing.T) {
 	assert.JSONEq(t, `{"resume":null}`, response.Body.String())
 
 	response = requestWithBody(handler, http.MethodPut, "/api/resume", `{
-		"fullName":" Ada Lovelace ","headline":" Backend engineer ","location":" Berlin ","email":" ada@example.com ","phone":" +49 123 ","summaryParagraphs":[{"content":" Builds systems. "},{"content":""},{"content":" Delivers reliable software. "}],
+		"fullName":" Ada Lovelace ","headline":" Backend engineer ","town":" Berlin ","country":" Germany ","email":" ada@example.com ","phone":" +49 123 ","summaryParagraphs":[{"content":" Builds systems. "},{"content":""},{"content":" Delivers reliable software. "}],
 		"links":[{"label":" GitHub ","url":" https://github.com/ada "},{"label":"","url":""}],
 		"skills":[{"name":" Go "},{"name":""}],
 		"competencies":[{"title":" Backend systems ","bullets":[{"content":" Built APIs "},{"content":""}]}],
@@ -489,6 +489,8 @@ func TestResumeAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, int64(1), result.Resume.ID)
 	assert.Equal(t, "Ada Lovelace", result.Resume.FullName)
+	assert.Equal(t, "Berlin", result.Resume.Town)
+	assert.Equal(t, "Germany", result.Resume.Country)
 	assert.Equal(t, []string{"Builds systems.", "Delivers reliable software."}, []string{result.Resume.SummaryParagraphs[0].Content, result.Resume.SummaryParagraphs[1].Content})
 	assert.Positive(t, result.Resume.SummaryParagraphs[0].ID)
 	require.Len(t, result.Resume.Skills, 1)

@@ -38,11 +38,12 @@ func TestLatestResumeRevisionReturnsNotFoundWithoutSnapshot(t *testing.T) {
 	assert.ErrorIs(t, err, ErrApplicationResumeNotFound)
 }
 
-func TestProviderRequestRedactsCandidateIdentityAndResumeOrganizations(t *testing.T) {
+func TestProviderRequestOmitsCandidateIdentityAndInstitutions(t *testing.T) {
 	resume := models.Resume{
 		FullName: "Avery Patel",
 		Phone:    "+1 555 0100",
-		Location: "Mapleton, Canada",
+		Town:     "Mapleton",
+		Country:  "Canada",
 		Email:    "avery.patel@example.test",
 		SummaryParagraphs: []models.ResumeText{{
 			Content: "Avery Patel built systems at Orchid Labs in Mapleton, Canada.",
@@ -53,14 +54,16 @@ func TestProviderRequestRedactsCandidateIdentityAndResumeOrganizations(t *testin
 	updatedResume := models.Resume{
 		FullName:   "Avery Patel",
 		Phone:      "+1 555 0101",
-		Location:   "Lakeside, Canada",
+		Town:       "Lakeside",
+		Country:    "Canada",
 		Email:      "avery.patel+new@example.test",
 		Experience: []models.ResumeExperience{{Company: "Harbor Works"}},
 		Education:  []models.ResumeEducation{{Institution: "Stonebridge University"}},
 	}
 	initialContext, err := json.Marshal(jobMatchChatInitialContext{Profile: &models.UserProfile{
-		WorkHistory: []models.UserProfileWorkHistory{{Company: "Cedar Systems"}},
-		Education:   []models.UserProfileEducation{{Institution: "Riverside College"}},
+		WorkAuthorization: "Authorized to work in Canada",
+		WorkHistory:       []models.UserProfileWorkHistory{{Company: "Cedar Systems"}},
+		Education:         []models.UserProfileEducation{{Institution: "Riverside College"}},
 	}})
 	require.NoError(t, err)
 	baseRevision, err := json.Marshal(resumeRevisionPayload{Revision: 0, Resume: resume})
@@ -93,20 +96,22 @@ func TestProviderRequestRedactsCandidateIdentityAndResumeOrganizations(t *testin
 		"Avery Patel",
 		"+1 555 0100",
 		"+1 555 0101",
-		"Mapleton, Canada",
-		"Lakeside, Canada",
+		"Mapleton",
+		"Lakeside",
 		"avery.patel@example.test",
 		"avery.patel+new@example.test",
-		"Orchid Labs",
-		"Harbor Works",
-		"Cedar Systems",
 		"Northfield Institute",
 		"Stonebridge University",
 		"Riverside College",
 	} {
 		assert.NotContains(t, string(providerPayload), sensitiveValue)
 	}
-	assert.Contains(t, string(providerPayload), redactedChatValue)
+	for _, company := range []string{"Orchid Labs", "Harbor Works", "Cedar Systems"} {
+		assert.Contains(t, string(providerPayload), company)
+	}
+	assert.Contains(t, string(providerPayload), `\"country\":\"Canada\"`)
+	assert.Contains(t, string(providerPayload), "Authorized to work in Canada")
+	assert.NotContains(t, string(providerPayload), "[redacted]")
 	assert.Equal(t, "Avery Patel", resume.FullName)
 	assert.Equal(t, "Orchid Labs", resume.Experience[0].Company)
 }

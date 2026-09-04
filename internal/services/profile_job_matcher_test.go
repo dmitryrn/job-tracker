@@ -58,7 +58,7 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 	assert.ErrorContains(t, err, "score must be between 0 and 100")
 }
 
-func TestLLMProfileJobMatcherRedactsProfileOrganizations(t *testing.T) {
+func TestLLMProfileJobMatcherOmitsInstitutionNames(t *testing.T) {
 	client := &recordingMatchCompletionClient{response: openai.ChatResponse{Model: "test-model", Content: `{
 		"score":84,
 		"summary":"Strong fit.",
@@ -85,10 +85,10 @@ func TestLLMProfileJobMatcherRedactsProfileOrganizations(t *testing.T) {
 
 	providerPayload, err := json.Marshal(client.request)
 	require.NoError(t, err)
-	for _, sensitiveValue := range []string{"Cedar Systems", "Riverside College"} {
+	for _, sensitiveValue := range []string{"Riverside College"} {
 		assert.NotContains(t, string(providerPayload), sensitiveValue)
 	}
-	assert.Contains(t, string(providerPayload), redactedChatValue)
+	assert.Contains(t, string(providerPayload), "Cedar Systems")
 	assert.Contains(t, string(providerPayload), "Authorized to work in Canada")
 	assert.Equal(t, "Cedar Systems", profile.WorkHistory[0].Company)
 }

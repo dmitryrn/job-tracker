@@ -51,8 +51,8 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 	input, err := json.Marshal(struct {
 		Job      models.BrowseJob         `json:"job"`
 		Analysis models.JobAnalysisRecord `json:"analysis"`
-		Profile  models.UserProfile       `json:"profile"`
-	}{Job: job, Analysis: analysis, Profile: redactedUserProfile(profile)})
+		Profile  chatUserProfile          `json:"profile"`
+	}{Job: job, Analysis: analysis, Profile: chatProfile(profile)})
 	if err != nil {
 		return models.JobMatchAssessment{}, fmt.Errorf("encode profile-job match input: %w", err)
 	}

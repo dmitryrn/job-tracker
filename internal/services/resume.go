@@ -32,7 +32,8 @@ func (service *ResumeService) Resume(ctx context.Context) (*models.Resume, error
 func (service *ResumeService) Save(ctx context.Context, resume models.Resume) (models.Resume, error) {
 	resume.FullName = strings.TrimSpace(resume.FullName)
 	resume.Headline = strings.TrimSpace(resume.Headline)
-	resume.Location = strings.TrimSpace(resume.Location)
+	resume.Town = strings.TrimSpace(resume.Town)
+	resume.Country = strings.TrimSpace(resume.Country)
 	resume.Email = strings.TrimSpace(resume.Email)
 	resume.Phone = strings.TrimSpace(resume.Phone)
 	resume.SummaryParagraphs = cleanResumeParagraphs(resume.SummaryParagraphs)

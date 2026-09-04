@@ -37,7 +37,8 @@ type Resume struct {
 	ID                int64              `json:"id"`
 	FullName          string             `json:"fullName"`
 	Headline          string             `json:"headline"`
-	Location          string             `json:"location"`
+	Town              string             `json:"town"`
+	Country           string             `json:"country"`
 	Email             string             `json:"email"`
 	Phone             string             `json:"phone"`
 	SummaryParagraphs []ResumeText       `json:"summaryParagraphs"`

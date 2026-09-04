@@ -5,7 +5,8 @@ const emptyResume: Resume = {
   id: 1,
   fullName: "",
   headline: "",
-  location: "",
+  town: "",
+  country: "",
   email: "",
   phone: "",
   summaryParagraphs: [],
@@ -64,7 +65,7 @@ export default function ResumeView() {
     }
   }
 
-  function updateHeader(field: "fullName" | "headline" | "location" | "email" | "phone", value: string) {
+  function updateHeader(field: "fullName" | "headline" | "town" | "country" | "email" | "phone", value: string) {
     setResume((current) => ({ ...current, [field]: value }));
   }
 
@@ -97,13 +98,14 @@ export default function ResumeView() {
       </header>
 
       {loading ? <p className="browse-loading">Loading resume...</p> : (
-        <form className="profile-form" onSubmit={(event) => void submit(event)}>
+        <form className="profile-form" noValidate onSubmit={(event) => void submit(event)}>
           <section className="profile-section">
             <h2>Header</h2>
             <div className="profile-fields">
               <label>Full name<input value={resume.fullName} onChange={(event) => updateHeader("fullName", event.target.value)} /></label>
               <label>Professional headline<input value={resume.headline} onChange={(event) => updateHeader("headline", event.target.value)} placeholder="Senior backend engineer" /></label>
-              <label>Location<input value={resume.location} onChange={(event) => updateHeader("location", event.target.value)} placeholder="Berlin, Germany" /></label>
+              <label>Town<input value={resume.town} onChange={(event) => updateHeader("town", event.target.value)} placeholder="Berlin" /></label>
+              <label>Country<input value={resume.country} onChange={(event) => updateHeader("country", event.target.value)} placeholder="Germany" /></label>
               <label>Email<input type="email" value={resume.email} onChange={(event) => updateHeader("email", event.target.value)} /></label>
               <label>Phone<input type="tel" value={resume.phone} onChange={(event) => updateHeader("phone", event.target.value)} /></label>
             </div>
