@@ -23,6 +23,7 @@ var (
 	ErrJobMatchChatUserMessageNotFound = errors.New("user chat message not found")
 	ErrJobMatchChatTurnActive          = errors.New("a chat turn is already active")
 	ErrJobMatchChatUnansweredMessage   = errors.New("remove the unanswered message before starting another turn")
+	ErrApplicationResumeNotFound       = errors.New("application resume not found")
 )
 
 const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, and their application resume. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. The user sees a structured diff for each resume revision, so do not repeat what changed; briefly explain why the changes improve relevance instead. Ask clarifying questions when useful.`
@@ -150,6 +151,18 @@ func (service *JobMatchChat) Shutdown(ctx context.Context) error {
 
 func (service *JobMatchChat) Items(ctx context.Context, jobID, afterSequence int64) ([]models.JobMatchChatItem, error) {
 	return service.items.JobMatchChatItems(ctx, jobID, afterSequence)
+}
+
+func (service *JobMatchChat) LatestResume(ctx context.Context, jobID int64) (*models.Resume, error) {
+	items, err := service.items.JobMatchChatItems(ctx, jobID, 0)
+	if err != nil {
+		return nil, fmt.Errorf("load application resume revisions: %w", err)
+	}
+	latest, err := latestResumeRevision(items)
+	if err != nil {
+		return nil, fmt.Errorf("load latest application resume revision: %w", err)
+	}
+	return &latest.Resume, nil
 }
 
 func (service *JobMatchChat) Subscribe(jobID int64) (<-chan JobMatchChatUpdate, func()) {
@@ -522,7 +535,7 @@ func latestResumeRevision(items []models.JobMatchChatItem) (resumeRevisionPayloa
 		}
 	}
 	if !found {
-		return current, errors.New("initial resume revision not found")
+		return current, ErrApplicationResumeNotFound
 	}
 	return current, nil
 }

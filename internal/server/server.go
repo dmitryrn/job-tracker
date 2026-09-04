@@ -30,6 +30,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("GET /api/jobs/{id}", jobHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match/resume.pdf", jobApplicationResumePDFHandler(chat, resumePDF, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
 	mux.HandleFunc("GET /api/jobs/{id}/match/chat", jobMatchChatItemsHandler(chat, logger))
@@ -70,6 +71,14 @@ type resumePDFGenerator interface {
 	Generate(context.Context) ([]byte, error)
 }
 
+type applicationResumePDFGenerator interface {
+	GenerateResume(context.Context, models.Resume) ([]byte, error)
+}
+
+type applicationResumeProvider interface {
+	LatestResume(context.Context, int64) (*models.Resume, error)
+}
+
 func resumePDFHandler(pdf resumePDFGenerator, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		content, err := pdf.Generate(request.Context())
@@ -89,6 +98,41 @@ func resumePDFHandler(pdf resumePDFGenerator, logger *zap.Logger) http.HandlerFu
 		writer.WriteHeader(http.StatusOK)
 		if _, err := writer.Write(content); err != nil {
 			logger.Error("write base resume PDF failed", zap.Error(err))
+		}
+	}
+}
+
+func jobApplicationResumePDFHandler(chat applicationResumeProvider, pdf applicationResumePDFGenerator, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		jobID, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || jobID < 1 {
+			logger.Warn("invalid job ID for application resume PDF", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		resume, err := chat.LatestResume(request.Context(), jobID)
+		if errors.Is(err, services.ErrApplicationResumeNotFound) {
+			logger.Warn("generate application resume PDF without a resume", zap.Int64("job_id", jobID), zap.Error(err))
+			writeError(writer, http.StatusNotFound, "application resume not found")
+			return
+		}
+		if err != nil {
+			logger.Error("load latest application resume failed", zap.Int64("job_id", jobID), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load application resume")
+			return
+		}
+		content, err := pdf.GenerateResume(request.Context(), *resume)
+		if err != nil {
+			logger.Error("generate application resume PDF failed", zap.Int64("job_id", jobID), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not generate application resume PDF")
+			return
+		}
+		writer.Header().Set("Cache-Control", "no-store")
+		writer.Header().Set("Content-Disposition", `attachment; filename="application-resume.pdf"`)
+		writer.Header().Set("Content-Type", "application/pdf")
+		writer.WriteHeader(http.StatusOK)
+		if _, err := writer.Write(content); err != nil {
+			logger.Error("write application resume PDF failed", zap.Int64("job_id", jobID), zap.Error(err))
 		}
 	}
 }

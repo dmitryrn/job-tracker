@@ -314,6 +314,10 @@ export function resumePDFURL() {
   return apiURL("resume.pdf");
 }
 
+export function jobApplicationResumePDFURL(id: number) {
+  return apiURL(`jobs/${id}/match/resume.pdf`);
+}
+
 export function resumePhotoURL() {
   return apiURL("resume/photo");
 }

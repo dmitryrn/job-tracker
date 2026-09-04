@@ -33,18 +33,21 @@ func (service *ResumePDFService) Generate(ctx context.Context) ([]byte, error) {
 	if resume == nil {
 		return nil, ErrResumeNotFound
 	}
+	return service.GenerateResume(ctx, *resume)
+}
 
-	data := resumePDFData{Resume: *resume}
+func (service *ResumePDFService) GenerateResume(ctx context.Context, resume models.Resume) ([]byte, error) {
+	data := resumePDFData{Resume: resume}
 	if resume.HasPhoto {
 		photo, err := service.resume.Photo(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("load base resume photo: %w", err)
+			return nil, fmt.Errorf("load resume photo: %w", err)
 		}
 		data.Photo = template.URL("data:" + photo.ContentType + ";base64," + base64.StdEncoding.EncodeToString(photo.Data))
 	}
 	html, err := renderResumePDF(data)
 	if err != nil {
-		return nil, fmt.Errorf("render base resume HTML: %w", err)
+		return nil, fmt.Errorf("render resume HTML: %w", err)
 	}
 
 	renderCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -71,7 +74,7 @@ func (service *ResumePDFService) Generate(ctx context.Context) ([]byte, error) {
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("print base resume PDF: %w", err)
+		return nil, fmt.Errorf("print resume PDF: %w", err)
 	}
 	return output, nil
 }

@@ -563,12 +563,48 @@ func TestResumePDFHandler(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, response.Code)
 }
 
+func TestJobApplicationResumePDFHandler(t *testing.T) {
+	renderer := &applicationResumePDFStub{content: []byte("application pdf")}
+	handler := jobApplicationResumePDFHandler(applicationResumeStub{resume: &models.Resume{Headline: "Backend engineer"}}, renderer, zap.NewNop())
+	request := httptest.NewRequest(http.MethodGet, "/api/jobs/1/match/resume.pdf", nil)
+	request.SetPathValue("id", "1")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "application/pdf", response.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="application-resume.pdf"`, response.Header().Get("Content-Disposition"))
+	assert.Equal(t, []byte("application pdf"), response.Body.Bytes())
+	assert.Equal(t, "Backend engineer", renderer.resume.Headline)
+}
+
 type resumePDFStub struct {
 	content []byte
 	err     error
 }
 
 func (stub resumePDFStub) Generate(context.Context) ([]byte, error) {
+	return stub.content, stub.err
+}
+
+type applicationResumeStub struct {
+	resume *models.Resume
+	err    error
+}
+
+func (stub applicationResumeStub) LatestResume(context.Context, int64) (*models.Resume, error) {
+	return stub.resume, stub.err
+}
+
+type applicationResumePDFStub struct {
+	content []byte
+	err     error
+	resume  models.Resume
+}
+
+func (stub *applicationResumePDFStub) GenerateResume(_ context.Context, resume models.Resume) ([]byte, error) {
+	stub.resume = resume
 	return stub.content, stub.err
 }
 
