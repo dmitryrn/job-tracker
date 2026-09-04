@@ -41,7 +41,7 @@ type Resume struct {
 	Location          string             `json:"location"`
 	Email             string             `json:"email"`
 	Phone             string             `json:"phone"`
-	SummaryParagraphs []string           `json:"summaryParagraphs"`
+	SummaryParagraphs []ResumeText       `json:"summaryParagraphs"`
 	Links             []ResumeLink       `json:"links"`
 	Skills            []ResumeSkill      `json:"skills"`
 	Competencies      []ResumeCompetency `json:"competencies"`
@@ -57,31 +57,41 @@ type ResumePhoto struct {
 }
 
 type ResumeLink struct {
+	ID    int64  `json:"id"`
 	Label string `json:"label"`
 	URL   string `json:"url"`
 }
 
+type ResumeText struct {
+	ID      int64  `json:"id"`
+	Content string `json:"content"`
+}
+
 type ResumeSkill struct {
+	ID   int64  `json:"id"`
 	Name string `json:"name"`
 }
 
 type ResumeCompetency struct {
-	Title   string   `json:"title"`
-	Bullets []string `json:"bullets"`
+	ID      int64        `json:"id"`
+	Title   string       `json:"title"`
+	Bullets []ResumeText `json:"bullets"`
 }
 
 type ResumeExperience struct {
-	Company   string   `json:"company"`
-	Title     string   `json:"title"`
-	Location  string   `json:"location"`
-	StartDate string   `json:"startDate"`
-	EndDate   string   `json:"endDate"`
-	IsCurrent bool     `json:"isCurrent"`
-	Stack     string   `json:"stack"`
-	Bullets   []string `json:"bullets"`
+	ID        int64        `json:"id"`
+	Company   string       `json:"company"`
+	Title     string       `json:"title"`
+	Location  string       `json:"location"`
+	StartDate string       `json:"startDate"`
+	EndDate   string       `json:"endDate"`
+	IsCurrent bool         `json:"isCurrent"`
+	Stack     string       `json:"stack"`
+	Bullets   []ResumeText `json:"bullets"`
 }
 
 type ResumeEducation struct {
+	ID           int64  `json:"id"`
 	Institution  string `json:"institution"`
 	Location     string `json:"location"`
 	Degree       string `json:"degree"`
@@ -89,6 +99,34 @@ type ResumeEducation struct {
 	StartDate    string `json:"startDate"`
 	EndDate      string `json:"endDate"`
 	Details      string `json:"details"`
+}
+
+type ApplicationResume struct {
+	ID            int64                       `json:"id"`
+	JobID         int64                       `json:"jobId"`
+	RootMessageID int64                       `json:"rootMessageId"`
+	Base          Resume                      `json:"base"`
+	Revisions     []ApplicationResumeRevision `json:"revisions"`
+	CreatedAt     string                      `json:"createdAt"`
+}
+
+type ApplicationResumeRevision struct {
+	ID                 int64  `json:"id"`
+	RevisionNumber     int    `json:"revisionNumber"`
+	TriggerMessageID   int64  `json:"triggerMessageId"`
+	AssistantMessageID int64  `json:"assistantMessageId"`
+	Resume             Resume `json:"resume"`
+	Summary            string `json:"summary"`
+	CreatedAt          string `json:"createdAt"`
+}
+
+type ApplicationResumeAgentEvent struct {
+	ID               int64  `json:"id"`
+	TriggerMessageID int64  `json:"triggerMessageId"`
+	RevisionID       int64  `json:"revisionId"`
+	Type             string `json:"type"`
+	Detail           string `json:"detail"`
+	CreatedAt        string `json:"createdAt"`
 }
 
 type CVProfileDraft struct {

@@ -204,7 +204,18 @@ button { cursor: pointer; }
 .match-chat-compose { align-items: end; border-top: 1px solid #e4e1d9; display: grid; gap: 10px; grid-template-columns: 1fr auto; padding-top: 16px; }
 .match-chat-compose label { color: #4b6075; display: grid; font-size: 12px; font-weight: 700; gap: 6px; }
 .match-chat-compose textarea { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; font: inherit; padding: 10px; resize: vertical; width: 100%; }
+.match-chat-actions { display: flex; gap: 8px; }
 .match-chat-compose .primary-action:disabled { cursor: not-allowed; opacity: .55; }
+
+.application-resume-activity { border: 1px solid #dedcd5; margin: 20px 0; padding: 14px; }
+
+.application-resume-activity header h3, .application-resume-revision p { margin: 0; }
+
+.application-resume-revision { border-top: 1px solid #e4e1d9; margin-top: 10px; padding-top: 10px; }
+
+.application-resume-revision ul, .application-resume-events ol { margin: 7px 0 0; }
+
+.application-resume-events { margin-top: 10px; }
 .analysis-loading { color: #65758a; font-size: 13px; margin: 18px 0; }
 .analysis-panel { background: #fff; border: 1px solid #dedcd5; margin: 22px 0; padding: 22px; }
 .analysis-panel-header { align-items: start; border-bottom: 1px solid #e4e1d9; display: flex; gap: 18px; justify-content: space-between; padding-bottom: 18px; }
@@ -353,6 +364,7 @@ tr:hover td { background: #fffbed; }
   .match-chat-header { flex-direction: column; }
   .match-chat-header > p { max-width: none; text-align: left; }
   .match-chat-compose { grid-template-columns: 1fr; }
+  .match-chat-actions { justify-content: end; }
   .value-dialog-header { padding: 15px 16px; }
   .value-dialog pre { font-size: 13px; padding: 16px; }
 }

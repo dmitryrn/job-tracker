@@ -1,5 +1,5 @@
-import { type FormEvent, useEffect, useState } from "react";
-import { deleteJob, fetchJobMatch, fetchJobMatchChat, queueJobMatch, revertJobMatchChat, sendJobMatchChatMessage, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatMessage } from "./api";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { deleteJob, fetchJobMatch, fetchJobMatchApplicationResume, fetchJobMatchChat, queueJobMatch, revertJobMatchChat, sendJobMatchChatMessage, type ApplicationResume, type ApplicationResumeAgentEvent, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatMessage, type Resume } from "./api";
 
 type JobDetailViewProps = {
   job: BrowseJob;
@@ -107,20 +107,30 @@ function JobMatchAssessmentPanel({ assessment }: { assessment: JobMatchAssessmen
 
 function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | null | undefined }) {
   const [messages, setMessages] = useState<JobMatchChatMessage[]>();
+  const [applicationResume, setApplicationResume] = useState<ApplicationResume | null>();
+  const [agentEvents, setAgentEvents] = useState<ApplicationResumeAgentEvent[]>([]);
   const [draft, setDraft] = useState("");
-  const [requestID, setRequestID] = useState<string>();
-  const [sending, setSending] = useState(false);
-  const [reverting, setReverting] = useState(false);
-  const [error, setError] = useState("");
+	const [requestID, setRequestID] = useState<string>();
+	const [sending, setSending] = useState(false);
+	const [reverting, setReverting] = useState(false);
+	const [error, setError] = useState("");
+	const sendController = useRef<AbortController | undefined>(undefined);
+
+	useEffect(() => () => sendController.current?.abort(), []);
 
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
       setMessages(undefined);
       try {
-        const result = await fetchJobMatchChat(jobID, controller.signal);
+        const [result, application] = await Promise.all([
+          fetchJobMatchChat(jobID, controller.signal),
+          fetchJobMatchApplicationResume(jobID, controller.signal),
+        ]);
         if (!controller.signal.aborted) {
           setMessages(result.messages);
+          setApplicationResume(application.resume);
+          setAgentEvents(application.events);
           setError("");
         }
       } catch (reason) {
@@ -138,27 +148,42 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     const content = draft.trim();
     if (!content || sending) {
       return;
-    }
-    setSending(true);
-    try {
-      const currentRequestID = requestID ?? chatRequestID();
-      setRequestID(currentRequestID);
-      await sendJobMatchChatMessage(jobID, content, currentRequestID);
-      setDraft("");
-      setRequestID(undefined);
-      setError("");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not send chat message");
-    } finally {
-      try {
-        const result = await fetchJobMatchChat(jobID, new AbortController().signal);
+		}
+		setSending(true);
+		const controller = new AbortController();
+		sendController.current = controller;
+		try {
+			const currentRequestID = requestID ?? chatRequestID();
+			setRequestID(currentRequestID);
+			await sendJobMatchChatMessage(jobID, content, currentRequestID, controller.signal);
+			setDraft("");
+			setRequestID(undefined);
+			setError("");
+		} catch (reason) {
+			setError(controller.signal.aborted ? "Response stopped." : reason instanceof Error ? reason.message : "Could not send chat message");
+		} finally {
+			if (sendController.current === controller) {
+				sendController.current = undefined;
+			}
+			try {
+        const controller = new AbortController();
+        const [result, application] = await Promise.all([
+          fetchJobMatchChat(jobID, controller.signal),
+          fetchJobMatchApplicationResume(jobID, controller.signal),
+        ]);
         setMessages(result.messages);
+        setApplicationResume(application.resume);
+        setAgentEvents(application.events);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Could not load chat");
       }
       setSending(false);
-    }
-  }
+		}
+	}
+
+	function stop() {
+		sendController.current?.abort();
+	}
 
   async function revert(message: JobMatchChatMessage) {
     if (sending || reverting) {
@@ -168,6 +193,8 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     try {
       await revertJobMatchChat(jobID, message.id);
       setMessages((current) => current?.filter((item) => item.id < message.id));
+      setApplicationResume((current) => current?.rootMessageId === message.id ? null : current ? { ...current, revisions: current.revisions.filter((revision) => revision.triggerMessageId < message.id) } : current);
+      setAgentEvents((current) => current.filter((event) => event.triggerMessageId < message.id));
       setDraft(message.content);
       setRequestID(undefined);
       setError("");
@@ -194,11 +221,39 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
         <div>{message.content}</div>
       </article>)}
     </div>}
-    <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
-      <label>Message<textarea value={draft} onChange={(event) => { setDraft(event.target.value); setRequestID(undefined); }} disabled={sending || reverting} placeholder="Ask about this job and your fit..." rows={3} /></label>
-      <button className="primary-action" type="submit" disabled={sending || reverting || !draft.trim()}>{sending ? "Thinking..." : "Send"}</button>
-    </form>
+    {applicationResume && <ApplicationResumeActivity applicationResume={applicationResume} events={agentEvents} />}
+	<form className="match-chat-compose" onSubmit={(event) => void send(event)}>
+		<label>Message<textarea value={draft} onChange={(event) => { setDraft(event.target.value); setRequestID(undefined); }} disabled={sending || reverting} placeholder="Ask about this job and your fit..." rows={3} /></label>
+		<div className="match-chat-actions"><button className="primary-action" type="submit" disabled={sending || reverting || !draft.trim()}>{sending ? "Thinking..." : "Send"}</button>{sending && <button className="secondary-action" type="button" onClick={stop}>Stop</button>}</div>
+	</form>
   </section>;
+}
+
+function ApplicationResumeActivity({ applicationResume, events }: { applicationResume: ApplicationResume; events: ApplicationResumeAgentEvent[] }) {
+  return <section className="application-resume-activity">
+    <header><p className="eyebrow">Application resume</p><h3>Revision history</h3></header>
+    {applicationResume.revisions.map((revision, index) => <article className="application-resume-revision" key={revision.id}>
+      <strong>{revision.revisionNumber === 0 ? "Base snapshot" : `Revision ${revision.revisionNumber}`}</strong>
+      <p>{revision.summary}</p>
+      {index > 0 && <ul>{resumeDiff(applicationResume.revisions[index - 1].resume, revision.resume).map((change) => <li key={change}>{change}</li>)}</ul>}
+    </article>)}
+    {events.length > 0 && <details className="application-resume-events"><summary>Resume edit activity</summary><ol>{events.map((event) => <li key={event.id}>{event.detail}</li>)}</ol></details>}
+  </section>;
+}
+
+function resumeDiff(previous: Resume, next: Resume) {
+  const changes: string[] = [];
+  if (previous.headline !== next.headline) changes.push(`Headline: ${previous.headline || "(empty)"} -> ${next.headline || "(empty)"}`);
+  const previousSummary = new Map(previous.summaryParagraphs.map((item) => [item.id, item.content]));
+  for (const item of next.summaryParagraphs) if (previousSummary.get(item.id) !== item.content) changes.push(previousSummary.has(item.id) ? `Summary: ${previousSummary.get(item.id)} -> ${item.content}` : `Added summary: ${item.content}`);
+  const previousSkills = new Map(previous.skills.map((item) => [item.id, item.name]));
+  for (const item of next.skills) if (previousSkills.get(item.id) !== item.name) changes.push(previousSkills.has(item.id) ? `Skill: ${previousSkills.get(item.id)} -> ${item.name}` : `Added skill: ${item.name}`);
+  for (const item of previous.skills) if (!next.skills.some((current) => current.id === item.id)) changes.push(`Removed skill: ${item.name}`);
+  const previousBullets = new Map(previous.experience.flatMap((entry) => entry.bullets.map((bullet) => [bullet.id, bullet.content])));
+  for (const bullet of next.experience.flatMap((entry) => entry.bullets)) if (previousBullets.get(bullet.id) !== bullet.content) changes.push(previousBullets.has(bullet.id) ? `Experience bullet: ${previousBullets.get(bullet.id)} -> ${bullet.content}` : `Added experience bullet: ${bullet.content}`);
+  const previousCompetencyBullets = new Map(previous.competencies.flatMap((entry) => entry.bullets.map((bullet) => [bullet.id, bullet.content])));
+  for (const bullet of next.competencies.flatMap((entry) => entry.bullets)) if (previousCompetencyBullets.get(bullet.id) !== bullet.content) changes.push(previousCompetencyBullets.has(bullet.id) ? `Competency bullet: ${previousCompetencyBullets.get(bullet.id)} -> ${bullet.content}` : `Added competency bullet: ${bullet.content}`);
+  return changes.length > 0 ? changes : ["Updated application resume"];
 }
 
 export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted }: JobDetailViewProps) {

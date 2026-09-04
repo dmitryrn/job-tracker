@@ -48,6 +48,14 @@ type ResumeRepository interface {
 	SaveResumePhoto(context.Context, models.ResumePhoto) error
 }
 
+type ApplicationResumeRepository interface {
+	ApplicationResume(context.Context, int64) (*models.ApplicationResume, error)
+	CreateApplicationResume(context.Context, int64, int64, models.Resume) (*models.ApplicationResume, bool, error)
+	CreateApplicationResumeRevision(context.Context, int64, int64, int64, models.Resume, string) (models.ApplicationResumeRevision, error)
+	ApplicationResumeAgentEvents(context.Context, int64) ([]models.ApplicationResumeAgentEvent, error)
+	CreateApplicationResumeAgentEvent(context.Context, models.ApplicationResumeAgentEvent) (models.ApplicationResumeAgentEvent, error)
+}
+
 type JobAnalysisRepository interface {
 	JobAnalysis(context.Context, int64) (*models.JobAnalysisRecord, error)
 	SaveJobAnalysis(context.Context, models.JobAnalysisRecord) error
@@ -98,6 +106,10 @@ func NewUserProfileRepository(sqlite *SQLite) UserProfileRepository {
 }
 
 func NewResumeRepository(sqlite *SQLite) ResumeRepository {
+	return sqlite
+}
+
+func NewApplicationResumeRepository(sqlite *SQLite) ApplicationResumeRepository {
 	return sqlite
 }
 

@@ -328,6 +328,8 @@ func TestJobMatchChatAPI(t *testing.T) {
 	require.NoError(t, enableForeignKeys(db))
 
 	repository := repositories.NewSQLite(db)
+	_, err = repository.SaveResume(context.Background(), models.Resume{FullName: "Ada Lovelace"})
+	require.NoError(t, err)
 	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
 		Source: "remotive", SourceID: "chat-job", SourceURL: "https://example.com/chat-job", Title: "Engineer", BodyText: "Build reliable services.", Workplace: "remote", MetadataJSON: "{}",
 	}}))
@@ -346,6 +348,16 @@ func TestJobMatchChatAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&reply))
 	assert.Equal(t, "assistant", reply.Message.Role)
 	assert.Equal(t, "Test chat reply.", reply.Message.Content)
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/application-resume")
+	require.Equal(t, http.StatusOK, response.Code)
+	var application struct {
+		Resume *models.ApplicationResume `json:"resume"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&application))
+	require.NotNil(t, application.Resume)
+	require.Equal(t, int64(1), application.Resume.RootMessageID)
+	require.Len(t, application.Resume.Revisions, 1)
+	require.Equal(t, 0, application.Resume.Revisions[0].RevisionNumber)
 
 	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"chat-request"}`)
 	require.Equal(t, http.StatusCreated, response.Code)
@@ -368,6 +380,9 @@ func TestJobMatchChatAPI(t *testing.T) {
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/application-resume")
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.JSONEq(t, `{"resume":null,"events":[]}`, response.Body.String())
 
 	response = request(handler, http.MethodPost, "/api/jobs/1/match/redo")
 	require.Equal(t, http.StatusAccepted, response.Code)
@@ -410,6 +425,38 @@ func TestJobMatchChatAPIDoesNotDuplicateUserMessageAfterFailedReply(t *testing.T
 	require.Len(t, history.Messages, 1)
 }
 
+func TestJobMatchChatCreatesApplicationResumeRevision(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+	require.NoError(t, enableForeignKeys(db))
+
+	repository := repositories.NewSQLite(db)
+	_, err = repository.SaveResume(context.Background(), models.Resume{FullName: "Ada Lovelace", Headline: "Software engineer"})
+	require.NoError(t, err)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{Source: "remotive", SourceID: "revision-job", SourceURL: "https://example.com/revision-job", Title: "Engineer", BodyText: "Build reliable services.", Workplace: "remote", MetadataJSON: "{}"}}))
+	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "Strong match"))
+	handler := newTestServerWithJobCompletionClient(repository, resumePatchCompletionClient{}).http.Handler
+
+	response := requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"Tailor my resume.","requestId":"revision-request"}`)
+	require.Equal(t, http.StatusCreated, response.Code)
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/application-resume")
+	require.Equal(t, http.StatusOK, response.Code)
+	var application struct {
+		Resume *models.ApplicationResume            `json:"resume"`
+		Events []models.ApplicationResumeAgentEvent `json:"events"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&application))
+	require.NotNil(t, application.Resume)
+	require.Len(t, application.Resume.Revisions, 2)
+	assert.Equal(t, "Backend engineer", application.Resume.Revisions[1].Resume.Headline)
+	assert.Equal(t, "Tailored the headline to the role.", application.Resume.Revisions[1].Summary)
+	require.Len(t, application.Events, 2)
+	assert.Equal(t, "resume_snapshot_created", application.Events[0].Type)
+	assert.Equal(t, "revision_created", application.Events[1].Type)
+}
+
 func TestResumeAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -422,11 +469,11 @@ func TestResumeAPI(t *testing.T) {
 	assert.JSONEq(t, `{"resume":null}`, response.Body.String())
 
 	response = requestWithBody(handler, http.MethodPut, "/api/resume", `{
-		"fullName":" Ada Lovelace ","headline":" Backend engineer ","location":" Berlin ","email":" ada@example.com ","phone":" +49 123 ","summaryParagraphs":[" Builds systems. ",""," Delivers reliable software. "],
+		"fullName":" Ada Lovelace ","headline":" Backend engineer ","location":" Berlin ","email":" ada@example.com ","phone":" +49 123 ","summaryParagraphs":[{"content":" Builds systems. "},{"content":""},{"content":" Delivers reliable software. "}],
 		"links":[{"label":" GitHub ","url":" https://github.com/ada "},{"label":"","url":""}],
 		"skills":[{"name":" Go "},{"name":""}],
-		"competencies":[{"title":" Backend systems ","bullets":[" Built APIs ",""]}],
-		"experience":[{"company":" Acme ","title":" Engineer ","location":" Berlin ","startDate":"2023-01","endDate":"","isCurrent":true,"stack":" Go, PostgreSQL ","bullets":[" Shipped a service ",""]}],
+		"competencies":[{"title":" Backend systems ","bullets":[{"content":" Built APIs "},{"content":""}]}],
+		"experience":[{"company":" Acme ","title":" Engineer ","location":" Berlin ","startDate":"2023-01","endDate":"","isCurrent":true,"stack":" Go, PostgreSQL ","bullets":[{"content":" Shipped a service "},{"content":""}]}],
 		"education":[{"institution":" University ","location":" Berlin ","degree":" MSc ","fieldOfStudy":" Computer science ","startDate":"2019","endDate":"2021","details":" Distributed systems "},{"institution":"","location":"","degree":"","fieldOfStudy":"","startDate":"","endDate":"","details":""}]
 	}`)
 	require.Equal(t, http.StatusOK, response.Code)
@@ -438,13 +485,15 @@ func TestResumeAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, int64(1), result.Resume.ID)
 	assert.Equal(t, "Ada Lovelace", result.Resume.FullName)
-	assert.Equal(t, []string{"Builds systems.", "Delivers reliable software."}, result.Resume.SummaryParagraphs)
+	assert.Equal(t, []string{"Builds systems.", "Delivers reliable software."}, []string{result.Resume.SummaryParagraphs[0].Content, result.Resume.SummaryParagraphs[1].Content})
+	assert.Positive(t, result.Resume.SummaryParagraphs[0].ID)
 	require.Len(t, result.Resume.Skills, 1)
 	assert.Equal(t, "Go", result.Resume.Skills[0].Name)
 	require.Len(t, result.Resume.Links, 1)
 	assert.Equal(t, "GitHub", result.Resume.Links[0].Label)
 	require.Len(t, result.Resume.Competencies, 1)
-	assert.Equal(t, []string{"Built APIs"}, result.Resume.Competencies[0].Bullets)
+	assert.Equal(t, "Built APIs", result.Resume.Competencies[0].Bullets[0].Content)
+	assert.Positive(t, result.Resume.Competencies[0].Bullets[0].ID)
 	require.Len(t, result.Resume.Experience, 1)
 	assert.True(t, result.Resume.Experience[0].IsCurrent)
 	require.Len(t, result.Resume.Education, 1)
@@ -455,6 +504,19 @@ func TestResumeAPI(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, "Backend engineer", result.Resume.Headline)
 	assert.Equal(t, "Go, PostgreSQL", result.Resume.Experience[0].Stack)
+	paragraphID := result.Resume.SummaryParagraphs[0].ID
+	experienceID := result.Resume.Experience[0].ID
+	bulletID := result.Resume.Experience[0].Bullets[0].ID
+	result.Resume.Headline = "Platform engineer"
+	result.Resume.Experience[0].Bullets[0].Content = "Shipped a resilient service"
+	body, err := json.Marshal(result.Resume)
+	require.NoError(t, err)
+	response = requestWithBody(handler, http.MethodPut, "/api/resume", string(body))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+	assert.Equal(t, paragraphID, result.Resume.SummaryParagraphs[0].ID)
+	assert.Equal(t, experienceID, result.Resume.Experience[0].ID)
+	assert.Equal(t, bulletID, result.Resume.Experience[0].Bullets[0].ID)
 }
 
 func TestResumePhotoAPI(t *testing.T) {
@@ -525,7 +587,7 @@ func newTestServerWithJobCompletionClient(repository *repositories.SQLite, clien
 		services.NewResumePDFService(services.NewResumeService(repository)),
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),
-		services.NewJobMatchChat(repository, repository, repository, repository, repository, client, "test-model", "low"),
+		services.NewJobMatchChat(repository, repository, repository, repository, repository, repository, client, "test-model", "low"),
 	)
 }
 
@@ -556,6 +618,12 @@ type failingJobCompletionClient struct{}
 
 func (failingJobCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
 	return openai.ChatResponse{}, errors.New("LLM unavailable")
+}
+
+type resumePatchCompletionClient struct{}
+
+func (resumePatchCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
+	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "patch-call", Type: "function", Function: openai.ToolFunction{Name: "revise_application_resume", Arguments: `{"baseRevision":0,"summary":"Tailored the headline to the role.","operations":[{"op":"replace","section":"headline","id":0,"parentId":0,"expected":"Software engineer","value":"Backend engineer"}]}`}}}}, nil
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {

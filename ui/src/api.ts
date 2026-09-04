@@ -56,20 +56,29 @@ export type UserProfile = {
 };
 
 export type ResumeLink = {
+  id: number;
   label: string;
   url: string;
 };
 
+export type ResumeText = {
+  id: number;
+  content: string;
+};
+
 export type ResumeSkill = {
+  id: number;
   name: string;
 };
 
 export type ResumeCompetency = {
+  id: number;
   title: string;
-  bullets: string[];
+  bullets: ResumeText[];
 };
 
 export type ResumeExperience = {
+  id: number;
   company: string;
   title: string;
   location: string;
@@ -77,10 +86,11 @@ export type ResumeExperience = {
   endDate: string;
   isCurrent: boolean;
   stack: string;
-  bullets: string[];
+  bullets: ResumeText[];
 };
 
 export type ResumeEducation = {
+  id: number;
   institution: string;
   location: string;
   degree: string;
@@ -97,7 +107,7 @@ export type Resume = {
   location: string;
   email: string;
   phone: string;
-  summaryParagraphs: string[];
+  summaryParagraphs: ResumeText[];
   links: ResumeLink[];
   skills: ResumeSkill[];
   competencies: ResumeCompetency[];
@@ -149,6 +159,34 @@ export type JobMatchChatMessage = {
   jobId: number;
   role: "user" | "assistant";
   content: string;
+  createdAt: string;
+};
+
+export type ApplicationResumeRevision = {
+  id: number;
+  revisionNumber: number;
+  triggerMessageId: number;
+  assistantMessageId: number;
+  resume: Resume;
+  summary: string;
+  createdAt: string;
+};
+
+export type ApplicationResume = {
+  id: number;
+  jobId: number;
+  rootMessageId: number;
+  base: Resume;
+  revisions: ApplicationResumeRevision[];
+  createdAt: string;
+};
+
+export type ApplicationResumeAgentEvent = {
+  id: number;
+  triggerMessageId: number;
+  revisionId: number;
+  type: string;
+  detail: string;
   createdAt: string;
 };
 
@@ -321,12 +359,17 @@ export function fetchJobMatchChat(id: number, signal: AbortSignal) {
   return request<{ messages: JobMatchChatMessage[] }>(`jobs/${id}/match/chat`, { signal });
 }
 
-export function sendJobMatchChatMessage(id: number, content: string, requestId: string) {
-  return request<{ message: JobMatchChatMessage }>(`jobs/${id}/match/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, requestId }),
-  });
+export function fetchJobMatchApplicationResume(id: number, signal: AbortSignal) {
+  return request<{ resume: ApplicationResume | null; events: ApplicationResumeAgentEvent[] }>(`jobs/${id}/match/application-resume`, { signal });
+}
+
+export function sendJobMatchChatMessage(id: number, content: string, requestId: string, signal: AbortSignal) {
+	return request<{ message: JobMatchChatMessage }>(`jobs/${id}/match/chat`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ content, requestId }),
+		signal,
+	});
 }
 
 export function fetchJobMatches(signal: AbortSignal) {

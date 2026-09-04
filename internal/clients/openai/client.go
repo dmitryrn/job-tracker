@@ -17,8 +17,28 @@ const (
 )
 
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+}
+
+type ToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
+}
+
+type ToolFunction struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Arguments   string          `json:"arguments,omitempty"`
+}
+
+type Tool struct {
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
 }
 
 type ProviderPreferences struct {
@@ -32,6 +52,8 @@ type ChatRequest struct {
 	Temperature     *float64             `json:"temperature,omitempty"`
 	ReasoningEffort string               `json:"reasoning_effort,omitempty"`
 	Provider        *ProviderPreferences `json:"provider,omitempty"`
+	Tools           []Tool               `json:"tools,omitempty"`
+	ToolChoice      any                  `json:"tool_choice,omitempty"`
 }
 
 type chatCompletionPayload struct {
@@ -40,8 +62,10 @@ type chatCompletionPayload struct {
 }
 
 type ChatResponse struct {
-	Model   string
-	Content string
+	Model        string
+	Content      string
+	ToolCalls    []ToolCall
+	FinishReason string
 }
 
 type chatCompletionResponse struct {
@@ -56,8 +80,9 @@ type chatCompletionChoice struct {
 }
 
 type chatCompletionMessage struct {
-	Content *string `json:"content"`
-	Refusal *string `json:"refusal"`
+	Content   *string    `json:"content"`
+	Refusal   *string    `json:"refusal"`
+	ToolCalls []ToolCall `json:"tool_calls"`
 }
 
 type Client struct {
@@ -142,7 +167,11 @@ func (client *Client) Complete(ctx context.Context, model, sessionID string, inp
 	}
 
 	choice := body.Choices[0]
-	if choice.Message.Content == nil || strings.TrimSpace(*choice.Message.Content) == "" {
+	content := ""
+	if choice.Message.Content != nil {
+		content = *choice.Message.Content
+	}
+	if strings.TrimSpace(content) == "" && len(choice.Message.ToolCalls) == 0 {
 		reason := choice.NativeFinishReason
 		if reason == "" {
 			reason = choice.FinishReason
@@ -155,7 +184,7 @@ func (client *Client) Complete(ctx context.Context, model, sessionID string, inp
 		}
 		return ChatResponse{}, noCompletionContentError(body.Model, reason)
 	}
-	return ChatResponse{Model: body.Model, Content: *choice.Message.Content}, nil
+	return ChatResponse{Model: body.Model, Content: content, ToolCalls: choice.Message.ToolCalls, FinishReason: choice.FinishReason}, nil
 }
 
 func (client *Client) requestForEndpoint(input ChatRequest) ChatRequest {

@@ -33,6 +33,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
 	mux.HandleFunc("GET /api/jobs/{id}/match/chat", jobMatchChatMessagesHandler(chat, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match/application-resume", jobMatchApplicationResumeHandler(chat, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match/chat", jobMatchChatReplyHandler(chat, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}/match/chat/{messageID}", jobMatchChatRevertHandler(chat, logger))
 	mux.HandleFunc("GET /api/matches", jobMatchesHandler(matches, logger))
@@ -445,6 +446,27 @@ func jobMatchChatMessagesHandler(chat *services.JobMatchChat, logger *zap.Logger
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]any{"messages": messages})
+	}
+}
+
+func jobMatchApplicationResumeHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID for application resume", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		resume, events, err := chat.ApplicationResume(request.Context(), id)
+		if err != nil {
+			logger.Error("load application resume failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load application resume")
+			return
+		}
+		if events == nil {
+			events = []models.ApplicationResumeAgentEvent{}
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"resume": resume, "events": events})
 	}
 }
 

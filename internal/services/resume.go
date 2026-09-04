@@ -83,10 +83,11 @@ func cleanResumeLinks(links []models.ResumeLink) []models.ResumeLink {
 	return cleaned
 }
 
-func cleanResumeParagraphs(paragraphs []string) []string {
-	cleaned := make([]string, 0, len(paragraphs))
+func cleanResumeParagraphs(paragraphs []models.ResumeText) []models.ResumeText {
+	cleaned := make([]models.ResumeText, 0, len(paragraphs))
 	for _, paragraph := range paragraphs {
-		if paragraph = strings.TrimSpace(paragraph); paragraph != "" {
+		paragraph.Content = strings.TrimSpace(paragraph.Content)
+		if paragraph.Content != "" {
 			cleaned = append(cleaned, paragraph)
 		}
 	}
@@ -150,10 +151,11 @@ func cleanResumeEducation(education []models.ResumeEducation) []models.ResumeEdu
 	return cleaned
 }
 
-func cleanResumeBullets(bullets []string) []string {
-	cleaned := make([]string, 0, len(bullets))
+func cleanResumeBullets(bullets []models.ResumeText) []models.ResumeText {
+	cleaned := make([]models.ResumeText, 0, len(bullets))
 	for _, bullet := range bullets {
-		if bullet = strings.TrimSpace(bullet); bullet != "" {
+		bullet.Content = strings.TrimSpace(bullet.Content)
+		if bullet.Content != "" {
 			cleaned = append(cleaned, bullet)
 		}
 	}

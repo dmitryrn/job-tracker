@@ -94,6 +94,32 @@ func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
 	assert.EqualError(t, err, "LLM returned no completion content (length) from provider/model")
 }
 
+func TestCompleteSupportsFunctionCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var body struct{ ChatRequest }
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&body))
+		require.Len(t, body.Tools, 1)
+		assert.Equal(t, "revise_resume", body.Tools[0].Function.Name)
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"model":"provider/model","choices":[{"finish_reason":"tool_calls","message":{"content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"revise_resume","arguments":"{\"revision\":1}"}}]}}]}`))
+	}))
+	defer server.Close()
+
+	client := newClient("test-key", server.Client(), server.URL)
+	response, err := client.Complete(context.Background(), "test-model", "session", ChatRequest{
+		Tools: []Tool{{
+			Type:     "function",
+			Function: ToolFunction{Name: "revise_resume", Parameters: json.RawMessage(`{"type":"object"}`)},
+		}},
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, response.Content)
+	assert.Equal(t, "tool_calls", response.FinishReason)
+	require.Len(t, response.ToolCalls, 1)
+	assert.Equal(t, `{"revision":1}`, response.ToolCalls[0].Function.Arguments)
+}
+
 func TestCompleteRejectsMissingSessionID(t *testing.T) {
 	client := newClient("test-key", http.DefaultClient, "https://opencode.ai/zen/go/v1/chat/completions")
 

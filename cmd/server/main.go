@@ -46,6 +46,7 @@ func main() {
 			repositories.NewDiscoverySettingsRepository,
 			repositories.NewUserProfileRepository,
 			repositories.NewResumeRepository,
+			repositories.NewApplicationResumeRepository,
 			repositories.NewJobAnalysisRepository,
 			repositories.NewJobMatchRepository,
 			repositories.NewJobMatchChatRepository,
@@ -120,12 +121,12 @@ func newProfileJobMatcher(clients completionClients, cfg config.Config) (service
 	return services.NewLLMProfileJobMatcher(client, cfg.ProfileMatcher.Model, cfg.ProfileMatcher.ReasoningEffort), nil
 }
 
-func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, clients completionClients, cfg config.Config) (*services.JobMatchChat, error) {
+func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, applications repositories.ApplicationResumeRepository, clients completionClients, cfg config.Config) (*services.JobMatchChat, error) {
 	client, err := clients.forProvider(cfg.JobChat.Provider)
 	if err != nil {
 		return nil, fmt.Errorf("select job chat client: %w", err)
 	}
-	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort), nil
+	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, applications, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort), nil
 }
 
 func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {
