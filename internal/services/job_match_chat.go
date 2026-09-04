@@ -25,7 +25,7 @@ var (
 	ErrJobMatchChatUnansweredMessage   = errors.New("remove the unanswered message before starting another turn")
 )
 
-const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, and their application resume. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. Ask clarifying questions when useful.`
+const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, and their application resume. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. The user sees a structured diff for each resume revision, so do not repeat what changed; briefly explain why the changes improve relevance instead. Ask clarifying questions when useful.`
 
 const resumePatchAttempts = 3
 
@@ -34,13 +34,52 @@ var resumePatchTool = openai.Tool{
 	Function: openai.ToolFunction{
 		Name:        "revise_application_resume",
 		Description: "Apply narrowly targeted, factual resume tailoring changes. Use exact expected text from the application resume and never invent experience, credentials, employers, or dates.",
-		Parameters:  json.RawMessage(`{"type":"object","additionalProperties":false,"required":["baseRevision","summary","operations"],"properties":{"baseRevision":{"type":"integer","minimum":0},"summary":{"type":"string","minLength":1},"operations":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["op","section","id","parentId","expected","value"],"properties":{"op":{"type":"string","enum":["replace","add","remove"]},"section":{"type":"string","enum":["headline","summary","skill","competencyBullet","experienceBullet"]},"id":{"type":"integer","minimum":0},"parentId":{"type":"integer","minimum":0},"expected":{"type":"string"},"value":{"type":"string"}}}}}}`),
+		Parameters: json.RawMessage(`{
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["baseRevision", "operations"],
+			"properties": {
+				"baseRevision": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"operations": {
+					"type": "array",
+					"minItems": 1,
+					"maxItems": 20,
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": ["op", "section", "id", "parentId", "expected", "value"],
+						"properties": {
+							"op": {
+								"type": "string",
+								"enum": ["replace", "add", "remove"]
+							},
+							"section": {
+								"type": "string",
+								"enum": ["headline", "summary", "skill", "competencyBullet", "experienceBullet"]
+							},
+							"id": {
+								"type": "integer",
+								"minimum": 0
+							},
+							"parentId": {
+								"type": "integer",
+								"minimum": 0
+							},
+							"expected": { "type": "string" },
+							"value": { "type": "string" }
+						}
+					}
+				}
+			}
+		}`),
 	},
 }
 
 type resumePatch struct {
 	BaseRevision int                    `json:"baseRevision"`
-	Summary      string                 `json:"summary"`
 	Operations   []resumePatchOperation `json:"operations"`
 }
 
@@ -268,7 +307,7 @@ func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64
 			Profile *models.UserProfile    `json:"profile"`
 		}{job, match, profile})},
 		{JobID: jobID, Type: "tool_definition", Payload: payload(resumePatchTool)},
-		{JobID: jobID, Type: "resume_revision", Payload: payload(resumeRevisionPayload{Revision: 0, Resume: *resume, Summary: "Snapshot of the base resume"})},
+		{JobID: jobID, Type: "resume_revision", Payload: payload(resumeRevisionPayload{Revision: 0, Resume: *resume})},
 	} {
 		if _, err := service.append(ctx, item); err != nil {
 			return fmt.Errorf("save initial chat item: %w", err)
@@ -394,19 +433,18 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			history = append(history, retry)
 			continue
 		}
-		result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: current.Revision + 1, Resume: &updated, Summary: strings.TrimSpace(patch.Summary)})})
+		result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: current.Revision + 1, Resume: &updated})})
 		if err != nil {
 			return fmt.Errorf("record accepted tool result: %w", err)
 		}
 		history = append(history, result)
-		current = resumeRevisionPayload{Revision: current.Revision + 1, Resume: updated, Summary: strings.TrimSpace(patch.Summary)}
+		current = resumeRevisionPayload{Revision: current.Revision + 1, Resume: updated}
 	}
 }
 
 type resumeRevisionPayload struct {
 	Revision int           `json:"revision"`
 	Resume   models.Resume `json:"resume"`
-	Summary  string        `json:"summary"`
 }
 
 type toolResultPayload struct {
@@ -415,7 +453,6 @@ type toolResultPayload struct {
 	Error      string         `json:"error,omitempty"`
 	Revision   int            `json:"revision,omitempty"`
 	Resume     *models.Resume `json:"resume,omitempty"`
-	Summary    string         `json:"summary,omitempty"`
 }
 
 func providerRequest(items []models.JobMatchChatItem, reasoning string) (openai.ChatRequest, error) {
@@ -479,7 +516,7 @@ func latestResumeRevision(items []models.JobMatchChatItem) (resumeRevisionPayloa
 				return current, err
 			}
 			if result.Status == "accepted" && result.Resume != nil {
-				current = resumeRevisionPayload{Revision: result.Revision, Resume: *result.Resume, Summary: result.Summary}
+				current = resumeRevisionPayload{Revision: result.Revision, Resume: *result.Resume}
 				found = true
 			}
 		}
@@ -562,8 +599,8 @@ func (service *JobMatchChat) recordTerminal(ctx context.Context, jobID int64, re
 }
 
 func applyResumePatch(resume *models.Resume, patch resumePatch) error {
-	if strings.TrimSpace(patch.Summary) == "" || len(patch.Operations) == 0 {
-		return errors.New("patch must include a summary and at least one operation")
+	if len(patch.Operations) == 0 {
+		return errors.New("patch must include at least one operation")
 	}
 	for _, operation := range patch.Operations {
 		value := strings.TrimSpace(operation.Value)

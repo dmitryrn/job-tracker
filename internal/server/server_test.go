@@ -648,7 +648,7 @@ func (resumePatchCompletionClient) Complete(_ context.Context, _ string, _ strin
 			return openai.ChatResponse{Model: "test-model", Content: "The resume has been tailored."}, nil
 		}
 	}
-	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "patch-call", Type: "function", Function: openai.ToolFunction{Name: "revise_application_resume", Arguments: `{"baseRevision":0,"summary":"Tailored the headline to the role.","operations":[{"op":"replace","section":"headline","id":0,"parentId":0,"expected":"Software engineer","value":"Backend engineer"}]}`}}}}, nil
+	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "patch-call", Type: "function", Function: openai.ToolFunction{Name: "revise_application_resume", Arguments: `{"baseRevision":0,"operations":[{"op":"replace","section":"headline","id":0,"parentId":0,"expected":"Software engineer","value":"Backend engineer"}]}`}}}}, nil
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {

@@ -91,8 +91,8 @@ application resume. These items are not rebuilt or changed on later turns.
 
 A successful `revise_application_resume` tool call appends its raw assistant
 tool-call item and an accepted tool-result item. That tool result carries the
-full resulting resume snapshot, revision number, and summary, and is itself
-the immutable revision record. Revision snapshots use stable nested resume IDs
+full resulting resume snapshot and revision number, and is itself the
+immutable revision record. Revision snapshots use stable nested resume IDs
 so semantic changes can be computed from consecutive revisions. Structural
 diffs are computed on demand and are not stored separately.
 

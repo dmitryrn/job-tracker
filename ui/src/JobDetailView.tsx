@@ -122,7 +122,7 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
       try {
         const result = await fetchJobMatchChat(jobID, controller.signal);
         if (!controller.signal.aborted) {
-          setItems(result.items);
+          setItems((current) => mergeChatItems(current, result.items));
           setError("");
         }
       } catch (reason) {
@@ -135,11 +135,7 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     const events = new EventSource(jobMatchChatEventsURL(jobID));
     events.addEventListener("item", (event) => {
       const item = JSON.parse((event as MessageEvent<string>).data) as JobMatchChatItem;
-      setItems((current) => {
-        if (!current) return current;
-        if (current.some((existing) => existing.sequence === item.sequence)) return current;
-        return [...current, item].sort((left, right) => left.sequence - right.sequence);
-      });
+      setItems((current) => mergeChatItems(current, [item]));
     });
     events.addEventListener("reset", () => void load());
     events.onerror = () => { /* EventSource reconnects; the server repairs item gaps on reconnect. */ };
@@ -159,7 +155,8 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     }
     setSending(true);
     try {
-      await sendJobMatchChatMessage(jobID, content, chatRequestID());
+      const result = await sendJobMatchChatMessage(jobID, content, chatRequestID());
+      setItems((current) => mergeChatItems(current, [result.item]));
       setDraft("");
       setError("");
     } catch (reason) {
@@ -208,7 +205,14 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
   </section>;
 }
 
-type ResumeRevision = { sequence: number; revision: number; resume: Resume; summary: string };
+export function mergeChatItems(current: JobMatchChatItem[] | undefined, incoming: JobMatchChatItem[]) {
+  const bySequence = new Map((current ?? []).map((item) => [item.sequence, item]));
+  for (const item of incoming) bySequence.set(item.sequence, item);
+  return [...bySequence.values()].sort((left, right) => left.sequence - right.sequence);
+}
+
+type ResumeRevision = { sequence: number; revision: number; resume: Resume };
+type ResumeChange = { key: string; label: string; removed?: string; added?: string };
 
 function contentOf(item: JobMatchChatItem) {
   return typeof item.payload === "object" && item.payload !== null && "content" in item.payload && typeof item.payload.content === "string" ? item.payload.content : "";
@@ -216,8 +220,8 @@ function contentOf(item: JobMatchChatItem) {
 
 function resumeRevisions(items: JobMatchChatItem[]): ResumeRevision[] {
   return items.flatMap((item) => {
-    const value = item.payload as { status?: string; revision?: number; resume?: Resume; summary?: string };
-    if ((item.type === "resume_revision" || item.type === "tool_result") && (item.type !== "tool_result" || value.status === "accepted") && value.resume && typeof value.revision === "number") return [{ sequence: item.sequence, revision: value.revision, resume: value.resume, summary: value.summary || "Application resume updated" }];
+    const value = item.payload as { status?: string; revision?: number; resume?: Resume };
+    if ((item.type === "resume_revision" || item.type === "tool_result") && (item.type !== "tool_result" || value.status === "accepted") && value.resume && typeof value.revision === "number") return [{ sequence: item.sequence, revision: value.revision, resume: value.resume }];
     return [];
   });
 }
@@ -272,28 +276,48 @@ function toolCallName(item: JobMatchChatItem) {
 }
 
 function ApplicationResumeActivity({ revision, previous }: { revision: ResumeRevision; previous?: ResumeRevision }) {
+  const changes = previous ? resumeDiff(previous.resume, revision.resume) : [];
+  const groups = changes.reduce<Array<{ label: string; changes: ResumeChange[] }>>((all, change) => {
+    const group = all.at(-1);
+    if (group?.label === change.label) group.changes.push(change);
+    else all.push({ label: change.label, changes: [change] });
+    return all;
+  }, []);
   return <section className="application-resume-activity">
     <h3>{revision.revision === 0 ? "Base snapshot" : `Revision ${revision.revision} applied`}</h3>
     <article className="application-resume-revision">
-      <p>{revision.summary}</p>
-      {previous && <ul>{resumeDiff(previous.resume, revision.resume).map((change) => <li key={change}>{change}</li>)}</ul>}
+      {groups.length > 0 && <div className="resume-diff" aria-label="Resume changes">
+        {groups.map((group) => <section className="resume-diff-group" key={group.label}>
+          <h4>{group.label}</h4>
+          {group.changes.map((change) => <div className="resume-diff-change" key={change.key}>
+            {change.removed !== undefined && <div className="resume-diff-line removed"><span className="resume-diff-prefix" aria-hidden="true">-</span><span>{change.removed || "(empty)"}</span></div>}
+            {change.added !== undefined && <div className="resume-diff-line added"><span className="resume-diff-prefix" aria-hidden="true">+</span><span>{change.added || "(empty)"}</span></div>}
+          </div>)}
+        </section>)}
+      </div>}
     </article>
   </section>;
 }
 
 function resumeDiff(previous: Resume, next: Resume) {
-  const changes: string[] = [];
-  if (previous.headline !== next.headline) changes.push(`Headline: ${previous.headline || "(empty)"} -> ${next.headline || "(empty)"}`);
-  const previousSummary = new Map(previous.summaryParagraphs.map((item) => [item.id, item.content]));
-  for (const item of next.summaryParagraphs) if (previousSummary.get(item.id) !== item.content) changes.push(previousSummary.has(item.id) ? `Summary: ${previousSummary.get(item.id)} -> ${item.content}` : `Added summary: ${item.content}`);
-  const previousSkills = new Map(previous.skills.map((item) => [item.id, item.name]));
-  for (const item of next.skills) if (previousSkills.get(item.id) !== item.name) changes.push(previousSkills.has(item.id) ? `Skill: ${previousSkills.get(item.id)} -> ${item.name}` : `Added skill: ${item.name}`);
-  for (const item of previous.skills) if (!next.skills.some((current) => current.id === item.id)) changes.push(`Removed skill: ${item.name}`);
-  const previousBullets = new Map(previous.experience.flatMap((entry) => entry.bullets.map((bullet) => [bullet.id, bullet.content])));
-  for (const bullet of next.experience.flatMap((entry) => entry.bullets)) if (previousBullets.get(bullet.id) !== bullet.content) changes.push(previousBullets.has(bullet.id) ? `Experience bullet: ${previousBullets.get(bullet.id)} -> ${bullet.content}` : `Added experience bullet: ${bullet.content}`);
-  const previousCompetencyBullets = new Map(previous.competencies.flatMap((entry) => entry.bullets.map((bullet) => [bullet.id, bullet.content])));
-  for (const bullet of next.competencies.flatMap((entry) => entry.bullets)) if (previousCompetencyBullets.get(bullet.id) !== bullet.content) changes.push(previousCompetencyBullets.has(bullet.id) ? `Competency bullet: ${previousCompetencyBullets.get(bullet.id)} -> ${bullet.content}` : `Added competency bullet: ${bullet.content}`);
-  return changes.length > 0 ? changes : ["Updated application resume"];
+  const changes: ResumeChange[] = [];
+  const appendChanges = (label: string, keyPrefix: string, before: Array<{ id: number; content: string }>, after: Array<{ id: number; content: string }>) => {
+    const beforeByID = new Map(before.map((item) => [item.id, item.content]));
+    const afterByID = new Map(after.map((item) => [item.id, item.content]));
+    for (const item of after) {
+      const prior = beforeByID.get(item.id);
+      if (prior === undefined) changes.push({ key: `${keyPrefix}-${item.id}`, label, added: item.content });
+      else if (prior !== item.content) changes.push({ key: `${keyPrefix}-${item.id}`, label, removed: prior, added: item.content });
+    }
+    for (const item of before) if (!afterByID.has(item.id)) changes.push({ key: `${keyPrefix}-${item.id}`, label, removed: item.content });
+  };
+
+  if (previous.headline !== next.headline) changes.push({ key: "headline", label: "Headline", removed: previous.headline, added: next.headline });
+  appendChanges("Summary", "summary", previous.summaryParagraphs, next.summaryParagraphs);
+  appendChanges("Skill", "skill", previous.skills.map((item) => ({ id: item.id, content: item.name })), next.skills.map((item) => ({ id: item.id, content: item.name })));
+  appendChanges("Experience bullet", "experience-bullet", previous.experience.flatMap((entry) => entry.bullets), next.experience.flatMap((entry) => entry.bullets));
+  appendChanges("Competency bullet", "competency-bullet", previous.competencies.flatMap((entry) => entry.bullets), next.competencies.flatMap((entry) => entry.bullets));
+  return changes;
 }
 
 export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted }: JobDetailViewProps) {
