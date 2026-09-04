@@ -116,6 +116,24 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    function updateComposerOffset() {
+      if (!viewport) return;
+      const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      document.documentElement.style.setProperty("--chat-compose-keyboard-offset", `${keyboardHeight}px`);
+    }
+    updateComposerOffset();
+    viewport.addEventListener("resize", updateComposerOffset);
+    viewport.addEventListener("scroll", updateComposerOffset);
+    return () => {
+      viewport.removeEventListener("resize", updateComposerOffset);
+      viewport.removeEventListener("scroll", updateComposerOffset);
+      document.documentElement.style.removeProperty("--chat-compose-keyboard-offset");
+    };
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     async function load(reset = false) {
       if (reset) setItems(undefined);
@@ -171,6 +189,13 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     try { await stopJobMatchChat(jobID, activeRequestID); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not stop chat"); }
   }
 
+  function keepComposerClear() {
+    const distanceFromBottom = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
+    const atBottom = distanceFromBottom <= 80;
+    if (!atBottom) return;
+    window.setTimeout(() => window.scrollTo(0, document.documentElement.scrollHeight), 160);
+  }
+
   async function revert(message: JobMatchChatItem, content: string) {
     if (reverting) {
       return;
@@ -199,8 +224,10 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     {error && <p className="query-error">{error}</p>}
     {items === undefined ? <p className="analysis-loading">Loading chat...</p> : <ChatTimeline items={items} onRevert={revert} reverting={reverting} />}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
-      <textarea aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} disabled={blocked} rows={3} />
-      <div className="match-chat-actions"><button className={activeRequestID ? "secondary-action" : "primary-action"} type={activeRequestID ? "button" : "submit"} disabled={!activeRequestID && (blocked || !draft.trim())} onClick={activeRequestID ? () => void stop() : undefined}>{activeRequestID ? "Stop" : "Send"}</button></div>
+      <textarea aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} onFocus={keepComposerClear} disabled={blocked} rows={3} />
+      <div className="match-chat-actions"><button className={activeRequestID ? "secondary-action" : "primary-action"} type={activeRequestID ? "button" : "submit"} disabled={!activeRequestID && (blocked || !draft.trim())} onClick={activeRequestID ? () => void stop() : undefined} aria-label={activeRequestID ? "Stop response" : "Send message"} title={activeRequestID ? "Stop response" : "Send message"}>
+        {activeRequestID ? <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1" /></svg> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3.5 21 12 3 20.5V14l12-2-12-2z" /></svg>}
+      </button></div>
     </form>
   </section>;
 }
