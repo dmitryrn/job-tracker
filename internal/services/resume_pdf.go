@@ -110,7 +110,7 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
   .photo { display: block; height: 43mm; margin: 0 0 6mm; object-fit: cover; width: 43mm; }
   .headline { font-size: 18pt; font-weight: 400; letter-spacing: .01em; margin-bottom: 5mm; text-transform: uppercase; }
   .contact { font-size: 12pt; font-weight: 800; margin-bottom: 9mm; }
-  .contact span + span::before, .skills span + span::before { content: " | "; padding: 0 .15em; }
+  .contact span + span::before { content: " | "; padding: 0 .15em; }
   .summary { font-size: 12pt; line-height: 1.42; margin-bottom: 7mm; white-space: pre-line; }
   .links { color: #555; font-size: 9.5pt; margin-bottom: 7mm; }
   .links a { color: inherit; text-decoration: none; }
@@ -141,7 +141,7 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
     {{if .Resume.Links}}<p class="links">{{range $index, $link := .Resume.Links}}{{if $index}}<span></span>{{end}}<span><a href="{{$link.URL}}">{{$link.Label}}</a></span>{{end}}</p>{{end}}
   </section>
 
-  {{if .Resume.Skills}}<section><h2>Key Competences</h2><p class="skills">{{range .Resume.Skills}}<span>{{.Name}}</span>{{end}}</p></section>{{end}}
+  {{if .Resume.Skills}}<section><h2>Key Competences</h2><ul class="skills">{{range .Resume.Skills}}<li>{{.Name}}</li>{{end}}</ul></section>{{end}}
 
   {{if .Resume.Competencies}}<section><h2>Competencies</h2>{{range .Resume.Competencies}}<div class="section"><h3>{{.Title}}</h3>{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}</div>{{end}}</section>{{end}}
 
