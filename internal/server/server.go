@@ -32,10 +32,11 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
-	mux.HandleFunc("GET /api/jobs/{id}/match/chat", jobMatchChatMessagesHandler(chat, logger))
-	mux.HandleFunc("GET /api/jobs/{id}/match/application-resume", jobMatchApplicationResumeHandler(chat, logger))
-	mux.HandleFunc("POST /api/jobs/{id}/match/chat", jobMatchChatReplyHandler(chat, logger))
-	mux.HandleFunc("DELETE /api/jobs/{id}/match/chat/{messageID}", jobMatchChatRevertHandler(chat, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match/chat", jobMatchChatItemsHandler(chat, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match/chat/events", jobMatchChatEventsHandler(chat, logger))
+	mux.HandleFunc("POST /api/jobs/{id}/match/chat", jobMatchChatSendHandler(chat, logger))
+	mux.HandleFunc("POST /api/jobs/{id}/match/chat/{requestID}/stop", jobMatchChatStopHandler(chat, logger))
+	mux.HandleFunc("DELETE /api/jobs/{id}/match/chat/{sequence}", jobMatchChatRevertHandler(chat, logger))
 	mux.HandleFunc("GET /api/matches", jobMatchesHandler(matches, logger))
 	mux.HandleFunc("GET /api/match-queue", matchQueueHandler(requests, logger))
 	mux.HandleFunc("POST /api/match-queue", queueUnmatchedJobMatchesHandler(requests, logger))
@@ -431,7 +432,7 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 	}
 }
 
-func jobMatchChatMessagesHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+func jobMatchChatItemsHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
 		if err != nil || id < 1 {
@@ -439,38 +440,105 @@ func jobMatchChatMessagesHandler(chat *services.JobMatchChat, logger *zap.Logger
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
-		messages, err := chat.Messages(request.Context(), id)
+		after, err := chatAfterSequence(request)
 		if err != nil {
-			logger.Error("load job match chat messages failed", zap.Int64("id", id), zap.Error(err))
+			logger.Warn("invalid match chat item sequence", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "after must be a non-negative integer")
+			return
+		}
+		items, err := chat.Items(request.Context(), id, after)
+		if err != nil {
+			logger.Error("load job match chat items failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load match chat")
 			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"messages": messages})
+		writeJSON(writer, http.StatusOK, map[string]any{"items": items})
 	}
 }
 
-func jobMatchApplicationResumeHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+func chatAfterSequence(request *http.Request) (int64, error) {
+	value := request.URL.Query().Get("after")
+	if value == "" {
+		return 0, nil
+	}
+	after, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || after < 0 {
+		return 0, errors.New("invalid after sequence")
+	}
+	return after, nil
+}
+
+func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
 		if err != nil || id < 1 {
-			logger.Warn("invalid job ID for application resume", zap.String("id", request.PathValue("id")))
+			logger.Warn("invalid job ID for match chat events", zap.String("id", request.PathValue("id")))
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
-		resume, events, err := chat.ApplicationResume(request.Context(), id)
+		after, err := chatAfterSequence(request)
 		if err != nil {
-			logger.Error("load application resume failed", zap.Int64("id", id), zap.Error(err))
-			writeError(writer, http.StatusInternalServerError, "could not load application resume")
+			logger.Warn("invalid match chat event sequence", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "after must be a non-negative integer")
 			return
 		}
-		if events == nil {
-			events = []models.ApplicationResumeAgentEvent{}
+		flusher, ok := writer.(http.Flusher)
+		if !ok {
+			logger.Error("match chat SSE is not supported", zap.Int64("id", id))
+			writeError(writer, http.StatusInternalServerError, "match chat events are unavailable")
+			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"resume": resume, "events": events})
+		writer.Header().Set("Cache-Control", "no-cache")
+		writer.Header().Set("Connection", "keep-alive")
+		writer.Header().Set("Content-Type", "text/event-stream")
+		updates, unsubscribe := chat.Subscribe(id)
+		defer unsubscribe()
+		writeChatItems := func() bool {
+			items, err := chat.Items(request.Context(), id, after)
+			if err != nil {
+				logger.Error("load match chat SSE items failed", zap.Int64("id", id), zap.Error(err))
+				return false
+			}
+			for _, item := range items {
+				data, err := json.Marshal(item)
+				if err != nil {
+					logger.Error("encode match chat SSE item failed", zap.Int64("id", id), zap.Error(err))
+					return false
+				}
+				if _, err := writer.Write([]byte("event: item\ndata: " + string(data) + "\n\n")); err != nil {
+					logger.Error("write match chat SSE item failed", zap.Int64("id", id), zap.Error(err))
+					return false
+				}
+				after = item.Sequence
+			}
+			flusher.Flush()
+			return true
+		}
+		if !writeChatItems() {
+			return
+		}
+		for {
+			select {
+			case <-request.Context().Done():
+				return
+			case update := <-updates:
+				if update.Reset {
+					if _, err := writer.Write([]byte("event: reset\ndata: {}\n\n")); err != nil {
+						logger.Error("write match chat SSE reset failed", zap.Int64("id", id), zap.Error(err))
+						return
+					}
+					flusher.Flush()
+					continue
+				}
+				if !writeChatItems() {
+					return
+				}
+			}
+		}
 	}
 }
 
-func jobMatchChatReplyHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+func jobMatchChatSendHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
 		if err != nil || id < 1 {
@@ -487,7 +555,7 @@ func jobMatchChatReplyHandler(chat *services.JobMatchChat, logger *zap.Logger) h
 			writeError(writer, http.StatusBadRequest, "message must be valid JSON")
 			return
 		}
-		message, err := chat.Reply(request.Context(), id, body.Content, body.RequestID)
+		item, err := chat.Send(request.Context(), id, body.Content, body.RequestID)
 		if errors.Is(err, services.ErrEmptyJobMatchChatMessage) || errors.Is(err, services.ErrMissingJobMatchChatRequestID) {
 			logger.Warn("empty job match chat message", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
@@ -498,12 +566,40 @@ func jobMatchChatReplyHandler(chat *services.JobMatchChat, logger *zap.Logger) h
 			writeError(writer, http.StatusConflict, err.Error())
 			return
 		}
+		if errors.Is(err, services.ErrJobMatchChatTurnActive) || errors.Is(err, services.ErrJobMatchChatUnansweredMessage) {
+			logger.Warn("job match chat turn rejected", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusConflict, err.Error())
+			return
+		}
 		if err != nil {
 			logger.Error("reply to job match chat failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not reply to match chat")
 			return
 		}
-		writeJSON(writer, http.StatusCreated, map[string]any{"message": message})
+		writeJSON(writer, http.StatusAccepted, map[string]any{"item": item})
+	}
+}
+
+func jobMatchChatStopHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		jobID, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || jobID < 1 {
+			logger.Warn("invalid job ID for match chat stop", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		requestID := strings.TrimSpace(request.PathValue("requestID"))
+		if requestID == "" {
+			logger.Warn("missing match chat request ID for stop", zap.Int64("job_id", jobID))
+			writeError(writer, http.StatusBadRequest, "request ID is required")
+			return
+		}
+		if !chat.Stop(jobID, requestID) {
+			logger.Warn("active match chat turn not found for stop", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
+			writeError(writer, http.StatusNotFound, "active chat turn not found")
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -515,19 +611,19 @@ func jobMatchChatRevertHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
-		messageID, err := strconv.ParseInt(request.PathValue("messageID"), 10, 64)
-		if err != nil || messageID < 1 {
-			logger.Warn("invalid message ID for match chat revert", zap.Int64("job_id", jobID), zap.String("message_id", request.PathValue("messageID")))
-			writeError(writer, http.StatusBadRequest, "message ID must be a positive integer")
+		sequence, err := strconv.ParseInt(request.PathValue("sequence"), 10, 64)
+		if err != nil || sequence < 1 {
+			logger.Warn("invalid item sequence for match chat revert", zap.Int64("job_id", jobID), zap.String("sequence", request.PathValue("sequence")))
+			writeError(writer, http.StatusBadRequest, "item sequence must be a positive integer")
 			return
 		}
-		if err := chat.Revert(request.Context(), jobID, messageID); err != nil {
+		if err := chat.Revert(request.Context(), jobID, sequence); err != nil {
 			if errors.Is(err, services.ErrJobMatchChatUserMessageNotFound) {
-				logger.Warn("user chat message not found for revert", zap.Int64("job_id", jobID), zap.Int64("message_id", messageID), zap.Error(err))
+				logger.Warn("user chat item not found for revert", zap.Int64("job_id", jobID), zap.Int64("sequence", sequence), zap.Error(err))
 				writeError(writer, http.StatusNotFound, err.Error())
 				return
 			}
-			logger.Error("revert job match chat failed", zap.Int64("job_id", jobID), zap.Int64("message_id", messageID), zap.Error(err))
+			logger.Error("revert job match chat failed", zap.Int64("job_id", jobID), zap.Int64("sequence", sequence), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not revert match chat")
 			return
 		}

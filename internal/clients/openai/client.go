@@ -62,15 +62,23 @@ type chatCompletionPayload struct {
 }
 
 type ChatResponse struct {
-	Model        string
-	Content      string
-	ToolCalls    []ToolCall
-	FinishReason string
+	Model            string
+	Content          string
+	ToolCalls        []ToolCall
+	FinishReason     string
+	Refusal          string
+	ReasoningSummary string
+	Reasoning        json.RawMessage
+	Usage            json.RawMessage
+	ProviderMetadata json.RawMessage
 }
 
 type chatCompletionResponse struct {
-	Model   string                 `json:"model"`
-	Choices []chatCompletionChoice `json:"choices"`
+	Model    string                 `json:"model"`
+	Choices  []chatCompletionChoice `json:"choices"`
+	Usage    json.RawMessage        `json:"usage"`
+	Provider json.RawMessage        `json:"provider"`
+	Metadata json.RawMessage        `json:"metadata"`
 }
 
 type chatCompletionChoice struct {
@@ -80,9 +88,11 @@ type chatCompletionChoice struct {
 }
 
 type chatCompletionMessage struct {
-	Content   *string    `json:"content"`
-	Refusal   *string    `json:"refusal"`
-	ToolCalls []ToolCall `json:"tool_calls"`
+	Content          *string         `json:"content"`
+	Refusal          *string         `json:"refusal"`
+	ToolCalls        []ToolCall      `json:"tool_calls"`
+	Reasoning        json.RawMessage `json:"reasoning"`
+	ReasoningDetails json.RawMessage `json:"reasoning_details"`
 }
 
 type Client struct {
@@ -184,7 +194,23 @@ func (client *Client) Complete(ctx context.Context, model, sessionID string, inp
 		}
 		return ChatResponse{}, noCompletionContentError(body.Model, reason)
 	}
-	return ChatResponse{Model: body.Model, Content: content, ToolCalls: choice.Message.ToolCalls, FinishReason: choice.FinishReason}, nil
+	reasoning := choice.Message.ReasoningDetails
+	if len(reasoning) == 0 {
+		reasoning = choice.Message.Reasoning
+	}
+	reasoningSummary := ""
+	if json.Unmarshal(choice.Message.Reasoning, &reasoningSummary) != nil {
+		_ = json.Unmarshal(choice.Message.ReasoningDetails, &reasoningSummary)
+	}
+	refusal := ""
+	if choice.Message.Refusal != nil {
+		refusal = *choice.Message.Refusal
+	}
+	providerMetadata := body.Provider
+	if len(providerMetadata) == 0 {
+		providerMetadata = body.Metadata
+	}
+	return ChatResponse{Model: body.Model, Content: content, ToolCalls: choice.Message.ToolCalls, FinishReason: choice.FinishReason, Refusal: refusal, ReasoningSummary: reasoningSummary, Reasoning: reasoning, Usage: body.Usage, ProviderMetadata: providerMetadata}, nil
 }
 
 func (client *Client) requestForEndpoint(input ChatRequest) ChatRequest {

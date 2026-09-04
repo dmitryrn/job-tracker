@@ -323,6 +323,7 @@ func TestJobMatchChatAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
+	db.SetMaxOpenConns(1)
 	require.NoError(t, db.Ping())
 	require.NoError(t, migrations.Apply(db))
 	require.NoError(t, enableForeignKeys(db))
@@ -338,66 +339,63 @@ func TestJobMatchChatAPI(t *testing.T) {
 
 	response := request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
-	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
+	assert.JSONEq(t, `{"items":[]}`, response.Body.String())
 
 	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"chat-request"}`)
-	require.Equal(t, http.StatusCreated, response.Code)
-	var reply struct {
-		Message models.JobMatchChatMessage `json:"message"`
+	require.Equal(t, http.StatusAccepted, response.Code)
+	var accepted struct {
+		Item models.JobMatchChatItem `json:"item"`
 	}
-	require.NoError(t, json.NewDecoder(response.Body).Decode(&reply))
-	assert.Equal(t, "assistant", reply.Message.Role)
-	assert.Equal(t, "Test chat reply.", reply.Message.Content)
-	response = request(handler, http.MethodGet, "/api/jobs/1/match/application-resume")
-	require.Equal(t, http.StatusOK, response.Code)
-	var application struct {
-		Resume *models.ApplicationResume `json:"resume"`
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&accepted))
+	assert.Equal(t, "user_message", accepted.Item.Type)
+	var userPayload struct {
+		Content string `json:"content"`
 	}
-	require.NoError(t, json.NewDecoder(response.Body).Decode(&application))
-	require.NotNil(t, application.Resume)
-	require.Equal(t, int64(1), application.Resume.RootMessageID)
-	require.Len(t, application.Resume.Revisions, 1)
-	require.Equal(t, 0, application.Resume.Revisions[0].RevisionNumber)
+	require.NoError(t, json.Unmarshal(accepted.Item.Payload, &userPayload))
+	assert.Equal(t, "How should I approach this role?", userPayload.Content)
+	waitForChatTurn(t, repository, 1)
 
 	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"chat-request"}`)
-	require.Equal(t, http.StatusCreated, response.Code)
+	require.Equal(t, http.StatusAccepted, response.Code)
 
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
 	var history struct {
-		Messages []models.JobMatchChatMessage `json:"messages"`
+		Items []models.JobMatchChatItem `json:"items"`
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
-	require.Len(t, history.Messages, 2)
-	assert.Equal(t, "user", history.Messages[0].Role)
-	assert.Equal(t, "assistant", history.Messages[1].Role)
+	require.Len(t, history.Items, 9)
+	assert.Equal(t, "user_message", history.Items[4].Type)
+	assert.Equal(t, "assistant_message", history.Items[7].Type)
 
-	response = request(handler, http.MethodDelete, "/api/jobs/1/match/chat/2")
+	response = request(handler, http.MethodDelete, "/api/jobs/1/match/chat/6")
 	require.Equal(t, http.StatusNotFound, response.Code)
 
-	response = request(handler, http.MethodDelete, "/api/jobs/1/match/chat/1")
+	response = request(handler, http.MethodDelete, "/api/jobs/1/match/chat/5")
 	require.Equal(t, http.StatusNoContent, response.Code)
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
-	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
-	response = request(handler, http.MethodGet, "/api/jobs/1/match/application-resume")
-	require.Equal(t, http.StatusOK, response.Code)
-	assert.JSONEq(t, `{"resume":null,"events":[]}`, response.Body.String())
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
+	require.Len(t, history.Items, 4)
 
 	response = request(handler, http.MethodPost, "/api/jobs/1/match/redo")
 	require.Equal(t, http.StatusAccepted, response.Code)
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
-	assert.JSONEq(t, `{"messages":[]}`, response.Body.String())
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
+	require.Empty(t, history.Items)
 }
 
 func TestJobMatchChatAPIDoesNotDuplicateUserMessageAfterFailedReply(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
+	db.SetMaxOpenConns(1)
 	require.NoError(t, migrations.Apply(db))
 
 	repository := repositories.NewSQLite(db)
+	_, err = repository.SaveResume(context.Background(), models.Resume{FullName: "Ada Lovelace"})
+	require.NoError(t, err)
 	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
 		Source: "remotive", SourceID: "failed-chat-job", SourceURL: "https://example.com/failed-chat-job", Title: "Engineer", BodyText: "Build reliable services.", Workplace: "remote", MetadataJSON: "{}",
 	}}))
@@ -405,30 +403,31 @@ func TestJobMatchChatAPIDoesNotDuplicateUserMessageAfterFailedReply(t *testing.T
 	handler := newTestServerWithJobCompletionClient(repository, failingJobCompletionClient{}).http.Handler
 
 	response := requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"failed-chat-request"}`)
-	require.Equal(t, http.StatusInternalServerError, response.Code)
+	require.Equal(t, http.StatusAccepted, response.Code)
+	waitForChatTurn(t, repository, 1)
 
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
 	var history struct {
-		Messages []models.JobMatchChatMessage `json:"messages"`
+		Items []models.JobMatchChatItem `json:"items"`
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
-	require.Len(t, history.Messages, 1)
-	assert.Equal(t, "user", history.Messages[0].Role)
-	assert.Equal(t, "How should I approach this role?", history.Messages[0].Content)
+	require.Len(t, history.Items, 8)
+	assert.Equal(t, "user_message", history.Items[4].Type)
 
 	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"How should I approach this role?","requestId":"failed-chat-request"}`)
-	require.Equal(t, http.StatusInternalServerError, response.Code)
+	require.Equal(t, http.StatusAccepted, response.Code)
 	response = request(handler, http.MethodGet, "/api/jobs/1/match/chat")
 	require.Equal(t, http.StatusOK, response.Code)
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&history))
-	require.Len(t, history.Messages, 1)
+	require.Len(t, history.Items, 8)
 }
 
 func TestJobMatchChatCreatesApplicationResumeRevision(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
+	db.SetMaxOpenConns(1)
 	require.NoError(t, migrations.Apply(db))
 	require.NoError(t, enableForeignKeys(db))
 
@@ -440,21 +439,25 @@ func TestJobMatchChatCreatesApplicationResumeRevision(t *testing.T) {
 	handler := newTestServerWithJobCompletionClient(repository, resumePatchCompletionClient{}).http.Handler
 
 	response := requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"Tailor my resume.","requestId":"revision-request"}`)
-	require.Equal(t, http.StatusCreated, response.Code)
-	response = request(handler, http.MethodGet, "/api/jobs/1/match/application-resume")
-	require.Equal(t, http.StatusOK, response.Code)
-	var application struct {
-		Resume *models.ApplicationResume            `json:"resume"`
-		Events []models.ApplicationResumeAgentEvent `json:"events"`
+	require.Equal(t, http.StatusAccepted, response.Code)
+	waitForChatTurn(t, repository, 1)
+	items, err := repository.JobMatchChatItems(context.Background(), 1, 0)
+	require.NoError(t, err)
+	accepted := models.JobMatchChatItem{}
+	for _, item := range items {
+		if item.Type == "tool_result" {
+			accepted = item
+			break
+		}
 	}
-	require.NoError(t, json.NewDecoder(response.Body).Decode(&application))
-	require.NotNil(t, application.Resume)
-	require.Len(t, application.Resume.Revisions, 2)
-	assert.Equal(t, "Backend engineer", application.Resume.Revisions[1].Resume.Headline)
-	assert.Equal(t, "Tailored the headline to the role.", application.Resume.Revisions[1].Summary)
-	require.Len(t, application.Events, 2)
-	assert.Equal(t, "resume_snapshot_created", application.Events[0].Type)
-	assert.Equal(t, "revision_created", application.Events[1].Type)
+	assert.Equal(t, "tool_result", accepted.Type)
+	var revision struct {
+		Resume   models.Resume `json:"resume"`
+		Revision int           `json:"revision"`
+	}
+	require.NoError(t, json.Unmarshal(accepted.Payload, &revision))
+	assert.Equal(t, 1, revision.Revision)
+	assert.Equal(t, "Backend engineer", revision.Resume.Headline)
 }
 
 func TestResumeAPI(t *testing.T) {
@@ -587,8 +590,25 @@ func newTestServerWithJobCompletionClient(repository *repositories.SQLite, clien
 		services.NewResumePDFService(services.NewResumeService(repository)),
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),
-		services.NewJobMatchChat(repository, repository, repository, repository, repository, repository, client, "test-model", "low"),
+		services.NewJobMatchChat(repository, repository, repository, repository, repository, client, "test-model", "low", zap.NewNop()),
 	)
+}
+
+func waitForChatTurn(t *testing.T, repository *repositories.SQLite, jobID int64) {
+	t.Helper()
+	var types []string
+	completed := assert.Eventually(t, func() bool {
+		items, err := repository.JobMatchChatItems(context.Background(), jobID, 0)
+		if err != nil {
+			return false
+		}
+		types = types[:0]
+		for _, item := range items {
+			types = append(types, item.Type)
+		}
+		return len(items) > 0 && (items[len(items)-1].Type == "turn_completed" || items[len(items)-1].Type == "turn_halted" || items[len(items)-1].Type == "turn_stopped")
+	}, time.Second, 10*time.Millisecond)
+	require.True(t, completed, "chat item types: %v", types)
 }
 
 func enableForeignKeys(db *sql.DB) error {
@@ -622,7 +642,12 @@ func (failingJobCompletionClient) Complete(context.Context, string, string, open
 
 type resumePatchCompletionClient struct{}
 
-func (resumePatchCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
+func (resumePatchCompletionClient) Complete(_ context.Context, _ string, _ string, request openai.ChatRequest) (openai.ChatResponse, error) {
+	for _, message := range request.Messages {
+		if message.Role == "tool" {
+			return openai.ChatResponse{Model: "test-model", Content: "The resume has been tailored."}, nil
+		}
+	}
 	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "patch-call", Type: "function", Function: openai.ToolFunction{Name: "revise_application_resume", Arguments: `{"baseRevision":0,"summary":"Tailored the headline to the role.","operations":[{"op":"replace","section":"headline","id":0,"parentId":0,"expected":"Software engineer","value":"Backend engineer"}]}`}}}}, nil
 }
 

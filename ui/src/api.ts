@@ -154,40 +154,13 @@ export type JobMatch = {
   createdAt: string;
 };
 
-export type JobMatchChatMessage = {
-  id: number;
-  jobId: number;
-  role: "user" | "assistant";
-  content: string;
-  createdAt: string;
-};
-
-export type ApplicationResumeRevision = {
-  id: number;
-  revisionNumber: number;
-  triggerMessageId: number;
-  assistantMessageId: number;
-  resume: Resume;
-  summary: string;
-  createdAt: string;
-};
-
-export type ApplicationResume = {
-  id: number;
-  jobId: number;
-  rootMessageId: number;
-  base: Resume;
-  revisions: ApplicationResumeRevision[];
-  createdAt: string;
-};
-
-export type ApplicationResumeAgentEvent = {
-  id: number;
-  triggerMessageId: number;
-  revisionId: number;
-  type: string;
-  detail: string;
-  createdAt: string;
+export type JobMatchChatItem = {
+	jobId: number;
+	sequence: number;
+	type: string;
+	payload: unknown;
+	createdAt: string;
+	requestId?: string;
 };
 
 export type JobMatchAssessment = {
@@ -356,20 +329,27 @@ export function fetchJobMatch(id: number, signal: AbortSignal) {
 }
 
 export function fetchJobMatchChat(id: number, signal: AbortSignal) {
-  return request<{ messages: JobMatchChatMessage[] }>(`jobs/${id}/match/chat`, { signal });
+	return request<{ items: JobMatchChatItem[] }>(`jobs/${id}/match/chat`, { signal });
 }
 
-export function fetchJobMatchApplicationResume(id: number, signal: AbortSignal) {
-  return request<{ resume: ApplicationResume | null; events: ApplicationResumeAgentEvent[] }>(`jobs/${id}/match/application-resume`, { signal });
+export function jobMatchChatEventsURL(id: number, after = 0) {
+	return apiURL(`jobs/${id}/match/chat/events?after=${after}`);
 }
 
-export function sendJobMatchChatMessage(id: number, content: string, requestId: string, signal: AbortSignal) {
-	return request<{ message: JobMatchChatMessage }>(`jobs/${id}/match/chat`, {
+export function sendJobMatchChatMessage(id: number, content: string, requestId: string) {
+	return request<{ item: JobMatchChatItem }>(`jobs/${id}/match/chat`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ content, requestId }),
-		signal,
 	});
+}
+
+export async function stopJobMatchChat(id: number, requestId: string) {
+	const response = await fetch(apiURL(`jobs/${id}/match/chat/${encodeURIComponent(requestId)}/stop`), { method: "POST" });
+	if (!response.ok && response.status !== 404) {
+		const body = await response.json().catch(() => undefined) as { error?: string } | undefined;
+		throw new Error(body?.error || `Could not stop match chat (${response.status})`);
+	}
 }
 
 export function fetchJobMatches(signal: AbortSignal) {
@@ -420,8 +400,8 @@ export async function deleteJob(id: number) {
   }
 }
 
-export async function revertJobMatchChat(id: number, messageID: number) {
-  const response = await fetch(apiURL(`jobs/${id}/match/chat/${messageID}`), { method: "DELETE" });
+export async function revertJobMatchChat(id: number, sequence: number) {
+	const response = await fetch(apiURL(`jobs/${id}/match/chat/${sequence}`), { method: "DELETE" });
   if (!response.ok) {
     const body = await response.json().catch(() => undefined) as { error?: string } | undefined;
     throw new Error(body?.error || `Could not revert match chat (${response.status})`);

@@ -48,14 +48,6 @@ type ResumeRepository interface {
 	SaveResumePhoto(context.Context, models.ResumePhoto) error
 }
 
-type ApplicationResumeRepository interface {
-	ApplicationResume(context.Context, int64) (*models.ApplicationResume, error)
-	CreateApplicationResume(context.Context, int64, int64, models.Resume) (*models.ApplicationResume, bool, error)
-	CreateApplicationResumeRevision(context.Context, int64, int64, int64, models.Resume, string) (models.ApplicationResumeRevision, error)
-	ApplicationResumeAgentEvents(context.Context, int64) ([]models.ApplicationResumeAgentEvent, error)
-	CreateApplicationResumeAgentEvent(context.Context, models.ApplicationResumeAgentEvent) (models.ApplicationResumeAgentEvent, error)
-}
-
 type JobAnalysisRepository interface {
 	JobAnalysis(context.Context, int64) (*models.JobAnalysisRecord, error)
 	SaveJobAnalysis(context.Context, models.JobAnalysisRecord) error
@@ -69,11 +61,10 @@ type JobMatchRepository interface {
 }
 
 type JobMatchChatRepository interface {
-	JobMatchChatMessages(context.Context, int64) ([]models.JobMatchChatMessage, error)
-	JobMatchChatMessage(context.Context, int64, int64) (*models.JobMatchChatMessage, error)
-	JobMatchChatMessageByRequestID(context.Context, int64, string, string) (*models.JobMatchChatMessage, error)
-	CreateJobMatchChatMessage(context.Context, models.JobMatchChatMessage) (models.JobMatchChatMessage, error)
-	DeleteJobMatchChatMessagesFrom(context.Context, int64, int64) (bool, error)
+	JobMatchChatItems(context.Context, int64, int64) ([]models.JobMatchChatItem, error)
+	JobMatchChatItemByRequestID(context.Context, int64, string, string) (*models.JobMatchChatItem, error)
+	CreateJobMatchChatItem(context.Context, models.JobMatchChatItem) (models.JobMatchChatItem, error)
+	DeleteJobMatchChatItemsFrom(context.Context, int64, int64) (bool, error)
 }
 
 type MatchQueueRepository interface {
@@ -106,10 +97,6 @@ func NewUserProfileRepository(sqlite *SQLite) UserProfileRepository {
 }
 
 func NewResumeRepository(sqlite *SQLite) ResumeRepository {
-	return sqlite
-}
-
-func NewApplicationResumeRepository(sqlite *SQLite) ApplicationResumeRepository {
 	return sqlite
 }
 

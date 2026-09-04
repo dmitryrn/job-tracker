@@ -46,7 +46,6 @@ func main() {
 			repositories.NewDiscoverySettingsRepository,
 			repositories.NewUserProfileRepository,
 			repositories.NewResumeRepository,
-			repositories.NewApplicationResumeRepository,
 			repositories.NewJobAnalysisRepository,
 			repositories.NewJobMatchRepository,
 			repositories.NewJobMatchChatRepository,
@@ -121,12 +120,12 @@ func newProfileJobMatcher(clients completionClients, cfg config.Config) (service
 	return services.NewLLMProfileJobMatcher(client, cfg.ProfileMatcher.Model, cfg.ProfileMatcher.ReasoningEffort), nil
 }
 
-func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, messages repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, applications repositories.ApplicationResumeRepository, clients completionClients, cfg config.Config) (*services.JobMatchChat, error) {
+func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, items repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, clients completionClients, cfg config.Config, logger *zap.Logger) (*services.JobMatchChat, error) {
 	client, err := clients.forProvider(cfg.JobChat.Provider)
 	if err != nil {
 		return nil, fmt.Errorf("select job chat client: %w", err)
 	}
-	return services.NewJobMatchChat(jobs, matches, messages, profiles, resumes, applications, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort), nil
+	return services.NewJobMatchChat(jobs, matches, items, profiles, resumes, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort, logger), nil
 }
 
 func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {
@@ -141,6 +140,7 @@ func registerLifecycle(
 	server *server.Server,
 	sync *services.JobSync,
 	matchWorker *services.JobMatchWorker,
+	chat *services.JobMatchChat,
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
@@ -167,6 +167,7 @@ func registerLifecycle(
 	server.Register(lifecycle)
 	sync.Register(lifecycle)
 	matchWorker.Register(lifecycle)
+	chat.Register(lifecycle)
 }
 
 func newLogger() (*zap.Logger, error) {

@@ -101,34 +101,6 @@ type ResumeEducation struct {
 	Details      string `json:"details"`
 }
 
-type ApplicationResume struct {
-	ID            int64                       `json:"id"`
-	JobID         int64                       `json:"jobId"`
-	RootMessageID int64                       `json:"rootMessageId"`
-	Base          Resume                      `json:"base"`
-	Revisions     []ApplicationResumeRevision `json:"revisions"`
-	CreatedAt     string                      `json:"createdAt"`
-}
-
-type ApplicationResumeRevision struct {
-	ID                 int64  `json:"id"`
-	RevisionNumber     int    `json:"revisionNumber"`
-	TriggerMessageID   int64  `json:"triggerMessageId"`
-	AssistantMessageID int64  `json:"assistantMessageId"`
-	Resume             Resume `json:"resume"`
-	Summary            string `json:"summary"`
-	CreatedAt          string `json:"createdAt"`
-}
-
-type ApplicationResumeAgentEvent struct {
-	ID               int64  `json:"id"`
-	TriggerMessageID int64  `json:"triggerMessageId"`
-	RevisionID       int64  `json:"revisionId"`
-	Type             string `json:"type"`
-	Detail           string `json:"detail"`
-	CreatedAt        string `json:"createdAt"`
-}
-
 type CVProfileDraft struct {
 	Name              string              `json:"name"`
 	Headline          string              `json:"headline"`

@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type Job struct {
 	Source         string `json:"source"`
 	SourceID       string `json:"sourceId"`
@@ -113,13 +115,13 @@ type JobMatchRecord struct {
 	CreatedAt  string              `json:"createdAt"`
 }
 
-type JobMatchChatMessage struct {
-	ID        int64  `json:"id"`
-	JobID     int64  `json:"jobId"`
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"createdAt"`
-	RequestID string `json:"requestId,omitempty"`
+type JobMatchChatItem struct {
+	JobID     int64           `json:"jobId"`
+	Sequence  int64           `json:"sequence"`
+	Type      string          `json:"type"`
+	Payload   json.RawMessage `json:"payload"`
+	RequestID string          `json:"requestId,omitempty"`
+	CreatedAt string          `json:"createdAt"`
 }
 
 type JobMatchAssessment struct {

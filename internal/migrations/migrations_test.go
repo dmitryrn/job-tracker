@@ -21,7 +21,7 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	for _, table := range []string{
 		"companies", "jobs", "provider_runs", "user_profiles", "job_matches", "job_match_queue", "job_analyses",
 		"resumes", "resume_links", "resume_skills", "resume_competencies", "resume_competency_bullets",
-		"resume_experience", "resume_experience_bullets", "resume_education", "resume_summary_paragraphs", "job_match_chat_messages",
+		"resume_experience", "resume_experience_bullets", "resume_education", "resume_summary_paragraphs", "job_match_chat_items",
 	} {
 		var count int
 		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count))
@@ -32,9 +32,9 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('resume_skills') WHERE name = 'level'`).Scan(&levelColumns))
 	assert.Zero(t, levelColumns)
 
-	var requestIDColumns int
-	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('job_match_chat_messages') WHERE name = 'request_id'`).Scan(&requestIDColumns))
-	assert.Equal(t, 1, requestIDColumns)
+	var itemColumns int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('job_match_chat_items') WHERE name = 'sequence'`).Scan(&itemColumns))
+	assert.Equal(t, 1, itemColumns)
 
 	var ftsTables int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))

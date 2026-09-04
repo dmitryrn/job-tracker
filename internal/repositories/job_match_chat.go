@@ -3,139 +3,125 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/Masterminds/squirrel"
 
 	"nice/internal/models"
 )
 
-func (repository *SQLite) JobMatchChatMessages(ctx context.Context, jobID int64) ([]models.JobMatchChatMessage, error) {
+func (repository *SQLite) JobMatchChatItems(ctx context.Context, jobID, afterSequence int64) ([]models.JobMatchChatItem, error) {
 	query, arguments, err := sqlBuilder.
-		Select("id", "job_id", "role", "content", "created_at", "COALESCE(request_id, '')").
-		From("job_match_chat_messages").
+		Select("job_id", "sequence", "item_type", "payload_json", "COALESCE(request_id, '')", "created_at").
+		From("job_match_chat_items").
 		Where(squirrel.Eq{"job_id": jobID}).
-		OrderBy("id").
+		Where(squirrel.Gt{"sequence": afterSequence}).
+		OrderBy("sequence").
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build list job match chat messages query: %w", err)
+		return nil, fmt.Errorf("build list job match chat items query: %w", err)
 	}
 
 	rows, err := repository.db.QueryContext(ctx, query, arguments...)
 	if err != nil {
-		return nil, fmt.Errorf("list job match chat messages: %w", err)
+		return nil, fmt.Errorf("list job match chat items: %w", err)
 	}
 	defer rows.Close()
 
-	messages := make([]models.JobMatchChatMessage, 0)
+	items := make([]models.JobMatchChatItem, 0)
 	for rows.Next() {
-		var message models.JobMatchChatMessage
-		if err := rows.Scan(&message.ID, &message.JobID, &message.Role, &message.Content, &message.CreatedAt, &message.RequestID); err != nil {
-			return nil, fmt.Errorf("scan job match chat message: %w", err)
+		var item models.JobMatchChatItem
+		var itemPayload []byte
+		if err := rows.Scan(&item.JobID, &item.Sequence, &item.Type, &itemPayload, &item.RequestID, &item.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan job match chat item: %w", err)
 		}
-		messages = append(messages, message)
+		item.Payload = json.RawMessage(itemPayload)
+		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate job match chat messages: %w", err)
+		return nil, fmt.Errorf("iterate job match chat items: %w", err)
 	}
-	return messages, nil
+	return items, nil
 }
 
-func (repository *SQLite) JobMatchChatMessage(ctx context.Context, jobID, messageID int64) (*models.JobMatchChatMessage, error) {
+func (repository *SQLite) JobMatchChatItemByRequestID(ctx context.Context, jobID int64, requestID, itemType string) (*models.JobMatchChatItem, error) {
 	query, arguments, err := sqlBuilder.
-		Select("id", "job_id", "role", "content", "created_at", "COALESCE(request_id, '')").
-		From("job_match_chat_messages").
-		Where(squirrel.Eq{"job_id": jobID, "id": messageID}).
+		Select("job_id", "sequence", "item_type", "payload_json", "COALESCE(request_id, '')", "created_at").
+		From("job_match_chat_items").
+		Where(squirrel.Eq{"job_id": jobID, "request_id": requestID, "item_type": itemType}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build get job match chat message query: %w", err)
+		return nil, fmt.Errorf("build get job match chat item by request ID query: %w", err)
 	}
 
-	var message models.JobMatchChatMessage
-	err = repository.db.QueryRowContext(ctx, query, arguments...).Scan(&message.ID, &message.JobID, &message.Role, &message.Content, &message.CreatedAt, &message.RequestID)
+	var item models.JobMatchChatItem
+	var itemPayload []byte
+	err = repository.db.QueryRowContext(ctx, query, arguments...).Scan(&item.JobID, &item.Sequence, &item.Type, &itemPayload, &item.RequestID, &item.CreatedAt)
 	if err == nil {
-		return &message, nil
+		item.Payload = json.RawMessage(itemPayload)
+		return &item, nil
 	}
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("get job match chat message: %w", err)
+	return nil, fmt.Errorf("get job match chat item by request ID: %w", err)
 }
 
-func (repository *SQLite) JobMatchChatMessageByRequestID(ctx context.Context, jobID int64, requestID, role string) (*models.JobMatchChatMessage, error) {
-	query, arguments, err := sqlBuilder.
-		Select("id", "job_id", "role", "content", "created_at", "COALESCE(request_id, '')").
-		From("job_match_chat_messages").
-		Where(squirrel.Eq{"job_id": jobID, "request_id": requestID, "role": role}).
+func (repository *SQLite) CreateJobMatchChatItem(ctx context.Context, item models.JobMatchChatItem) (models.JobMatchChatItem, error) {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.JobMatchChatItem{}, fmt.Errorf("begin create job match chat item: %w", err)
+	}
+	defer transaction.Rollback()
+
+	sequenceQuery, sequenceArguments, err := sqlBuilder.
+		Select("COALESCE(MAX(sequence), 0) + 1").
+		From("job_match_chat_items").
+		Where(squirrel.Eq{"job_id": item.JobID}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build get job match chat message by request ID query: %w", err)
+		return models.JobMatchChatItem{}, fmt.Errorf("build next job match chat item sequence query: %w", err)
+	}
+	if err := transaction.QueryRowContext(ctx, sequenceQuery, sequenceArguments...).Scan(&item.Sequence); err != nil {
+		return models.JobMatchChatItem{}, fmt.Errorf("get next job match chat item sequence: %w", err)
 	}
 
-	var message models.JobMatchChatMessage
-	err = repository.db.QueryRowContext(ctx, query, arguments...).Scan(&message.ID, &message.JobID, &message.Role, &message.Content, &message.CreatedAt, &message.RequestID)
-	if err == nil {
-		return &message, nil
-	}
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return nil, fmt.Errorf("get job match chat message by request ID: %w", err)
-}
-
-func (repository *SQLite) CreateJobMatchChatMessage(ctx context.Context, message models.JobMatchChatMessage) (models.JobMatchChatMessage, error) {
+	item.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	query, arguments, err := sqlBuilder.
-		Insert("job_match_chat_messages").
-		Columns("job_id", "role", "content", "created_at", "request_id").
-		Values(message.JobID, message.Role, message.Content, message.CreatedAt, nullableString(message.RequestID)).
-		Suffix("ON CONFLICT DO NOTHING").
+		Insert("job_match_chat_items").
+		Columns("job_id", "sequence", "item_type", "payload_json", "request_id", "created_at").
+		Values(item.JobID, item.Sequence, item.Type, string(item.Payload), nullableString(item.RequestID), item.CreatedAt).
 		ToSql()
 	if err != nil {
-		return models.JobMatchChatMessage{}, fmt.Errorf("build create job match chat message query: %w", err)
+		return models.JobMatchChatItem{}, fmt.Errorf("build create job match chat item query: %w", err)
 	}
-
-	result, err := repository.db.ExecContext(ctx, query, arguments...)
-	if err != nil {
-		return models.JobMatchChatMessage{}, fmt.Errorf("create job match chat message: %w", err)
+	if _, err := transaction.ExecContext(ctx, query, arguments...); err != nil {
+		return models.JobMatchChatItem{}, fmt.Errorf("create job match chat item: %w", err)
 	}
-	created, err := result.RowsAffected()
-	if err != nil {
-		return models.JobMatchChatMessage{}, fmt.Errorf("check job match chat message creation: %w", err)
+	if err := transaction.Commit(); err != nil {
+		return models.JobMatchChatItem{}, fmt.Errorf("commit create job match chat item: %w", err)
 	}
-	if created == 0 {
-		existing, err := repository.JobMatchChatMessageByRequestID(ctx, message.JobID, message.RequestID, message.Role)
-		if err != nil {
-			return models.JobMatchChatMessage{}, err
-		}
-		if existing == nil {
-			return models.JobMatchChatMessage{}, fmt.Errorf("find existing job match chat message: no message found")
-		}
-		return *existing, nil
-	}
-	message.ID, err = result.LastInsertId()
-	if err != nil {
-		return models.JobMatchChatMessage{}, fmt.Errorf("get job match chat message ID: %w", err)
-	}
-	return message, nil
+	return item, nil
 }
 
-func (repository *SQLite) DeleteJobMatchChatMessagesFrom(ctx context.Context, jobID, messageID int64) (bool, error) {
+func (repository *SQLite) DeleteJobMatchChatItemsFrom(ctx context.Context, jobID, sequence int64) (bool, error) {
 	query, arguments, err := sqlBuilder.
-		Delete("job_match_chat_messages").
+		Delete("job_match_chat_items").
 		Where(squirrel.Eq{"job_id": jobID}).
-		Where(squirrel.GtOrEq{"id": messageID}).
+		Where(squirrel.GtOrEq{"sequence": sequence}).
 		ToSql()
 	if err != nil {
-		return false, fmt.Errorf("build delete job match chat messages query: %w", err)
+		return false, fmt.Errorf("build delete job match chat items query: %w", err)
 	}
-
 	result, err := repository.db.ExecContext(ctx, query, arguments...)
 	if err != nil {
-		return false, fmt.Errorf("delete job match chat messages: %w", err)
+		return false, fmt.Errorf("delete job match chat items: %w", err)
 	}
 	deleted, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("check job match chat message deletion: %w", err)
+		return false, fmt.Errorf("check job match chat item deletion: %w", err)
 	}
 	return deleted > 0, nil
 }
