@@ -222,3 +222,10 @@ func loadJobFixture(t *testing.T, name string) models.Job {
 		BodyText:       fixture.BodyText,
 	}
 }
+
+func repositoryRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	return root
+}

@@ -362,6 +362,15 @@ func validConstraintKind(kind string) bool {
 	}
 }
 
+func allNonBlank(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return false
+		}
+	}
+	return true
+}
+
 func validRequirementKind(kind string) bool {
 	switch kind {
 	case "must_have", "strong_preference", "nice_to_have", "unknown":
