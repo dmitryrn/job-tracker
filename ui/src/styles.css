@@ -220,9 +220,12 @@ button { cursor: pointer; }
 .match-chat-revert:focus-visible { outline: 2px solid #d8b778; outline-offset: 2px; }
 .match-chat-revert:disabled { cursor: not-allowed; opacity: .45; }
 .match-chat-revert svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 16px; }
-.match-chat-compose { align-items: end; background: #fff; border-top: 1px solid #e4e1d9; bottom: 12px; box-shadow: 0 -8px 14px rgb(255 255 255 / 94%); display: grid; gap: 10px; grid-template-columns: 1fr auto; padding-top: 12px; position: sticky; z-index: 1; }
-.match-chat-compose textarea { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; font: inherit; padding: 10px; resize: vertical; width: 100%; }
-.match-chat-actions { display: flex; gap: 8px; }
+.match-chat-compose { background: #fff; border-top: 1px solid #e4e1d9; bottom: 12px; box-shadow: 0 -8px 14px rgb(255 255 255 / 94%); padding-top: 12px; position: sticky; z-index: 1; }
+.match-chat-compose textarea { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; display: block; font: inherit; height: 48px; padding: 10px 82px 10px 10px; resize: none; transition: height .15s ease; width: 100%; }
+.match-chat-compose:focus-within textarea { height: 116px; }
+.match-chat-actions { bottom: 10px; display: flex; position: absolute; right: 10px; }
+.match-chat-actions button { background: #263d56; border: 0; border-radius: 4px; color: #fff; padding: 9px 12px; }
+.match-chat-actions button:hover { background: #1c3047; text-decoration: none; }
 .match-chat-compose .primary-action:disabled { cursor: not-allowed; opacity: .55; }
 
 .application-resume-activity { border: 1px solid #dedcd5; margin: 4px 0; padding: 10px 12px; }
@@ -394,8 +397,6 @@ tr:hover td { background: #fffbed; }
   .analysis-panel-header > p { text-align: left; }
   .match-chat-message, .match-chat-user-turn { max-width: 100%; }
   .match-chat-message.user { padding: 10px 12px; }
-  .match-chat-compose { grid-template-columns: 1fr; }
-  .match-chat-actions { justify-content: end; }
   .value-dialog-header { padding: 15px 16px; }
   .value-dialog pre { font-size: 13px; padding: 16px; }
 }

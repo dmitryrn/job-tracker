@@ -1,0 +1,13 @@
+[Unit]
+Description=Jobs UI reverse proxy
+After=jobs.service jobs-ui.service
+Wants=jobs.service jobs-ui.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/caddy run --config /home/clanker/projects/nice/systemd/Caddyfile --adapter caddyfile
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

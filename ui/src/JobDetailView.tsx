@@ -200,7 +200,7 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     {items === undefined ? <p className="analysis-loading">Loading chat...</p> : <ChatTimeline items={items} onRevert={revert} reverting={reverting} />}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
       <textarea aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} disabled={blocked} rows={3} />
-      <div className="match-chat-actions"><button className="primary-action" type="submit" disabled={blocked || !draft.trim()}>{sending || activeRequestID ? "Thinking..." : "Send"}</button>{activeRequestID && <button className="secondary-action" type="button" onClick={() => void stop()}>Stop</button>}</div>
+      <div className="match-chat-actions"><button className={activeRequestID ? "secondary-action" : "primary-action"} type={activeRequestID ? "button" : "submit"} disabled={!activeRequestID && (blocked || !draft.trim())} onClick={activeRequestID ? () => void stop() : undefined}>{activeRequestID ? "Stop" : "Send"}</button></div>
     </form>
   </section>;
 }
