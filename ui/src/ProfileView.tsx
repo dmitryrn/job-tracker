@@ -4,7 +4,6 @@ import { fetchProfile, saveProfile, type UserProfile } from "./api";
 const emptyProfile: UserProfile = {
   id: 1,
   headline: "",
-  location: "",
   workAuthorization: "",
   summary: "",
   skills: [],
@@ -97,10 +96,9 @@ export default function ProfileView() {
         <form className="profile-form" onSubmit={(event) => void submit(event)}>
           <section className="profile-section">
             <h2>Basics</h2>
-            <div className="profile-fields">
-              <label>Professional headline<input value={profile.headline} onChange={(event) => updateField("headline", event.target.value)} placeholder="Senior backend engineer" /></label>
-              <label>Location<input value={profile.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Berlin, Germany" /></label>
-              <label>Work authorization<input value={profile.workAuthorization} onChange={(event) => updateField("workAuthorization", event.target.value)} placeholder="Eligible to work in the EU" /></label>
+              <div className="profile-fields">
+                <label>Professional headline<input value={profile.headline} onChange={(event) => updateField("headline", event.target.value)} placeholder="Senior backend engineer" /></label>
+                <label>Work authorization<input value={profile.workAuthorization} onChange={(event) => updateField("workAuthorization", event.target.value)} placeholder="Eligible to work in the EU" /></label>
             </div>
             <label className="profile-summary">Summary<textarea value={profile.summary} onChange={(event) => updateField("summary", event.target.value)} placeholder="The work, domains, and strengths you want a matcher to consider." rows={5} /></label>
           </section>

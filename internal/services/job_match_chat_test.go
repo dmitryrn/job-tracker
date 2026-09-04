@@ -59,7 +59,6 @@ func TestProviderRequestRedactsCandidateIdentityAndResumeOrganizations(t *testin
 		Education:  []models.ResumeEducation{{Institution: "Stonebridge University"}},
 	}
 	initialContext, err := json.Marshal(jobMatchChatInitialContext{Profile: &models.UserProfile{
-		Location:    "Mapleton, Canada",
 		WorkHistory: []models.UserProfileWorkHistory{{Company: "Cedar Systems"}},
 		Education:   []models.UserProfileEducation{{Institution: "Riverside College"}},
 	}})

@@ -58,7 +58,7 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 	assert.ErrorContains(t, err, "score must be between 0 and 100")
 }
 
-func TestLLMProfileJobMatcherRedactsProfileLocationAndOrganizations(t *testing.T) {
+func TestLLMProfileJobMatcherRedactsProfileOrganizations(t *testing.T) {
 	client := &recordingMatchCompletionClient{response: openai.ChatResponse{Model: "test-model", Content: `{
 		"score":84,
 		"summary":"Strong fit.",
@@ -68,12 +68,11 @@ func TestLLMProfileJobMatcherRedactsProfileLocationAndOrganizations(t *testing.T
 		"applicationAngle":"Highlight platform experience."
 	}`}}
 	profile := models.UserProfile{
-		Location:          "Mapleton, Canada",
 		WorkAuthorization: "Authorized to work in Canada",
-		Summary:           "Built systems at Cedar Systems in Mapleton, Canada.",
+		Summary:           "Built systems at Cedar Systems.",
 		WorkHistory: []models.UserProfileWorkHistory{{
 			Company: "Cedar Systems",
-			Body:    "Led Cedar Systems engineering in Mapleton, Canada.",
+			Body:    "Led Cedar Systems engineering.",
 		}},
 		Education: []models.UserProfileEducation{{
 			Institution: "Riverside College",
@@ -86,12 +85,11 @@ func TestLLMProfileJobMatcherRedactsProfileLocationAndOrganizations(t *testing.T
 
 	providerPayload, err := json.Marshal(client.request)
 	require.NoError(t, err)
-	for _, sensitiveValue := range []string{"Mapleton, Canada", "Cedar Systems", "Riverside College"} {
+	for _, sensitiveValue := range []string{"Cedar Systems", "Riverside College"} {
 		assert.NotContains(t, string(providerPayload), sensitiveValue)
 	}
 	assert.Contains(t, string(providerPayload), redactedChatValue)
 	assert.Contains(t, string(providerPayload), "Authorized to work in Canada")
-	assert.Equal(t, "Mapleton, Canada", profile.Location)
 	assert.Equal(t, "Cedar Systems", profile.WorkHistory[0].Company)
 }
 

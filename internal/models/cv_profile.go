@@ -3,7 +3,6 @@ package models
 type UserProfile struct {
 	ID                int64                    `json:"id"`
 	Headline          string                   `json:"headline"`
-	Location          string                   `json:"location"`
 	WorkAuthorization string                   `json:"workAuthorization"`
 	Summary           string                   `json:"summary"`
 	Skills            []UserProfileSkill       `json:"skills"`

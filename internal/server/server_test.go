@@ -232,13 +232,14 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.JSONEq(t, `{"profile":null}`, response.Body.String())
 
-	response = requestWithBody(handler, http.MethodPut, "/api/profile", `{"headline":"Backend engineer","location":"Berlin","workAuthorization":"EU","summary":"APIs and systems","skills":[{"name":" Go ","level":"expert","notes":"Production services"},{"name":"","level":"","notes":""}],"workHistory":[{"company":" Acme ","title":"Engineer","startDate":"2020","endDate":"2022","body":"Built APIs"},{"company":"","title":"","startDate":"","endDate":"","body":""}],"education":[{"institution":" University ","degree":"BSc","startDate":"2016","endDate":"2020","body":"Computer science"},{"institution":"","degree":"","startDate":"","endDate":"","body":""}]}`)
+	response = requestWithBody(handler, http.MethodPut, "/api/profile", `{"headline":"Backend engineer","workAuthorization":"EU","summary":"APIs and systems","skills":[{"name":" Go ","level":"expert","notes":"Production services"},{"name":"","level":"","notes":""}],"workHistory":[{"company":" Acme ","title":"Engineer","startDate":"2020","endDate":"2022","body":"Built APIs"},{"company":"","title":"","startDate":"","endDate":"","body":""}],"education":[{"institution":" University ","degree":"BSc","startDate":"2016","endDate":"2020","body":"Computer science"},{"institution":"","degree":"","startDate":"","endDate":"","body":""}]}`)
 	require.Equal(t, http.StatusOK, response.Code)
 	var profileResponse struct {
 		Profile models.UserProfile `json:"profile"`
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&profileResponse))
 	assert.Equal(t, "Backend engineer", profileResponse.Profile.Headline)
+	assert.NotContains(t, response.Body.String(), `"location"`)
 	require.Len(t, profileResponse.Profile.Skills, 1)
 	assert.Equal(t, "Go", profileResponse.Profile.Skills[0].Name)
 	require.Len(t, profileResponse.Profile.WorkHistory, 1)

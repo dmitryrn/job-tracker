@@ -595,7 +595,6 @@ func appendResumeRedactionValues(values []string, resume models.Resume) []string
 }
 
 func appendUserProfileRedactionValues(values []string, profile models.UserProfile) []string {
-	values = append(values, profile.Location)
 	for _, experience := range profile.WorkHistory {
 		values = append(values, experience.Company)
 	}
@@ -663,7 +662,6 @@ func redactedResume(resume models.Resume) models.Resume {
 }
 
 func redactedUserProfile(profile models.UserProfile) models.UserProfile {
-	profile.Location = redactedChatValue
 	profile.WorkHistory = append([]models.UserProfileWorkHistory(nil), profile.WorkHistory...)
 	for index := range profile.WorkHistory {
 		profile.WorkHistory[index].Company = redactedChatValue

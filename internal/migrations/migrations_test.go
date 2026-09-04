@@ -36,6 +36,10 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('job_match_chat_items') WHERE name = 'sequence'`).Scan(&itemColumns))
 	assert.Equal(t, 1, itemColumns)
 
+	var profileLocationColumns int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('user_profiles') WHERE name = 'location'`).Scan(&profileLocationColumns))
+	assert.Zero(t, profileLocationColumns)
+
 	var ftsTables int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))
 	assert.Zero(t, ftsTables)

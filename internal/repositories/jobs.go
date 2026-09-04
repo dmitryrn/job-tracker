@@ -283,10 +283,17 @@ func (repository *SQLite) Companies(ctx context.Context, search string) ([]model
 func (repository *SQLite) UserProfile(ctx context.Context) (*models.UserProfile, error) {
 	var profile models.UserProfile
 	var skills, workHistory, education string
-	err := repository.db.QueryRowContext(ctx, `
-		SELECT id, headline, location, work_authorization, summary, skills_json, work_history_json, education_json, updated_at
-		FROM user_profiles WHERE id = 1`,
-	).Scan(&profile.ID, &profile.Headline, &profile.Location, &profile.WorkAuthorization, &profile.Summary, &skills, &workHistory, &education, &profile.UpdatedAt)
+	statement, args, err := sqlBuilder.
+		Select("id", "headline", "work_authorization", "summary", "skills_json", "work_history_json", "education_json", "updated_at").
+		From("user_profiles").
+		Where(squirrel.Eq{"id": 1}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build user profile query: %w", err)
+	}
+	err = repository.db.QueryRowContext(ctx, statement, args...).Scan(
+		&profile.ID, &profile.Headline, &profile.WorkAuthorization, &profile.Summary, &skills, &workHistory, &education, &profile.UpdatedAt,
+	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -320,20 +327,23 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 	}
 	profile.ID = 1
 	profile.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	_, err = repository.db.ExecContext(ctx, `
-		INSERT INTO user_profiles (id, headline, location, work_authorization, summary, skills_json, work_history_json, education_json, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
+	statement, args, err := sqlBuilder.
+		Insert("user_profiles").
+		Columns("id", "headline", "work_authorization", "summary", "skills_json", "work_history_json", "education_json", "updated_at").
+		Values(profile.ID, profile.Headline, profile.WorkAuthorization, profile.Summary, string(skills), string(workHistory), string(education), profile.UpdatedAt).
+		Suffix(`ON CONFLICT(id) DO UPDATE SET
 			headline = excluded.headline,
-			location = excluded.location,
 			work_authorization = excluded.work_authorization,
 			summary = excluded.summary,
 			skills_json = excluded.skills_json,
 			work_history_json = excluded.work_history_json,
 			education_json = excluded.education_json,
-			updated_at = excluded.updated_at`,
-		profile.ID, profile.Headline, profile.Location, profile.WorkAuthorization, profile.Summary, string(skills), string(workHistory), string(education), profile.UpdatedAt,
-	)
+			updated_at = excluded.updated_at`).
+		ToSql()
+	if err != nil {
+		return models.UserProfile{}, fmt.Errorf("build save user profile query: %w", err)
+	}
+	_, err = repository.db.ExecContext(ctx, statement, args...)
 	if err != nil {
 		return models.UserProfile{}, fmt.Errorf("save user profile: %w", err)
 	}

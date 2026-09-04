@@ -46,7 +46,6 @@ export type UserProfileEducation = {
 export type UserProfile = {
   id: number;
   headline: string;
-  location: string;
   workAuthorization: string;
   summary: string;
   skills: UserProfileSkill[];
