@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
@@ -202,7 +202,7 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     {error && <p className="query-error">{error}</p>}
     {items === undefined ? <p className="analysis-loading">Loading chat...</p> : <ChatTimeline items={items} onRevert={revert} reverting={reverting} />}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
-      <label>Message<textarea value={draft} onChange={(event) => setDraft(event.target.value)} disabled={blocked} placeholder="Ask about this job and your fit..." rows={3} /></label>
+      <textarea aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} disabled={blocked} rows={3} />
       <div className="match-chat-actions"><button className="primary-action" type="submit" disabled={blocked || !draft.trim()}>{sending || activeRequestID ? "Thinking..." : "Send"}</button>{activeRequestID && <button className="secondary-action" type="button" onClick={() => void stop()}>Stop</button>}</div>
     </form>
   </section>;
@@ -267,6 +267,7 @@ function activityDetail(item: JobMatchChatItem) {
 
 function toolCallName(item: JobMatchChatItem) {
   const value = item.payload as { function?: { name?: string } };
+  if (value.function?.name === "revise_application_resume") return "revised application resume";
   return value.function?.name ? humanize(value.function.name) : "Tool call";
 }
 
@@ -300,8 +301,10 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [queueing, setQueueing] = useState(false);
   const [queued, setQueued] = useState(false);
+  const actionsMenuRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -325,6 +328,15 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     void loadMatch();
     return () => controller.abort();
   }, [job.id]);
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+    function closeActions(event: PointerEvent) {
+      if (!actionsMenuRef.current?.contains(event.target as Node)) setActionsOpen(false);
+    }
+    document.addEventListener("pointerdown", closeActions);
+    return () => document.removeEventListener("pointerdown", closeActions);
+  }, [actionsOpen]);
 
   async function removeJob() {
     if (!window.confirm(`Delete ${job.title} from the database?`)) {
@@ -355,7 +367,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   }
 
   return (
-    <section className="job-page">
+    <section className={tab === "chat" ? "job-page chat-job-page" : "job-page"}>
       <button type="button" className="back-link" onClick={onBack}>Back to jobs</button>
       <header className="job-page-header">
         <div>
@@ -363,7 +375,13 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
           <h1>{job.title}</h1>
           <p>{job.company || "Company not listed"}</p>
         </div>
-        <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
+        <div className="job-page-header-actions">
+          <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
+          <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
+            <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
+            <div className="job-overflow-menu"><button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button></div>
+          </details>
+        </div>
       </header>
       <dl className="job-page-meta">
         <div><dt>Location</dt><dd>{job.location || "Location flexible"}</dd></div>
@@ -386,7 +404,6 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
           {analysis === undefined ? <p className="analysis-loading">Loading job analysis...</p> : analysis && <JobAnalysisPanel record={analysis} />}
         </>
       )}
-      <div className="job-page-actions"><button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button></div>
     </section>
   );
 }
