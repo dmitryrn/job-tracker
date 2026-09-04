@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,6 +56,43 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 
 	_, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
 	assert.ErrorContains(t, err, "score must be between 0 and 100")
+}
+
+func TestLLMProfileJobMatcherRedactsProfileLocationAndOrganizations(t *testing.T) {
+	client := &recordingMatchCompletionClient{response: openai.ChatResponse{Model: "test-model", Content: `{
+		"score":84,
+		"summary":"Strong fit.",
+		"strengths":[],
+		"gaps":[],
+		"questions":[],
+		"applicationAngle":"Highlight platform experience."
+	}`}}
+	profile := models.UserProfile{
+		Location:          "Mapleton, Canada",
+		WorkAuthorization: "Authorized to work in Canada",
+		Summary:           "Built systems at Cedar Systems in Mapleton, Canada.",
+		WorkHistory: []models.UserProfileWorkHistory{{
+			Company: "Cedar Systems",
+			Body:    "Led Cedar Systems engineering in Mapleton, Canada.",
+		}},
+		Education: []models.UserProfileEducation{{
+			Institution: "Riverside College",
+			Body:        "Studied at Riverside College.",
+		}},
+	}
+
+	_, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "low").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, profile)
+	require.NoError(t, err)
+
+	providerPayload, err := json.Marshal(client.request)
+	require.NoError(t, err)
+	for _, sensitiveValue := range []string{"Mapleton, Canada", "Cedar Systems", "Riverside College"} {
+		assert.NotContains(t, string(providerPayload), sensitiveValue)
+	}
+	assert.Contains(t, string(providerPayload), redactedChatValue)
+	assert.Contains(t, string(providerPayload), "Authorized to work in Canada")
+	assert.Equal(t, "Mapleton, Canada", profile.Location)
+	assert.Equal(t, "Cedar Systems", profile.WorkHistory[0].Company)
 }
 
 func TestLLMProfileJobMatcherAcceptsAJSONCodeFence(t *testing.T) {

@@ -216,7 +216,7 @@ export type JobAnalysis = {
   };
 };
 
-function apiURL(path: string) {
+export function apiURL(path: string) {
   const configured = import.meta.env.VITE_API_URL;
   const base = configured || `${window.location.origin}/api`;
   return `${base.replace(/\/$/, "")}/${path}`;

@@ -47,14 +47,16 @@ func NewLLMProfileJobMatcher(client JobCompletionClient, model, reasoningEffort 
 }
 
 func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.BrowseJob, analysis models.JobAnalysisRecord, profile models.UserProfile) (models.JobMatchAssessment, error) {
+	redactions := normalizedRedactionValues(appendUserProfileRedactionValues(nil, profile))
 	input, err := json.Marshal(struct {
 		Job      models.BrowseJob         `json:"job"`
 		Analysis models.JobAnalysisRecord `json:"analysis"`
 		Profile  models.UserProfile       `json:"profile"`
-	}{Job: job, Analysis: analysis, Profile: profile})
+	}{Job: job, Analysis: analysis, Profile: redactedUserProfile(profile)})
 	if err != nil {
 		return models.JobMatchAssessment{}, fmt.Errorf("encode profile-job match input: %w", err)
 	}
+	input = []byte(redactSensitiveText(string(input), redactions))
 
 	temperature := 0.2
 	response, err := matcher.client.Complete(ctx, matcher.model, newLLMSessionID(), openai.ChatRequest{

@@ -9,7 +9,7 @@ import JobMatchesView from "./JobMatchesView";
 import MatchQueueView from "./MatchQueueView";
 import ProfileView from "./ProfileView";
 import ResumeView from "./ResumeView";
-import { fetchJob, type BrowseJob } from "./api";
+import { apiURL, fetchJob, type BrowseJob } from "./api";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
 import "./styles.css";
 
@@ -44,7 +44,7 @@ function databaseURL() {
   if (configured) {
     return configured;
   }
-  return `${window.location.protocol}//${window.location.hostname}:4001/api/database`;
+  return apiURL("database");
 }
 
 function displayValue(value: unknown) {

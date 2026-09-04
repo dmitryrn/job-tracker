@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -28,7 +29,10 @@ var (
 
 const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, and their application resume. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. The user sees a structured diff for each resume revision, so do not repeat what changed; briefly explain why the changes improve relevance instead. Ask clarifying questions when useful.`
 
-const resumePatchAttempts = 3
+const (
+	resumePatchAttempts = 3
+	redactedChatValue   = "[redacted]"
+)
 
 var resumePatchTool = openai.Tool{
 	Type: "function",
@@ -314,11 +318,7 @@ func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64
 	}
 	for _, item := range []models.JobMatchChatItem{
 		{JobID: jobID, Type: "initial_instructions", Payload: payload(map[string]string{"content": jobMatchChatInstructions})},
-		{JobID: jobID, Type: "initial_context", Payload: payload(struct {
-			Job     *models.BrowseJob      `json:"job"`
-			Match   *models.JobMatchRecord `json:"match"`
-			Profile *models.UserProfile    `json:"profile"`
-		}{job, match, profile})},
+		{JobID: jobID, Type: "initial_context", Payload: payload(jobMatchChatInitialContext{Job: job, Match: match, Profile: profile})},
 		{JobID: jobID, Type: "tool_definition", Payload: payload(resumePatchTool)},
 		{JobID: jobID, Type: "resume_revision", Payload: payload(resumeRevisionPayload{Revision: 0, Resume: *resume})},
 	} {
@@ -460,6 +460,12 @@ type resumeRevisionPayload struct {
 	Resume   models.Resume `json:"resume"`
 }
 
+type jobMatchChatInitialContext struct {
+	Job     *models.BrowseJob      `json:"job"`
+	Match   *models.JobMatchRecord `json:"match"`
+	Profile *models.UserProfile    `json:"profile"`
+}
+
 type toolResultPayload struct {
 	ToolCallID string         `json:"toolCallId"`
 	Status     string         `json:"status"`
@@ -470,6 +476,10 @@ type toolResultPayload struct {
 
 func providerRequest(items []models.JobMatchChatItem, reasoning string) (openai.ChatRequest, error) {
 	request := openai.ChatRequest{ReasoningEffort: reasoning, Tools: []openai.Tool{resumePatchTool}}
+	redactions, err := chatRedactionValues(items)
+	if err != nil {
+		return request, err
+	}
 	for _, item := range items {
 		switch item.Type {
 		case "initial_instructions":
@@ -481,9 +491,17 @@ func providerRequest(items []models.JobMatchChatItem, reasoning string) (openai.
 			}
 			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: value.Content})
 		case "initial_context":
-			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Immutable application context:\n" + string(item.Payload)})
+			content, err := redactedInitialContext(item.Payload)
+			if err != nil {
+				return request, err
+			}
+			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Immutable application context:\n" + content})
 		case "resume_revision":
-			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Application resume revision 0:\n" + string(item.Payload)})
+			content, err := redactedResumeRevision(item.Payload)
+			if err != nil {
+				return request, err
+			}
+			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Application resume revision 0:\n" + content})
 		case "user_message", "assistant_message":
 			var value struct {
 				Content string `json:"content"`
@@ -507,10 +525,175 @@ func providerRequest(items []models.JobMatchChatItem, reasoning string) (openai.
 			if err := json.Unmarshal(item.Payload, &result); err != nil {
 				return request, err
 			}
-			request.Messages = append(request.Messages, openai.Message{Role: "tool", ToolCallID: result.ToolCallID, Content: string(item.Payload)})
+			content, err := redactedToolResult(item.Payload)
+			if err != nil {
+				return request, err
+			}
+			request.Messages = append(request.Messages, openai.Message{Role: "tool", ToolCallID: result.ToolCallID, Content: content})
 		}
 	}
+	redactProviderRequest(&request, redactions)
 	return request, nil
+}
+
+func chatRedactionValues(items []models.JobMatchChatItem) ([]string, error) {
+	values := make([]string, 0)
+	for _, item := range items {
+		switch item.Type {
+		case "initial_context":
+			var context jobMatchChatInitialContext
+			if err := json.Unmarshal(item.Payload, &context); err != nil {
+				return nil, err
+			}
+			if context.Profile != nil {
+				values = appendUserProfileRedactionValues(values, *context.Profile)
+			}
+		case "resume_revision":
+			var revision resumeRevisionPayload
+			if err := json.Unmarshal(item.Payload, &revision); err != nil {
+				return nil, err
+			}
+			values = appendResumeRedactionValues(values, revision.Resume)
+		case "tool_result":
+			var result toolResultPayload
+			if err := json.Unmarshal(item.Payload, &result); err != nil {
+				return nil, err
+			}
+			if result.Resume != nil {
+				values = appendResumeRedactionValues(values, *result.Resume)
+			}
+		}
+	}
+
+	return normalizedRedactionValues(values), nil
+}
+
+func normalizedRedactionValues(values []string) []string {
+	unique := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" && value != redactedChatValue {
+			unique[value] = struct{}{}
+		}
+	}
+	values = values[:0]
+	for value := range unique {
+		values = append(values, value)
+	}
+	sort.Slice(values, func(i, j int) bool { return len(values[i]) > len(values[j]) })
+	return values
+}
+
+func appendResumeRedactionValues(values []string, resume models.Resume) []string {
+	values = append(values, resume.FullName, resume.Phone, resume.Location, resume.Email)
+	for _, experience := range resume.Experience {
+		values = append(values, experience.Company)
+	}
+	for _, education := range resume.Education {
+		values = append(values, education.Institution)
+	}
+	return values
+}
+
+func appendUserProfileRedactionValues(values []string, profile models.UserProfile) []string {
+	values = append(values, profile.Location)
+	for _, experience := range profile.WorkHistory {
+		values = append(values, experience.Company)
+	}
+	for _, education := range profile.Education {
+		values = append(values, education.Institution)
+	}
+	return values
+}
+
+func redactedInitialContext(payload json.RawMessage) (string, error) {
+	var context jobMatchChatInitialContext
+	if err := json.Unmarshal(payload, &context); err != nil {
+		return "", err
+	}
+	if context.Profile != nil {
+		profile := redactedUserProfile(*context.Profile)
+		context.Profile = &profile
+	}
+	return marshalChatPayload(context)
+}
+
+func redactedResumeRevision(payload json.RawMessage) (string, error) {
+	var revision resumeRevisionPayload
+	if err := json.Unmarshal(payload, &revision); err != nil {
+		return "", err
+	}
+	revision.Resume = redactedResume(revision.Resume)
+	return marshalChatPayload(revision)
+}
+
+func redactedToolResult(payload json.RawMessage) (string, error) {
+	var result toolResultPayload
+	if err := json.Unmarshal(payload, &result); err != nil {
+		return "", err
+	}
+	if result.Resume != nil {
+		resume := redactedResume(*result.Resume)
+		result.Resume = &resume
+	}
+	return marshalChatPayload(result)
+}
+
+func marshalChatPayload(value any) (string, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(payload), nil
+}
+
+func redactedResume(resume models.Resume) models.Resume {
+	resume.FullName = redactedChatValue
+	resume.Phone = redactedChatValue
+	resume.Location = redactedChatValue
+	resume.Email = redactedChatValue
+	resume.Experience = append([]models.ResumeExperience(nil), resume.Experience...)
+	for index := range resume.Experience {
+		resume.Experience[index].Company = redactedChatValue
+	}
+	resume.Education = append([]models.ResumeEducation(nil), resume.Education...)
+	for index := range resume.Education {
+		resume.Education[index].Institution = redactedChatValue
+	}
+	return resume
+}
+
+func redactedUserProfile(profile models.UserProfile) models.UserProfile {
+	profile.Location = redactedChatValue
+	profile.WorkHistory = append([]models.UserProfileWorkHistory(nil), profile.WorkHistory...)
+	for index := range profile.WorkHistory {
+		profile.WorkHistory[index].Company = redactedChatValue
+	}
+	profile.Education = append([]models.UserProfileEducation(nil), profile.Education...)
+	for index := range profile.Education {
+		profile.Education[index].Institution = redactedChatValue
+	}
+	return profile
+}
+
+func redactProviderRequest(request *openai.ChatRequest, values []string) {
+	for messageIndex := range request.Messages {
+		message := &request.Messages[messageIndex]
+		message.Content = redactSensitiveText(message.Content, values)
+		for callIndex := range message.ToolCalls {
+			message.ToolCalls[callIndex].Function.Arguments = redactSensitiveText(message.ToolCalls[callIndex].Function.Arguments, values)
+		}
+	}
+}
+
+func redactSensitiveText(text string, values []string) string {
+	for _, value := range values {
+		text = strings.ReplaceAll(text, value, redactedChatValue)
+		encoded, err := json.Marshal(value)
+		if err == nil {
+			text = strings.ReplaceAll(text, string(encoded[1:len(encoded)-1]), redactedChatValue)
+		}
+	}
+	return text
 }
 
 func latestResumeRevision(items []models.JobMatchChatItem) (resumeRevisionPayload, error) {
