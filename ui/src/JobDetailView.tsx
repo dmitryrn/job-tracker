@@ -1,4 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
 
@@ -197,7 +199,6 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
   }
 
   return <section className="match-chat">
-    <header className="match-chat-header"><div><p className="eyebrow">Match chat</p><h2>Discuss this opportunity</h2></div><p>Uses the job post, current match, profile, and base resume.</p></header>
     {error && <p className="query-error">{error}</p>}
     {items === undefined ? <p className="analysis-loading">Loading chat...</p> : <ChatTimeline items={items} onRevert={revert} reverting={reverting} />}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
@@ -236,19 +237,22 @@ function ChatTimeline({ items, onRevert, reverting }: { items: JobMatchChatItem[
     {visible.map((item) => {
       if (item.type === "user_message" || item.type === "assistant_message") {
         const content = contentOf(item);
-        return <article className={`match-chat-message ${item.type === "user_message" ? "user" : "assistant"}`} key={item.sequence}>
-          <header><p>{item.type === "user_message" ? "You" : "AI"}</p>{item.type === "user_message" && <button type="button" className="match-chat-revert" onClick={() => void onRevert(item, content)} disabled={reverting} aria-label="Revert to this message" title="Revert to this message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5M4 12h9a6 6 0 0 1 6 6" /></svg></button>}</header>
-          <div>{content}</div>
-        </article>;
+        if (item.type === "user_message") return <div className="match-chat-user-turn" key={item.sequence}>
+          <article className="match-chat-message user"><div>{content}</div></article>
+          <button type="button" className="match-chat-revert" onClick={() => void onRevert(item, content)} disabled={reverting} aria-label="Revert to this message" title="Revert to this message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5M4 12h9a6 6 0 0 1 6 6" /></svg></button>
+        </div>;
+        return <article className="match-chat-message assistant" key={item.sequence}><div className="match-chat-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{content}</ReactMarkdown></div></article>;
       }
       if (item.type === "tool_result") {
         const revisionIndex = revisions.findIndex((revision) => revision.sequence === item.sequence);
         if (revisionIndex >= 0) return <ApplicationResumeActivity key={item.sequence} revision={revisions[revisionIndex]} previous={revisions[revisionIndex - 1]} />;
       }
-      return <details className="application-resume-events" key={item.sequence} open>
-        <summary>{humanize(item.type)}</summary>
-        <p>{activityDetail(item)}</p>
-        <details><summary>Details</summary><JSONTree value={item.payload} /></details>
+      const toolCall = item.type === "assistant_tool_call";
+      const toolName = toolCallName(item);
+      return <details className={`application-resume-events${toolCall ? " tool-call" : ""}`} key={item.sequence} open={toolCall ? undefined : true}>
+        <summary>{toolCall ? <><svg className="tool-call-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v5M16 15v5M5 9h6v6H5zM13 9h6v6h-6zM11 12h2" /></svg>{toolName}</> : humanize(item.type)}</summary>
+        {!toolCall && <p>{activityDetail(item)}</p>}
+        <div className="match-chat-activity-details"><JSONTree value={item.payload} /></div>
       </details>;
     })}
   </div>;
@@ -256,14 +260,19 @@ function ChatTimeline({ items, onRevert, reverting }: { items: JobMatchChatItem[
 
 function activityDetail(item: JobMatchChatItem) {
 	const value = item.payload as { summary?: string; detail?: string; error?: string; status?: string; revision?: number; function?: { name?: string } };
-	if (item.type === "assistant_tool_call") return value.function?.name ? `Called ${value.function.name}` : "Tool call requested";
+	if (item.type === "assistant_tool_call") return value.function?.name ? `Called ${humanize(value.function.name)}` : "Tool call requested";
 	if (item.type === "tool_result" && value.status === "accepted") return value.summary || (value.revision === undefined ? "Resume revision accepted" : `Accepted resume revision ${value.revision}`);
 	return value.summary || value.detail || value.error || value.status || "Recorded";
 }
 
+function toolCallName(item: JobMatchChatItem) {
+  const value = item.payload as { function?: { name?: string } };
+  return value.function?.name ? humanize(value.function.name) : "Tool call";
+}
+
 function ApplicationResumeActivity({ revision, previous }: { revision: ResumeRevision; previous?: ResumeRevision }) {
   return <section className="application-resume-activity">
-    <header><p className="eyebrow">Application resume</p><h3>{revision.revision === 0 ? "Base snapshot" : `Revision ${revision.revision} applied`}</h3></header>
+    <h3>{revision.revision === 0 ? "Base snapshot" : `Revision ${revision.revision} applied`}</h3>
     <article className="application-resume-revision">
       <p>{revision.summary}</p>
       {previous && <ul>{resumeDiff(previous.resume, revision.resume).map((change) => <li key={change}>{change}</li>)}</ul>}
