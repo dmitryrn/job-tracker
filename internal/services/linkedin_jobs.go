@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -12,8 +13,6 @@ import (
 	"nice/internal/models"
 	"nice/internal/repositories"
 )
-
-const linkedInPageSize = 25
 
 type linkedInClient interface {
 	Search(context.Context, linkedin.SearchFilter) ([]linkedin.SearchResult, error)
@@ -46,6 +45,18 @@ type linkedInFetchOptions struct {
 	save            bool
 }
 
+type linkedInClientError struct {
+	cause error
+}
+
+func (err *linkedInClientError) Error() string {
+	return err.cause.Error()
+}
+
+func (err *linkedInClientError) Unwrap() error {
+	return err.cause
+}
+
 func NewLinkedInJobs(client *linkedin.Client, jobs repositories.JobRepository, events repositories.EventRecorder, logger *zap.Logger) *LinkedInJobs {
 	return &LinkedInJobs{
 		client: client,
@@ -56,9 +67,17 @@ func NewLinkedInJobs(client *linkedin.Client, jobs repositories.JobRepository, e
 }
 
 func (service *LinkedInJobs) Preview(ctx context.Context, settings models.LinkedInSearchSettings, requestInterval time.Duration) (LinkedInFetchResult, error) {
-	return service.fetch(ctx, settings, linkedInFetchOptions{
+	fetch, err := service.fetch(ctx, settings, linkedInFetchOptions{
 		requestInterval: requestInterval,
 	})
+	var clientErr *linkedInClientError
+	if len(fetch.Jobs) > 0 && errors.As(err, &clientErr) {
+		if service.logger != nil {
+			service.logger.Warn("LinkedIn preview incomplete; returning fetched jobs", zap.Int("job_count", len(fetch.Jobs)), zap.Error(err))
+		}
+		return fetch, nil
+	}
+	return fetch, err
 }
 
 func (service *LinkedInJobs) Sync(ctx context.Context, settings models.LinkedInSearchSettings, runID string, requestInterval time.Duration) (LinkedInFetchResult, error) {
@@ -76,7 +95,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 	fetch := LinkedInFetchResult{Jobs: make([]models.Job, 0, settings.Limit)}
 	seen := make(map[string]struct{}, settings.Limit)
 	requested := false
-	for start := 0; len(fetch.Jobs) < settings.Limit; start += linkedInPageSize {
+	for start := 0; len(fetch.Jobs) < settings.Limit; {
 		if requested {
 			if err := service.wait(ctx, requestInterval); err != nil {
 				return fetch, err
@@ -95,7 +114,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 			service.recordEvent(ctx, runID, "linkedin.search.failed", "error", "LinkedIn search failed", map[string]any{
 				"start": start, "error": err.Error(),
 			})
-			return fetch, err
+			return fetch, &linkedInClientError{cause: err}
 		}
 		fetch.SearchResults += len(results)
 		service.recordEvent(ctx, runID, "linkedin.search.succeeded", "info", "LinkedIn search succeeded", map[string]any{
@@ -143,7 +162,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.failed", "error", "LinkedIn job fetch failed", map[string]any{
 					"jobID": candidate.ID, "error": err.Error(),
 				})
-				return fetch, err
+				return fetch, &linkedInClientError{cause: err}
 			}
 			if !validLinkedInJob(details) {
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
@@ -179,9 +198,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 			}
 			fetch.Jobs = append(fetch.Jobs, job)
 		}
-		if len(results) < linkedInPageSize {
-			break
-		}
+		start += len(results)
 	}
 	return fetch, nil
 }

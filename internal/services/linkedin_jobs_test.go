@@ -14,8 +14,10 @@ import (
 )
 
 func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
-	results := make([]linkedin.SearchResult, linkedInPageSize)
-	details := make(map[string]linkedin.Job, linkedInPageSize+1)
+	const firstPageSize = 10
+
+	results := make([]linkedin.SearchResult, firstPageSize)
+	details := make(map[string]linkedin.Job, firstPageSize+1)
 	for index := range results {
 		id := string(rune('a' + index))
 		results[index] = linkedin.SearchResult{ID: id, URL: "https://www.linkedin.com/jobs/view/" + id, Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}
@@ -25,22 +27,22 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
 			0:  results,
-			25: {{ID: "last", URL: "https://www.linkedin.com/jobs/view/last", Title: "Staff Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}},
+			10: {{ID: "last", URL: "https://www.linkedin.com/jobs/view/last", Title: "Staff Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}},
 		},
 		details: details,
 	}
 	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
 
-	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Location: "Berlin", Limit: linkedInPageSize + 1}, 0)
+	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Location: "Berlin", Limit: firstPageSize + 1}, 0)
 
 	require.NoError(t, err)
 	jobs := fetch.Jobs
-	require.Len(t, jobs, linkedInPageSize+1)
-	assert.Equal(t, []int{0, 25}, client.starts)
+	require.Len(t, jobs, firstPageSize+1)
+	assert.Equal(t, []int{0, 10}, client.starts)
 	assert.Equal(t, "linkedin", jobs[0].Source)
 	assert.Equal(t, "remote", jobs[0].Workplace)
-	assert.Equal(t, "hybrid", jobs[linkedInPageSize].Workplace)
-	assert.Equal(t, "2026-09-02T00:00:00Z", jobs[linkedInPageSize].PostedAt)
+	assert.Equal(t, "hybrid", jobs[firstPageSize].Workplace)
+	assert.Equal(t, "2026-09-02T00:00:00Z", jobs[firstPageSize].PostedAt)
 	assert.Equal(t, "Full-time", jobs[0].EmploymentType)
 }
 
@@ -81,7 +83,7 @@ func TestLinkedInPostedAt(t *testing.T) {
 	assert.Empty(t, linkedInPostedAt("not-a-date"))
 }
 
-func TestLinkedInJobsFetchReturnsCompletedJobsWhenLaterRequestFails(t *testing.T) {
+func TestLinkedInJobsPreviewReturnsCompletedJobsWhenLaterRequestFails(t *testing.T) {
 	fetchErr := errors.New("LinkedIn unavailable")
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
@@ -99,10 +101,34 @@ func TestLinkedInJobsFetchReturnsCompletedJobsWhenLaterRequestFails(t *testing.T
 
 	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 10}, 0)
 
-	require.ErrorIs(t, err, fetchErr)
+	require.NoError(t, err)
 	jobs := fetch.Jobs
 	require.Len(t, jobs, 1)
 	assert.Equal(t, "completed", jobs[0].SourceID)
+}
+
+func TestLinkedInJobsSyncSavesCompletedJobsWhenLaterRequestFails(t *testing.T) {
+	fetchErr := errors.New("LinkedIn unavailable")
+	client := &linkedInClientStub{
+		results: map[int][]linkedin.SearchResult{
+			0: {
+				{ID: "completed", URL: "https://www.linkedin.com/jobs/view/completed", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "failed", URL: "https://www.linkedin.com/jobs/view/failed", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+			},
+		},
+		details:   map[string]linkedin.Job{"completed": {Description: "Build systems", EmploymentType: "Full-time"}},
+		jobErrors: map[string]error{"failed": fetchErr},
+	}
+	jobs := &linkedInJobRepositoryStub{}
+	service := LinkedInJobs{client: client, jobs: jobs}
+
+	fetch, err := service.Sync(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 2}, "run-1", 0)
+
+	require.ErrorIs(t, err, fetchErr)
+	require.Len(t, fetch.Jobs, 1)
+	assert.Equal(t, "completed", fetch.Jobs[0].SourceID)
+	require.Len(t, jobs.upserted, 1)
+	assert.Equal(t, "completed", jobs.upserted[0].SourceID)
 }
 
 func TestLinkedInJobsFetchWaitsBetweenRequests(t *testing.T) {
