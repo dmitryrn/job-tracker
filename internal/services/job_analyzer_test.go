@@ -70,6 +70,38 @@ func TestJobAnalyzerRejectsClaimsWithoutPostingQuotes(t *testing.T) {
 	assert.ErrorContains(t, err, `quote "Must have Go experience." is not in source`)
 }
 
+func TestJobAnalyzerRetriesAnInvalidResponseWithCorrectionContext(t *testing.T) {
+	invalid := `{
+		"role":{"family":"backend_engineering","seniority":"senior","seniorityConfidence":"high"},
+		"constraints":[],
+		"requirements":[{"id":"go-experience","kind":"must_have","concept":"go","minimumYears":null,"screeningRisk":"high","quote":"Must have Go experience.","confidence":"high"}],
+		"responsibilities":[],
+		"preferences":[],
+		"unknowns":[]
+	}`
+	valid := `{
+		"role":{"family":"backend_engineering","seniority":"senior","seniorityConfidence":"high"},
+		"constraints":[],
+		"requirements":[{"id":"go-experience","kind":"must_have","concept":"go","minimumYears":null,"screeningRisk":"high","quote":"Build Go APIs.","confidence":"high"}],
+		"responsibilities":[],
+		"preferences":[],
+		"unknowns":[]
+	}`
+	client := &fakeJobCompletionClient{responses: []openai.ChatResponse{{Content: invalid}, {Content: valid}}}
+
+	analysis, err := NewJobAnalyzer(client, "analyzer-test-model", "high").Analyze(context.Background(), models.Job{Title: "Backend Engineer", BodyText: "Build Go APIs."})
+
+	require.NoError(t, err)
+	assert.Equal(t, "Build Go APIs.", analysis.Analysis.Requirements[0].Quote)
+	require.Len(t, client.requests, 2)
+	assert.Equal(t, client.sessions[0], client.sessions[1])
+	assert.Equal(t, "assistant", client.requests[1].Messages[2].Role)
+	assert.Equal(t, invalid, client.requests[1].Messages[2].Content)
+	assert.Equal(t, "user", client.requests[1].Messages[3].Role)
+	assert.Contains(t, client.requests[1].Messages[3].Content, `quote "Must have Go experience." is not in source`)
+	assert.Equal(t, []LLMResponseRejection{{Attempt: 1, Reason: "quote_not_in_source"}}, analysis.RetryMetadata.Rejections)
+}
+
 func TestJobAnalyzerAcceptsLabeledAuthoritativeFieldQuote(t *testing.T) {
 	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openai.ChatResponse{
 		Model: "test-model",
@@ -175,18 +207,28 @@ func TestNormalizeJobDescriptionPreservesHeadingsAndListItems(t *testing.T) {
 }
 
 type fakeJobCompletionClient struct {
-	response openai.ChatResponse
-	err      error
-	model    string
-	session  string
-	request  openai.ChatRequest
+	response  openai.ChatResponse
+	responses []openai.ChatResponse
+	err       error
+	model     string
+	session   string
+	request   openai.ChatRequest
+	sessions  []string
+	requests  []openai.ChatRequest
 }
 
 func (client *fakeJobCompletionClient) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	client.model = model
 	client.session = session
 	client.request = request
-	return client.response, client.err
+	client.sessions = append(client.sessions, session)
+	client.requests = append(client.requests, request)
+	if len(client.responses) == 0 {
+		return client.response, client.err
+	}
+	response := client.responses[0]
+	client.responses = client.responses[1:]
+	return response, client.err
 }
 
 func loadJobFixture(t *testing.T, name string) models.Job {

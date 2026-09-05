@@ -30,6 +30,8 @@ changing a unit definition. Read recent service logs with
 - handlers should log all errors, including service errors
 - worker execution paths should log all outcomes, including early returns, successes, and errors, with relevant IDs and context
 - clients should be dumb and application-agnostic where possible; retries and application policy belong to callers, though clients may use application models when needed
+- callers sending requests to an LLM must pass a session header or equivalent session identifier when the provider supports one, preserving upstream cache affinity
+- LLM retries, pipelines, and chats must use append-only context: preserve existing messages exactly, especially the initial user prompt, and append responses or correction feedback rather than rewriting prior context; reuse the session identifier within a retry loop to preserve prefix-cache eligibility
 - keep each repository interface and its persistence implementation in one dedicated file under `internal/repositories`; do not combine unrelated repositories in one file
 - use Squirrel builders for all new SQL queries
 - tests should assert behavior, not log output

@@ -743,8 +743,8 @@ func (noOpJobAnalysisService) Analyze(context.Context, models.Job) (services.Job
 
 type noOpProfileJobMatcher struct{}
 
-func (noOpProfileJobMatcher) Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (models.JobMatchAssessment, error) {
-	return models.JobMatchAssessment{}, nil
+func (noOpProfileJobMatcher) Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (services.ProfileJobMatch, error) {
+	return services.ProfileJobMatch{}, nil
 }
 
 type noOpJobCompletionClient struct{}

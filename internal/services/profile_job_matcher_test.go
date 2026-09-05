@@ -25,13 +25,14 @@ func TestLLMProfileJobMatcherReturnsValidatedAssessment(t *testing.T) {
 		}`,
 	}}
 
-	assessment, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(),
+	match, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(),
 		models.BrowseJob{ID: 1, Title: "Senior Backend Engineer", BodyText: "Build Go services."},
 		models.JobAnalysisRecord{JobID: 1, Analysis: models.JobAnalysisDraft{Requirements: []models.JobRequirement{{ID: "go", Concept: "go", Kind: "must_have", Quote: "Build Go services."}}}},
 		models.UserProfile{Headline: "Backend engineer", Skills: []models.UserProfileSkill{{Name: "Go", Notes: "Production services"}}},
 	)
 
 	require.NoError(t, err)
+	assessment := match.Assessment
 	assert.Equal(t, 84, assessment.Score)
 	assert.Equal(t, "Strong fit", assessment.Label)
 	assert.Equal(t, LLMProfileJobMatcherVersion, assessment.MatcherVersion)
@@ -56,6 +57,40 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 
 	_, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
 	assert.ErrorContains(t, err, "score must be between 0 and 100")
+	assert.Len(t, client.requests, validatedLLMResponseAttempts)
+}
+
+func TestLLMProfileJobMatcherRetriesAnInvalidResponseWithCorrectionContext(t *testing.T) {
+	invalid := `{
+		"score":101,
+		"summary":"Too high.",
+		"strengths":[],
+		"gaps":[],
+		"questions":[],
+		"applicationAngle":""
+	}`
+	valid := `{
+		"score":84,
+		"summary":"Strong fit.",
+		"strengths":[],
+		"gaps":[],
+		"questions":[],
+		"applicationAngle":"Highlight Go experience."
+	}`
+	client := &recordingMatchCompletionClient{responses: []openai.ChatResponse{{Content: invalid}, {Content: valid}}}
+
+	match, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
+
+	require.NoError(t, err)
+	assessment := match.Assessment
+	assert.Equal(t, 84, assessment.Score)
+	require.Len(t, client.requests, 2)
+	assert.Equal(t, client.sessions[0], client.sessions[1])
+	assert.Equal(t, "assistant", client.requests[1].Messages[2].Role)
+	assert.Equal(t, invalid, client.requests[1].Messages[2].Content)
+	assert.Equal(t, "user", client.requests[1].Messages[3].Role)
+	assert.Contains(t, client.requests[1].Messages[3].Content, "score must be between 0 and 100")
+	assert.Equal(t, []LLMResponseRejection{{Attempt: 1, Reason: "validation_failed"}}, match.RetryMetadata.Rejections)
 }
 
 func TestLLMProfileJobMatcherOmitsInstitutionNames(t *testing.T) {
@@ -96,9 +131,10 @@ func TestLLMProfileJobMatcherOmitsInstitutionNames(t *testing.T) {
 func TestLLMProfileJobMatcherAcceptsAJSONCodeFence(t *testing.T) {
 	client := &recordingMatchCompletionClient{response: openai.ChatResponse{Model: "test-model", Content: "```json\n{\"score\":84,\"summary\":\"Strong fit.\",\"strengths\":[],\"gaps\":[],\"questions\":[],\"applicationAngle\":\"Highlight Go experience.\"}\n```"}}
 
-	assessment, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "low").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
+	match, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "low").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
 
 	require.NoError(t, err)
+	assessment := match.Assessment
 	assert.Equal(t, 84, assessment.Score)
 }
 
@@ -111,16 +147,26 @@ func TestMatchScoreLabel(t *testing.T) {
 }
 
 type recordingMatchCompletionClient struct {
-	response openai.ChatResponse
-	err      error
-	model    string
-	session  string
-	request  openai.ChatRequest
+	response  openai.ChatResponse
+	responses []openai.ChatResponse
+	err       error
+	model     string
+	session   string
+	request   openai.ChatRequest
+	sessions  []string
+	requests  []openai.ChatRequest
 }
 
 func (client *recordingMatchCompletionClient) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	client.model = model
 	client.session = session
 	client.request = request
-	return client.response, client.err
+	client.sessions = append(client.sessions, session)
+	client.requests = append(client.requests, request)
+	if len(client.responses) == 0 {
+		return client.response, client.err
+	}
+	response := client.responses[0]
+	client.responses = client.responses[1:]
+	return response, client.err
 }

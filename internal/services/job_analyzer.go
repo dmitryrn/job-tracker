@@ -130,6 +130,7 @@ type JobAnalysis struct {
 	AnalyzedAt            string                  `json:"analyzedAt"`
 	NormalizedDescription string                  `json:"normalizedDescription"`
 	Analysis              models.JobAnalysisDraft `json:"analysis"`
+	RetryMetadata         LLMRetryMetadata        `json:"-"`
 }
 
 func NewJobAnalyzer(client JobCompletionClient, model, reasoningEffort string) *JobAnalyzer {
@@ -155,28 +156,42 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 		ReasoningEffort: analyzer.reasoningEffort,
 		Provider:        &openai.ProviderPreferences{RequireParameters: true},
 	}
-	response, err := analyzer.client.Complete(ctx, analyzer.model, newLLMSessionID(), request)
-	if err != nil {
-		return JobAnalysis{}, fmt.Errorf("analyze job: %w", err)
+	sessionID := newLLMSessionID()
+	retries := LLMRetryMetadata{}
+	for attempt := 1; attempt <= validatedLLMResponseAttempts; attempt++ {
+		response, err := analyzer.client.Complete(ctx, analyzer.model, sessionID, request)
+		if err != nil {
+			return JobAnalysis{}, fmt.Errorf("analyze job: %w", err)
+		}
+
+		draft, err := decodeJobAnalysis(response.Content)
+		decoded := err == nil
+		if err == nil {
+			err = validateJobAnalysisDraft(&draft, jobQuoteSource(job, normalizedDescription))
+		}
+		if err == nil {
+			return JobAnalysis{
+				AnalyzerVersion:       JobAnalyzerVersion,
+				PromptVersion:         JobPromptVersion,
+				InputSHA256:           jobAnalysisInputSHA256FromInput(input),
+				Model:                 response.Model,
+				AnalyzedAt:            time.Now().UTC().Format(time.RFC3339),
+				NormalizedDescription: normalizedDescription,
+				Analysis:              draft,
+				RetryMetadata:         retries,
+			}, nil
+		}
+		retries.Rejections = append(retries.Rejections, llmResponseRejection(attempt, response.Model, err))
+		if attempt == validatedLLMResponseAttempts {
+			if !decoded {
+				return JobAnalysis{}, fmt.Errorf("decode job analysis from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
+			}
+			return JobAnalysis{}, fmt.Errorf("validate job analysis from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
+		}
+		request.Messages = correctedLLMMessages(request.Messages, response.Content, err)
 	}
 
-	draft, err := decodeJobAnalysis(response.Content)
-	if err != nil {
-		return JobAnalysis{}, fmt.Errorf("decode job analysis from %s: %w", response.Model, err)
-	}
-	if err := validateJobAnalysisDraft(&draft, jobQuoteSource(job, normalizedDescription)); err != nil {
-		return JobAnalysis{}, fmt.Errorf("validate job analysis from %s: %w", response.Model, err)
-	}
-
-	return JobAnalysis{
-		AnalyzerVersion:       JobAnalyzerVersion,
-		PromptVersion:         JobPromptVersion,
-		InputSHA256:           jobAnalysisInputSHA256FromInput(input),
-		Model:                 response.Model,
-		AnalyzedAt:            time.Now().UTC().Format(time.RFC3339),
-		NormalizedDescription: normalizedDescription,
-		Analysis:              draft,
-	}, nil
+	return JobAnalysis{}, fmt.Errorf("job analysis retry limit reached")
 }
 
 func jobAnalysisInputSHA256(job models.Job) string {

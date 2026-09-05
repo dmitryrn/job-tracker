@@ -122,3 +122,23 @@ func TestMigrationsCanBeAppliedAndRolledBackRepeatedly(t *testing.T) {
 		require.NoError(t, goose.DownTo(db, "sql", 0))
 	}
 }
+
+func TestEventLevelMigrationRemovesConstraintAndPreservesExistingEvents(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	goose.SetBaseFS(files)
+	require.NoError(t, goose.SetDialect("sqlite3"))
+	require.NoError(t, goose.UpTo(db, "sql", 26))
+	_, err = db.Exec(`INSERT INTO app_events (occurred_at, type, level, message) VALUES ('2026-09-05T13:00:00Z', 'existing', 'info', 'Existing event')`)
+	require.NoError(t, err)
+
+	require.NoError(t, goose.Up(db, "sql"))
+	_, err = db.Exec(`INSERT INTO app_events (occurred_at, type, level, message) VALUES ('2026-09-05T13:01:00Z', 'debug', 'debug', 'Debug event')`)
+	require.NoError(t, err)
+
+	var count int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM app_events`).Scan(&count))
+	assert.Equal(t, 2, count)
+}

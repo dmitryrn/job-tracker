@@ -42,11 +42,16 @@ type LLMProfileJobMatcher struct {
 	reasoningEffort string
 }
 
+type ProfileJobMatch struct {
+	Assessment    models.JobMatchAssessment
+	RetryMetadata LLMRetryMetadata
+}
+
 func NewLLMProfileJobMatcher(client JobCompletionClient, model, reasoningEffort string) *LLMProfileJobMatcher {
 	return &LLMProfileJobMatcher{client: client, model: model, reasoningEffort: reasoningEffort}
 }
 
-func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.BrowseJob, analysis models.JobAnalysisRecord, profile models.UserProfile) (models.JobMatchAssessment, error) {
+func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.BrowseJob, analysis models.JobAnalysisRecord, profile models.UserProfile) (ProfileJobMatch, error) {
 	redactions := normalizedRedactionValues(appendUserProfileRedactionValues(nil, profile))
 	input, err := json.Marshal(struct {
 		Job      models.BrowseJob         `json:"job"`
@@ -54,12 +59,12 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 		Profile  chatUserProfile          `json:"profile"`
 	}{Job: job, Analysis: analysis, Profile: chatProfile(profile)})
 	if err != nil {
-		return models.JobMatchAssessment{}, fmt.Errorf("encode profile-job match input: %w", err)
+		return ProfileJobMatch{}, fmt.Errorf("encode profile-job match input: %w", err)
 	}
 	input = []byte(redactSensitiveText(string(input), redactions))
 
 	temperature := 0.2
-	response, err := matcher.client.Complete(ctx, matcher.model, newLLMSessionID(), openai.ChatRequest{
+	request := openai.ChatRequest{
 		Messages: []openai.Message{
 			{Role: "system", Content: profileJobMatchInstructions},
 			{Role: "user", Content: "Assess this job against this profile.\n\n<input>\n" + string(input) + "\n</input>"},
@@ -69,22 +74,37 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 		Temperature:     &temperature,
 		ReasoningEffort: matcher.reasoningEffort,
 		Provider:        &openai.ProviderPreferences{RequireParameters: true},
-	})
-	if err != nil {
-		return models.JobMatchAssessment{}, fmt.Errorf("match profile to job: %w", err)
+	}
+	sessionID := newLLMSessionID()
+	retries := LLMRetryMetadata{}
+	for attempt := 1; attempt <= validatedLLMResponseAttempts; attempt++ {
+		response, err := matcher.client.Complete(ctx, matcher.model, sessionID, request)
+		if err != nil {
+			return ProfileJobMatch{}, fmt.Errorf("match profile to job: %w", err)
+		}
+
+		assessment, err := decodeProfileJobMatch(response.Content)
+		decoded := err == nil
+		if err == nil {
+			err = validateProfileJobMatch(&assessment)
+		}
+		if err == nil {
+			assessment.MatcherVersion = LLMProfileJobMatcherVersion
+			assessment.Model = response.Model
+			assessment.Label = matchScoreLabel(assessment.Score)
+			return ProfileJobMatch{Assessment: assessment, RetryMetadata: retries}, nil
+		}
+		retries.Rejections = append(retries.Rejections, llmResponseRejection(attempt, response.Model, err))
+		if attempt == validatedLLMResponseAttempts {
+			if !decoded {
+				return ProfileJobMatch{}, fmt.Errorf("decode profile-job match from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
+			}
+			return ProfileJobMatch{}, fmt.Errorf("validate profile-job match from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
+		}
+		request.Messages = correctedLLMMessages(request.Messages, response.Content, err)
 	}
 
-	assessment, err := decodeProfileJobMatch(response.Content)
-	if err != nil {
-		return models.JobMatchAssessment{}, fmt.Errorf("decode profile-job match from %s: %w", response.Model, err)
-	}
-	if err := validateProfileJobMatch(&assessment); err != nil {
-		return models.JobMatchAssessment{}, fmt.Errorf("validate profile-job match from %s: %w", response.Model, err)
-	}
-	assessment.MatcherVersion = LLMProfileJobMatcherVersion
-	assessment.Model = response.Model
-	assessment.Label = matchScoreLabel(assessment.Score)
-	return assessment, nil
+	return ProfileJobMatch{}, fmt.Errorf("profile-job match retry limit reached")
 }
 
 func decodeProfileJobMatch(content string) (models.JobMatchAssessment, error) {

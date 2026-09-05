@@ -66,13 +66,13 @@ export default function EventsView() {
         <div>
           <p className="eyebrow">Observability</p>
           <h1>Application events</h1>
-          <p>LinkedIn runs include the search and individual listing requests that produced them. Use a run ID to inspect one sync from start to finish.</p>
+          <p>Use a run ID to inspect a discovery or job-matching run from start to finish.</p>
         </div>
         <p className="events-total">{page.total} events</p>
       </header>
 
       <form className="events-filter" onSubmit={filter}>
-        <label>Source<select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">All events</option><option value="application">Application</option><option value="linkedin">LinkedIn</option></select></label>
+        <label>Source<select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">All events</option><option value="application">Application</option><option value="linkedin">LinkedIn</option><option value="job_match">Job matching</option></select></label>
         <label>Run ID<input value={runID} onChange={(event) => setRunID(event.target.value)} placeholder="linkedin-..." /></label>
         <label>Event type<input value={type} onChange={(event) => setType(event.target.value)} placeholder="skipped" /></label>
         <label>Level<select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">All levels</option><option value="info">Info</option><option value="error">Error</option></select></label>

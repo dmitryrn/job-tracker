@@ -20,7 +20,7 @@ const jobMatchRetryInterval = 30 * time.Second
 var ErrMatchJobNotFound = errors.New("job not found")
 
 type ProfileJobMatcher interface {
-	Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (models.JobMatchAssessment, error)
+	Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (ProfileJobMatch, error)
 }
 
 type JobAnalysisService interface {
@@ -186,11 +186,15 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 	if analysis == nil {
 		return errors.New("job analysis was not saved")
 	}
-	assessment, err := worker.matcher.Match(ctx, job, *analysis, profile)
+	match, err := worker.matcher.Match(ctx, job, *analysis, profile)
 	if err != nil {
+		if retries, ok := llmRetryMetadataFromError(err); ok {
+			worker.recordRetryEvents(ctx, runID, job.ID, "assessment", retries, "", false)
+		}
 		return err
 	}
-	content, err := json.Marshal(assessment)
+	worker.recordRetryEvents(ctx, runID, job.ID, "assessment", match.RetryMetadata, match.Assessment.Model, true)
+	content, err := json.Marshal(match.Assessment)
 	if err != nil {
 		return fmt.Errorf("encode job match assessment: %w", err)
 	}
@@ -235,8 +239,12 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 	stage = "analyze"
 	analysis, err := worker.analyzer.Analyze(ctx, *job)
 	if err != nil {
+		if retries, ok := llmRetryMetadataFromError(err); ok {
+			worker.recordRetryEvents(ctx, runID, jobID, "analysis", retries, "", false)
+		}
 		return err
 	}
+	worker.recordRetryEvents(ctx, runID, jobID, "analysis", analysis.RetryMetadata, analysis.Model, true)
 	stage = "save_analysis"
 	if err := worker.analyses.SaveJobAnalysis(ctx, models.JobAnalysisRecord{
 		JobID:                 jobID,
@@ -261,6 +269,30 @@ func (worker *JobMatchWorker) recordEvent(ctx context.Context, runID, eventType,
 	if err := worker.events.RecordEvent(ctx, models.Event{Provider: "job_match", RunID: runID, Type: eventType, Level: level, Message: message, Data: data}); err != nil {
 		worker.logger.Error("record job match event failed", zap.String("run_id", runID), zap.String("event_type", eventType), zap.Error(err))
 	}
+}
+
+func (worker *JobMatchWorker) recordRetryEvents(ctx context.Context, runID string, jobID int64, stage string, retries LLMRetryMetadata, model string, succeeded bool) {
+	for _, rejection := range retries.Rejections {
+		worker.logger.Warn("job match response rejected; retrying", zap.Int64("job_id", jobID), zap.String("stage", stage), zap.Int("attempt", rejection.Attempt), zap.String("model", rejection.Model), zap.String("reason", rejection.Reason))
+		worker.recordEvent(ctx, runID, "job_match."+stage+".retrying", "warn", "Job match "+stage+" response rejected; retrying", map[string]any{
+			"jobId": jobID, "attempt": rejection.Attempt, "nextAttempt": rejection.Attempt + 1, "maxAttempts": validatedLLMResponseAttempts, "model": rejection.Model, "reason": rejection.Reason,
+		})
+	}
+	if len(retries.Rejections) == 0 {
+		return
+	}
+	last := retries.Rejections[len(retries.Rejections)-1]
+	if succeeded {
+		worker.logger.Info("job match response accepted after retry", zap.Int64("job_id", jobID), zap.String("stage", stage), zap.Int("attempt", len(retries.Rejections)+1), zap.String("model", model))
+		worker.recordEvent(ctx, runID, "job_match."+stage+".retry_succeeded", "info", "Job match "+stage+" response accepted after retry", map[string]any{
+			"jobId": jobID, "attempt": len(retries.Rejections) + 1, "retries": len(retries.Rejections), "model": model,
+		})
+		return
+	}
+	worker.logger.Error("job match response remained invalid after retries", zap.Int64("job_id", jobID), zap.String("stage", stage), zap.Int("attempt", last.Attempt), zap.String("model", last.Model), zap.String("reason", last.Reason))
+	worker.recordEvent(ctx, runID, "job_match."+stage+".retry_exhausted", "error", "Job match "+stage+" response remained invalid after retries", map[string]any{
+		"jobId": jobID, "attempt": last.Attempt, "maxAttempts": validatedLLMResponseAttempts, "model": last.Model, "reason": last.Reason,
+	})
 }
 
 func jobAnalysisCurrent(analysis *models.JobAnalysisRecord, job models.Job) bool {
