@@ -6,7 +6,7 @@ const emptySettings: DiscoverySettings = {
   adzuna: { enabled: true, query: "", country: "", maxDaysOld: 30, maxPages: 1, resultsPerPage: 50, workplace: "remote-hybrid" },
   remotive: { enabled: true, query: "", category: "software-development" },
   jobicy: { enabled: true, count: 50, geo: "", industry: "", tag: "" },
-  linkedin: { enabled: false, query: "", location: "", limit: 25 },
+  linkedin: { enabled: false, query: "", location: "Europe", postedWithin: "", workplace: "", experienceLevel: "", limit: 25 },
 };
 
 type DiscoveryProvider = keyof DiscoverySettings;
@@ -162,7 +162,10 @@ export default function DiscoverySettingsView() {
             <p>Public LinkedIn job listings, fetched without an account. Keep this disabled unless you want to import from LinkedIn.</p>
             <div className="profile-fields">
               <label>Search phrase<input value={settings.linkedin.query} onChange={(event) => update("linkedin", "query", event.target.value)} /></label>
-              <label>Location (optional)<input value={settings.linkedin.location} onChange={(event) => update("linkedin", "location", event.target.value)} placeholder="Berlin" /></label>
+              <label>Location<input value={settings.linkedin.location} onChange={(event) => update("linkedin", "location", event.target.value)} /></label>
+              <label>Posted within<select value={settings.linkedin.postedWithin} onChange={(event) => update("linkedin", "postedWithin", event.target.value)}><option value="">Any time</option><option value="r86400">Past 24 hours</option><option value="r604800">Past week</option><option value="r2592000">Past month</option></select></label>
+              <label>Workplace<select value={settings.linkedin.workplace} onChange={(event) => update("linkedin", "workplace", event.target.value)}><option value="">Any workplace</option><option value="1">On-site</option><option value="2">Remote</option><option value="3">Hybrid</option></select></label>
+              <label>Experience level<select value={settings.linkedin.experienceLevel} onChange={(event) => update("linkedin", "experienceLevel", event.target.value)}><option value="">Any level</option><option value="1">Internship</option><option value="2">Entry level</option><option value="3">Associate</option><option value="4">Mid-Senior level</option><option value="5">Director</option><option value="6">Executive</option></select></label>
               <label>Results to fetch<input type="number" min="1" max="100" value={settings.linkedin.limit} onChange={(event) => update("linkedin", "limit", Number(event.target.value))} /></label>
             </div>
             {previews.linkedin !== undefined && <ProviderPreview jobs={previews.linkedin} />}

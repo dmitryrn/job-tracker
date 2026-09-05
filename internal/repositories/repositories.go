@@ -32,11 +32,6 @@ type EventRepository interface {
 	Events(context.Context, models.EventSearch) (models.EventPage, error)
 }
 
-type DiscoverySettingsRepository interface {
-	DiscoverySettings(context.Context) (models.DiscoverySettings, error)
-	SaveDiscoverySettings(context.Context, models.DiscoverySettings) (models.DiscoverySettings, error)
-}
-
 type UserProfileRepository interface {
 	UserProfile(context.Context) (*models.UserProfile, error)
 	SaveUserProfile(context.Context, models.UserProfile) (models.UserProfile, error)
@@ -86,10 +81,6 @@ func NewProviderRunRepository(sqlite *SQLite) ProviderRunRepository {
 }
 
 func NewEventRepository(sqlite *SQLite) EventRepository {
-	return sqlite
-}
-
-func NewDiscoverySettingsRepository(sqlite *SQLite) DiscoverySettingsRepository {
 	return sqlite
 }
 

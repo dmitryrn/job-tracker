@@ -35,8 +35,11 @@ func (service *DiscoverySettingsService) Save(ctx context.Context, settings mode
 	settings.Jobicy.Tag = strings.TrimSpace(settings.Jobicy.Tag)
 	settings.LinkedIn.Query = strings.TrimSpace(settings.LinkedIn.Query)
 	settings.LinkedIn.Location = strings.TrimSpace(settings.LinkedIn.Location)
+	settings.LinkedIn.PostedWithin = strings.TrimSpace(settings.LinkedIn.PostedWithin)
+	settings.LinkedIn.Workplace = strings.TrimSpace(settings.LinkedIn.Workplace)
+	settings.LinkedIn.ExperienceLevel = strings.TrimSpace(settings.LinkedIn.ExperienceLevel)
 
-	if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) || settings.Remotive.Query == "" || settings.Remotive.Category == "" || settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 || settings.LinkedIn.Query == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 {
+	if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) || settings.Remotive.Query == "" || settings.Remotive.Category == "" || settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 || settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
 		return models.DiscoverySettings{}, fmt.Errorf("%w: check required fields and numeric limits", ErrInvalidDiscoverySettings)
 	}
 	return service.repository.SaveDiscoverySettings(ctx, settings)
@@ -44,4 +47,16 @@ func (service *DiscoverySettingsService) Save(ctx context.Context, settings mode
 
 func validWorkplace(value string) bool {
 	return value == "any" || value == "remote" || value == "remote-hybrid"
+}
+
+func validLinkedInPostedWithin(value string) bool {
+	return value == "" || value == "r86400" || value == "r604800" || value == "r2592000"
+}
+
+func validLinkedInWorkplace(value string) bool {
+	return value == "" || value == "1" || value == "2" || value == "3"
+}
+
+func validLinkedInExperienceLevel(value string) bool {
+	return value == "" || value == "1" || value == "2" || value == "3" || value == "4" || value == "5" || value == "6"
 }

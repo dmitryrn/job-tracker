@@ -43,6 +43,9 @@ func TestProviderPreviewRejectsInvalidOrUnknownProvider(t *testing.T) {
 
 	_, err = service.Preview(context.Background(), "unknown", models.DiscoverySettings{})
 	assert.True(t, errors.Is(err, ErrUnknownDiscoveryProvider))
+
+	_, err = service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: models.LinkedInSearchSettings{Query: "engineer", Workplace: "remote", Limit: 25}})
+	assert.ErrorIs(t, err, ErrInvalidDiscoverySettings)
 }
 
 func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
@@ -50,15 +53,21 @@ func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 	service := ProviderPreviewService{linkedin: linkedIn, linkedInPreviewRequestInterval: 5 * time.Second}
 
 	jobs, err := service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: models.LinkedInSearchSettings{
-		Query:    "  platform engineer ",
-		Location: " Berlin ",
-		Limit:    25,
+		Query:           "  platform engineer ",
+		Location:        " Europe ",
+		PostedWithin:    " r604800 ",
+		Workplace:       " 2 ",
+		ExperienceLevel: " 4 ",
+		Limit:           25,
 	}})
 
 	require.NoError(t, err)
 	assert.Equal(t, []models.Job{{Title: "Platform engineer"}}, jobs)
 	assert.Equal(t, "platform engineer", linkedIn.settings.Query)
-	assert.Equal(t, "Berlin", linkedIn.settings.Location)
+	assert.Equal(t, "Europe", linkedIn.settings.Location)
+	assert.Equal(t, "r604800", linkedIn.settings.PostedWithin)
+	assert.Equal(t, "2", linkedIn.settings.Workplace)
+	assert.Equal(t, "4", linkedIn.settings.ExperienceLevel)
 	assert.Equal(t, 25, linkedIn.settings.Limit)
 	assert.Equal(t, 5*time.Second, linkedIn.requestInterval)
 }

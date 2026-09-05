@@ -15,7 +15,11 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 		switch request.URL.Path {
 		case "/seeMoreJobPostings/search":
 			assert.Equal(t, "software engineer", request.URL.Query().Get("keywords"))
-			assert.Equal(t, "Berlin", request.URL.Query().Get("location"))
+			assert.Equal(t, "Europe", request.URL.Query().Get("location"))
+			assert.Equal(t, "r604800", request.URL.Query().Get("f_TPR"))
+			assert.Equal(t, "2", request.URL.Query().Get("f_WT"))
+			assert.Equal(t, "4", request.URL.Query().Get("f_E"))
+			assert.Equal(t, "DD", request.URL.Query().Get("sortBy"))
 			assert.Equal(t, "0", request.URL.Query().Get("start"))
 			_, _ = writer.Write([]byte(`<li><a href="https://www.linkedin.com/jobs/view/platform-engineer-42?trackingId=abc"></a><h3 class="base-search-card__title">Platform Engineer</h3><h4 class="base-search-card__subtitle"><a>Example Co</a></h4><span class="job-search-card__location">Berlin, Germany</span><time datetime="2026-09-02"></time></li>`))
 		case "/jobPosting/42":
@@ -27,7 +31,7 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server.Client(), server.URL)
-	results, err := client.Search(context.Background(), SearchFilter{Keywords: "software engineer", Location: "Berlin"})
+	results, err := client.Search(context.Background(), SearchFilter{Keywords: "software engineer", Location: "Europe", PostedWithin: "r604800", Workplace: "2", ExperienceLevel: "4"})
 
 	require.NoError(t, err)
 	require.Len(t, results, 1)
@@ -40,4 +44,17 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Build reliable remote systems.", job.Description)
 	assert.Equal(t, "Full-time", job.EmploymentType)
+}
+
+func TestSearchOmitsUnsetFilters(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		assert.Empty(t, request.URL.Query().Get("f_TPR"))
+		assert.Empty(t, request.URL.Query().Get("f_WT"))
+		assert.Empty(t, request.URL.Query().Get("f_E"))
+	}))
+	defer server.Close()
+
+	_, err := newClient(server.Client(), server.URL).Search(context.Background(), SearchFilter{Keywords: "software engineer"})
+
+	require.NoError(t, err)
 }

@@ -79,7 +79,10 @@ func (service *ProviderPreviewService) Preview(ctx context.Context, provider str
 	case "linkedin":
 		settings.LinkedIn.Query = strings.TrimSpace(settings.LinkedIn.Query)
 		settings.LinkedIn.Location = strings.TrimSpace(settings.LinkedIn.Location)
-		if settings.LinkedIn.Query == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 {
+		settings.LinkedIn.PostedWithin = strings.TrimSpace(settings.LinkedIn.PostedWithin)
+		settings.LinkedIn.Workplace = strings.TrimSpace(settings.LinkedIn.Workplace)
+		settings.LinkedIn.ExperienceLevel = strings.TrimSpace(settings.LinkedIn.ExperienceLevel)
+		if settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
 			return nil, fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and 100", ErrInvalidDiscoverySettings)
 		}
 		result, err := service.linkedin.Preview(ctx, settings.LinkedIn, service.linkedInPreviewRequestInterval)

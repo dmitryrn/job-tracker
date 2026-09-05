@@ -13,7 +13,9 @@ import (
 	"golang.org/x/net/html"
 )
 
-const baseURL = "https://www.linkedin.com/jobs-guest/jobs/api"
+const (
+	baseURL = "https://www.linkedin.com/jobs-guest/jobs/api"
+)
 
 var jobIDPattern = regexp.MustCompile(`/jobs/view/(?:[^/?#]*-)?(\d+)(?:[/?#]|$)`)
 
@@ -23,9 +25,12 @@ type Client struct {
 }
 
 type SearchFilter struct {
-	Keywords string
-	Location string
-	Start    int
+	Keywords        string
+	Location        string
+	PostedWithin    string
+	Workplace       string
+	ExperienceLevel string
+	Start           int
 }
 
 type SearchResult struct {
@@ -57,9 +62,18 @@ func (c *Client) Search(ctx context.Context, filter SearchFilter) ([]SearchResul
 	}
 	params := requestURL.Query()
 	params.Set("keywords", filter.Keywords)
-	if filter.Location != "" {
-		params.Set("location", filter.Location)
+	params.Set("location", filter.Location)
+	if filter.PostedWithin != "" {
+		params.Set("f_TPR", filter.PostedWithin)
 	}
+	if filter.Workplace != "" {
+		params.Set("f_WT", filter.Workplace)
+	}
+	if filter.ExperienceLevel != "" {
+		params.Set("f_E", filter.ExperienceLevel)
+	}
+	// LinkedIn's DD ordering keeps the newest roles at the top of each page.
+	params.Set("sortBy", "DD")
 	params.Set("start", fmt.Sprint(filter.Start))
 	requestURL.RawQuery = params.Encode()
 

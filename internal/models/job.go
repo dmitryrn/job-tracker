@@ -79,10 +79,13 @@ type JobicySearchSettings struct {
 }
 
 type LinkedInSearchSettings struct {
-	Enabled  bool   `json:"enabled"`
-	Query    string `json:"query"`
-	Location string `json:"location"`
-	Limit    int    `json:"limit"`
+	Enabled         bool   `json:"enabled"`
+	Query           string `json:"query"`
+	Location        string `json:"location"`
+	PostedWithin    string `json:"postedWithin"`
+	Workplace       string `json:"workplace"`
+	ExperienceLevel string `json:"experienceLevel"`
+	Limit           int    `json:"limit"`
 }
 
 type BrowseJob struct {

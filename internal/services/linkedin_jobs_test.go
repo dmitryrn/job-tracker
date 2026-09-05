@@ -33,7 +33,7 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	}
 	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
 
-	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Location: "Berlin", Limit: firstPageSize + 1}, 0)
+	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: firstPageSize + 1}, 0)
 
 	require.NoError(t, err)
 	jobs := fetch.Jobs

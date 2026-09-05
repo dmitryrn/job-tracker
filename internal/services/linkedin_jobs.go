@@ -103,12 +103,15 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 		}
 		requested = true
 		service.recordEvent(ctx, runID, "linkedin.search.started", "info", "LinkedIn search started", map[string]any{
-			"query": settings.Query, "location": settings.Location, "start": start, "requestedLimit": settings.Limit,
+			"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "start": start, "requestedLimit": settings.Limit,
 		})
 		results, err := service.client.Search(ctx, linkedin.SearchFilter{
-			Keywords: settings.Query,
-			Location: settings.Location,
-			Start:    start,
+			Keywords:        settings.Query,
+			Location:        settings.Location,
+			PostedWithin:    settings.PostedWithin,
+			Workplace:       settings.Workplace,
+			ExperienceLevel: settings.ExperienceLevel,
+			Start:           start,
 		})
 		if err != nil {
 			service.recordEvent(ctx, runID, "linkedin.search.failed", "error", "LinkedIn search failed", map[string]any{

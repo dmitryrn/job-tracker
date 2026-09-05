@@ -149,7 +149,7 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 		return
 	}
 	syncer.recordLinkedInEvent(ctx, runID, "provider.run.started", "info", "LinkedIn job sync started", map[string]any{
-		"query": settings.Query, "location": settings.Location, "requestedLimit": settings.Limit,
+		"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "requestedLimit": settings.Limit,
 	})
 	syncer.logger.Info("syncing LinkedIn jobs", zap.String("run_id", runID))
 	fetch, fetchErr := syncer.linkedin.Sync(ctx, settings, runID, syncer.linkedInRequestInterval)

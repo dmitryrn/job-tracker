@@ -143,6 +143,9 @@ export type DiscoverySettings = {
     enabled: boolean;
     query: string;
     location: string;
+    postedWithin: string;
+    workplace: string;
+    experienceLevel: string;
     limit: number;
   };
 };
