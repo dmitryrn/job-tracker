@@ -58,7 +58,7 @@ func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 		PostedWithin:    " r604800 ",
 		Workplace:       " 2 ",
 		ExperienceLevel: " 4 ",
-		Limit:           25,
+		Limit:           1000,
 	}})
 
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 	assert.Equal(t, "r604800", linkedIn.settings.PostedWithin)
 	assert.Equal(t, "2", linkedIn.settings.Workplace)
 	assert.Equal(t, "4", linkedIn.settings.ExperienceLevel)
-	assert.Equal(t, 25, linkedIn.settings.Limit)
+	assert.Equal(t, 1000, linkedIn.settings.Limit)
 	assert.Equal(t, 5*time.Second, linkedIn.requestInterval)
 }
 

@@ -191,7 +191,7 @@ export default function DiscoverySettingsView() {
               <label>Posted within<select value={settings.linkedin.postedWithin} onChange={(event) => update("linkedin", "postedWithin", event.target.value)}><option value="">Any time</option><option value="r86400">Past 24 hours</option><option value="r604800">Past week</option><option value="r2592000">Past month</option></select></label>
               <label>Workplace<select value={settings.linkedin.workplace} onChange={(event) => update("linkedin", "workplace", event.target.value)}><option value="">Any workplace</option><option value="1">On-site</option><option value="2">Remote</option><option value="3">Hybrid</option></select></label>
               <label>Experience level<select value={settings.linkedin.experienceLevel} onChange={(event) => update("linkedin", "experienceLevel", event.target.value)}><option value="">Any level</option><option value="1">Internship</option><option value="2">Entry level</option><option value="3">Associate</option><option value="4">Mid-Senior level</option><option value="5">Director</option><option value="6">Executive</option></select></label>
-              <label>Results to fetch<input type="number" min="1" max="100" value={settings.linkedin.limit} onChange={(event) => update("linkedin", "limit", Number(event.target.value))} /></label>
+              <label>Results to fetch<input type="number" min="1" max="1000" value={settings.linkedin.limit} onChange={(event) => update("linkedin", "limit", Number(event.target.value))} /></label>
             </div>
             {previews.linkedin !== undefined && <ProviderPreview jobs={previews.linkedin} fetching={previewing === "linkedin"} />}
           </section>

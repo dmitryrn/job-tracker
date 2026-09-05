@@ -16,6 +16,8 @@ const searchFieldOptions = [
   { value: "body", label: "Description" },
 ];
 
+const pageSize = 50;
+
 export function formatDate(value: string, now = new Date()) {
   if (!value) {
     return "Recently posted";
@@ -100,11 +102,14 @@ function CompanyCard({ company }: { company: BrowseCompany }) {
 export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseViewProps) {
   const [search, setSearch] = useState("");
   const [provider, setProvider] = useState("");
+  const [match, setMatch] = useState("all");
   const [searchFields, setSearchFields] = useState(searchFieldOptions.map(({ value }) => value));
   const [providers, setProviders] = useState<string[]>([]);
   const [jobs, setJobs] = useState<BrowseJob[]>([]);
   const [companies, setCompanies] = useState<BrowseCompany[]>([]);
   const [queuedJobIDs, setQueuedJobIDs] = useState<Set<number>>(() => new Set());
+  const [offset, setOffset] = useState(0);
+  const [totalJobs, setTotalJobs] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [queueing, setQueueing] = useState(false);
@@ -118,11 +123,12 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       try {
         if (mode === "jobs") {
           const [jobResult, providerResult, queueResult] = await Promise.all([
-            fetchJobs(search, provider, searchFields, controller.signal),
+            fetchJobs(search, provider, match, searchFields, pageSize, offset, controller.signal),
             fetchProviders(controller.signal),
             fetchMatchQueue(controller.signal),
           ]);
           setJobs(jobResult.jobs);
+          setTotalJobs(jobResult.total);
           setProviders(providerResult.providers);
           setQueuedJobIDs(new Set(queueResult.jobs.map((job) => job.id)));
         } else {
@@ -143,9 +149,10 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
     }
     void load();
     return () => controller.abort();
-  }, [mode, provider, search, searchFields]);
+  }, [match, mode, offset, provider, search, searchFields]);
 
   function toggleSearchField(field: string, checked: boolean) {
+    setOffset(0);
     setSearchFields((current) => checked ? [...current, field] : current.filter((value) => value !== field));
   }
 
@@ -177,8 +184,8 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
         </div>
         <div className="browse-summary">
           <div className="browse-stat">
-            <strong>{mode === "jobs" ? jobs.length : companies.length}</strong>
-            <span>{mode === "jobs" ? "roles in view" : "companies in view"}</span>
+            <strong>{mode === "jobs" ? totalJobs : companies.length}</strong>
+            <span>{mode === "jobs" ? "roles found" : "companies in view"}</span>
           </div>
           {mode === "jobs" && <button type="button" className="queue-unmatched-action" disabled={loading || queueing || queueableJobs.length === 0} onClick={() => void queueUnmatchedJobs()}>{queueing ? "Queueing..." : queueableJobs.length > 0 ? `Queue ${queueableJobs.length} unmatched ${queueableJobs.length === 1 ? "role" : "roles"}${queuedUnmatchedJobs > 0 ? ` (${queuedUnmatchedJobs} queued)` : ""}` : queuedUnmatchedJobs > 0 ? `All ${queuedUnmatchedJobs} unmatched ${queuedUnmatchedJobs === 1 ? "role is" : "roles are"} queued` : "No unmatched roles"}</button>}
         </div>
@@ -194,15 +201,21 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
         <input
           id="browse-search"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => { setSearch(event.target.value); setOffset(0); }}
           placeholder={mode === "jobs" ? "Search titles, companies, or locations" : "Search company names"}
         />
         {mode === "jobs" && (
           <>
             <label htmlFor="provider">Provider</label>
-            <select id="provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+            <select id="provider" value={provider} onChange={(event) => { setProvider(event.target.value); setOffset(0); }}>
               <option value="">All providers</option>
               {providers.map((value) => <option key={value} value={value}>{formatProvider(value)}</option>)}
+            </select>
+            <label htmlFor="match">Match</label>
+            <select id="match" value={match} onChange={(event) => { setMatch(event.target.value); setOffset(0); }}>
+              <option value="all">All</option>
+              <option value="has">Has match</option>
+              <option value="none">No match</option>
             </select>
           </>
         )}
@@ -217,7 +230,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
             ))}
           </fieldset>
         )}
-        {search && <button type="button" onClick={() => setSearch("")}>Clear</button>}
+        {search && <button type="button" onClick={() => { setSearch(""); setOffset(0); }}>Clear</button>}
       </form>
 
       {error && <p className="query-error">{error}</p>}
@@ -231,6 +244,15 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
         <div className="company-grid">
           {companies.map((company) => <CompanyCard key={company.id} company={company} />)}
         </div>
+      )}
+      {!loading && !error && mode === "jobs" && (
+        <footer className="browse-pagination">
+          <span>Showing {totalJobs === 0 ? 0 : offset + 1}-{Math.min(offset + jobs.length, totalJobs)} of {totalJobs}</span>
+          <div>
+            <button type="button" className="secondary-action" disabled={offset === 0} onClick={() => setOffset((current) => Math.max(0, current - pageSize))}>Previous</button>
+            <button type="button" className="secondary-action" disabled={offset + jobs.length >= totalJobs} onClick={() => setOffset((current) => current + pageSize)}>Next</button>
+          </div>
+        </footer>
       )}
       {!loading && !error && mode === "jobs" && jobs.length === 0 && <p className="empty browse-empty">No roles match this search.</p>}
       {!loading && !error && mode === "companies" && companies.length === 0 && <p className="empty browse-empty">No companies match this search.</p>}

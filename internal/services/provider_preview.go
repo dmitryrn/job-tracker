@@ -95,8 +95,8 @@ func (service *ProviderPreviewService) StreamPreview(ctx context.Context, provid
 		settings.LinkedIn.PostedWithin = strings.TrimSpace(settings.LinkedIn.PostedWithin)
 		settings.LinkedIn.Workplace = strings.TrimSpace(settings.LinkedIn.Workplace)
 		settings.LinkedIn.ExperienceLevel = strings.TrimSpace(settings.LinkedIn.ExperienceLevel)
-		if settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
-			return fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and 100", ErrInvalidDiscoverySettings)
+		if settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
+			return fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and %d", ErrInvalidDiscoverySettings, maxLinkedInResults)
 		}
 		_, err := service.linkedin.PreviewStream(ctx, settings.LinkedIn, service.linkedInPreviewRequestInterval, onJob)
 		return err

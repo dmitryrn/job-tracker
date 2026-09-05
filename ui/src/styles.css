@@ -45,7 +45,7 @@ button { cursor: pointer; }
 .browse-tabs { border-bottom: 1px solid #d6d5d0; display: flex; gap: 5px; margin: 22px 0 0; }
 .browse-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: #68758a; font-size: 13px; padding: 10px 12px; }
 .browse-tab:hover, .browse-tab.active { border-bottom-color: #e5ac4c; color: #1a2638; }
-.browse-search { align-items: center; display: grid; gap: 10px; grid-template-columns: auto minmax(180px, 1fr) auto minmax(140px, auto) auto; margin: 28px 0 24px; }
+.browse-search { align-items: center; display: grid; gap: 10px; grid-template-columns: auto minmax(180px, 1fr) auto minmax(140px, auto) auto minmax(140px, auto) auto; margin: 28px 0 24px; }
 .browse-search label { color: #4b6075; font-size: 13px; font-weight: 700; }
 .browse-search input { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; min-width: 0; padding: 11px 12px; }
 .browse-search select { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; min-width: 0; padding: 10px 12px; }
@@ -56,6 +56,9 @@ button { cursor: pointer; }
 .search-fields input { margin: 0 4px 0 0; }
 .browse-loading { color: #65758a; font-size: 13px; margin: 0 0 12px; }
 .job-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.browse-pagination { align-items: center; color: #65758a; display: flex; font-size: 12px; justify-content: space-between; margin-top: 20px; }
+.browse-pagination div { display: flex; gap: 8px; }
+.browse-pagination button:disabled { cursor: not-allowed; opacity: .5; }
 .job-card { background: #fff; border: 1px solid #dedcd5; border-radius: 7px; display: flex; flex-direction: column; min-height: 280px; overflow: hidden; }
 .job-card-button { background: transparent; border: 0; color: inherit; flex: 1; padding: 18px 18px 14px; text-align: left; }
 .job-card-button:hover { background: #fffbed; }
@@ -400,7 +403,7 @@ tr:hover td { background: #fffbed; }
   .events-filter { grid-template-columns: 1fr; }
   .event-card-header { flex-direction: column; gap: 8px; }
   .event-card time { text-align: left; }
-  .events-pagination { align-items: start; flex-direction: column; gap: 12px; }
+  .browse-pagination, .events-pagination { align-items: start; flex-direction: column; gap: 12px; }
   .analysis-panel-header { flex-direction: column; }
   .analysis-panel-header > p { text-align: left; }
   .match-chat-message, .match-chat-user-turn { max-width: 100%; }

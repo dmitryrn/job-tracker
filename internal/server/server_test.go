@@ -59,6 +59,23 @@ func TestJobAPI(t *testing.T) {
 	require.Len(t, jobs.Jobs, 1)
 	assert.True(t, jobs.Jobs[0].HasMatch)
 
+	response = request(handler, http.MethodGet, "/api/jobs?match=has")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
+	require.Len(t, jobs.Jobs, 1)
+	assert.Equal(t, "Designer", jobs.Jobs[0].Title)
+
+	response = request(handler, http.MethodGet, "/api/jobs?match=none")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
+	require.Len(t, jobs.Jobs, 1)
+	assert.Equal(t, "Searchable title", jobs.Jobs[0].Title)
+
+	response = request(handler, http.MethodGet, "/api/jobs?match=all")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
+	assert.Len(t, jobs.Jobs, 2)
+
 	response = request(handler, http.MethodGet, "/api/providers")
 	require.Equal(t, http.StatusOK, response.Code)
 	var providers struct {
@@ -82,6 +99,37 @@ func TestJobAPIRejectsUnknownSearchField(t *testing.T) {
 
 	response := request(handler, http.MethodGet, "/api/jobs?fields=invalid")
 	assert.Equal(t, http.StatusBadRequest, response.Code)
+	response = request(handler, http.MethodGet, "/api/jobs?match=invalid")
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
+func TestJobAPIListsPaginatedResults(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
+		{Source: "example", SourceID: "first", SourceURL: "https://example.com/first", Title: "First", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "second", SourceURL: "https://example.com/second", Title: "Second", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "third", SourceURL: "https://example.com/third", Title: "Third", Workplace: "remote", MetadataJSON: "{}"},
+	}))
+
+	handler := newTestServer(repository).http.Handler
+	response := request(handler, http.MethodGet, "/api/jobs?limit=1&offset=1")
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var page models.JobPage
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&page))
+	assert.Equal(t, 3, page.Total)
+	require.Len(t, page.Jobs, 1)
+	assert.Equal(t, "Second", page.Jobs[0].Title)
+
+	response = request(handler, http.MethodGet, "/api/jobs?limit=0")
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	response = request(handler, http.MethodGet, "/api/jobs?offset=-1")
+	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
 func TestDiscoverySettingsAPI(t *testing.T) {
@@ -102,7 +150,7 @@ func TestDiscoverySettingsAPI(t *testing.T) {
 	assert.Equal(t, "software-development", result.Settings.Remotive.Category)
 	assert.False(t, result.Settings.LinkedIn.Enabled)
 
-	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"enabled":false,"query":"platform engineer","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"enabled":true,"query":"platform engineer","category":"software-development"},"jobicy":{"enabled":true,"count":25,"geo":"europe","industry":"engineering","tag":"golang"},"linkedin":{"enabled":false,"query":"platform engineer","location":"Europe","postedWithin":"r604800","workplace":"2","experienceLevel":"4","limit":25}}`)
+	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"enabled":false,"query":"platform engineer","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"enabled":true,"query":"platform engineer","category":"software-development"},"jobicy":{"enabled":true,"count":25,"geo":"europe","industry":"engineering","tag":"golang"},"linkedin":{"enabled":false,"query":"platform engineer","location":"Europe","postedWithin":"r604800","workplace":"2","experienceLevel":"4","limit":1000}}`)
 	require.Equal(t, http.StatusOK, response.Code)
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 	assert.Equal(t, "platform engineer", result.Settings.Adzuna.Query)
@@ -112,8 +160,12 @@ func TestDiscoverySettingsAPI(t *testing.T) {
 	assert.Equal(t, "r604800", result.Settings.LinkedIn.PostedWithin)
 	assert.Equal(t, "2", result.Settings.LinkedIn.Workplace)
 	assert.Equal(t, "4", result.Settings.LinkedIn.ExperienceLevel)
+	assert.Equal(t, 1000, result.Settings.LinkedIn.Limit)
 
 	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"enabled":false,"query":"","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"enabled":true,"query":"platform engineer","category":"software-development"},"jobicy":{"enabled":true,"count":25,"geo":"europe","industry":"engineering","tag":"golang"},"linkedin":{"enabled":false,"query":"platform engineer","location":"Europe","postedWithin":"r604800","workplace":"2","experienceLevel":"4","limit":25}}`)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+
+	response = requestWithBody(handler, http.MethodPut, "/api/discovery-settings", `{"adzuna":{"enabled":false,"query":"platform engineer","country":"de","maxDaysOld":14,"maxPages":2,"resultsPerPage":25,"workplace":"remote"},"remotive":{"enabled":true,"query":"platform engineer","category":"software-development"},"jobicy":{"enabled":true,"count":25,"geo":"europe","industry":"engineering","tag":"golang"},"linkedin":{"enabled":false,"query":"platform engineer","location":"Europe","postedWithin":"r604800","workplace":"2","experienceLevel":"4","limit":1001}}`)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 

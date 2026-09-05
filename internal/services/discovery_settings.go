@@ -12,6 +12,8 @@ import (
 
 var ErrInvalidDiscoverySettings = errors.New("invalid discovery settings")
 
+const maxLinkedInResults = 1000
+
 type DiscoverySettingsService struct {
 	repository repositories.DiscoverySettingsRepository
 }
@@ -39,7 +41,7 @@ func (service *DiscoverySettingsService) Save(ctx context.Context, settings mode
 	settings.LinkedIn.Workplace = strings.TrimSpace(settings.LinkedIn.Workplace)
 	settings.LinkedIn.ExperienceLevel = strings.TrimSpace(settings.LinkedIn.ExperienceLevel)
 
-	if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) || settings.Remotive.Query == "" || settings.Remotive.Category == "" || settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 || settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
+	if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) || settings.Remotive.Query == "" || settings.Remotive.Category == "" || settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 || settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
 		return models.DiscoverySettings{}, fmt.Errorf("%w: check required fields and numeric limits", ErrInvalidDiscoverySettings)
 	}
 	return service.repository.SaveDiscoverySettings(ctx, settings)

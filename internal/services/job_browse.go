@@ -10,7 +10,10 @@ import (
 	"nice/internal/repositories"
 )
 
-var ErrInvalidSearchField = errors.New("fields must contain only title, company, location, or body")
+var (
+	ErrInvalidSearchField = errors.New("fields must contain only title, company, location, or body")
+	ErrInvalidMatchFilter = errors.New("match must be all, has, or none")
+)
 
 type JobBrowse struct {
 	repository repositories.JobRepository
@@ -20,13 +23,20 @@ func NewJobBrowse(repository repositories.JobRepository) *JobBrowse {
 	return &JobBrowse{repository: repository}
 }
 
-func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) ([]models.BrowseJob, error) {
+func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) (models.JobPage, error) {
 	fields, err := normalizeSearchFields(search.Fields)
 	if err != nil {
-		return nil, err
+		return models.JobPage{}, err
 	}
 	search.Search = strings.TrimSpace(search.Search)
 	search.Provider = strings.TrimSpace(search.Provider)
+	search.Match = strings.TrimSpace(strings.ToLower(search.Match))
+	if search.Match == "all" {
+		search.Match = ""
+	}
+	if search.Match != "" && search.Match != "has" && search.Match != "none" {
+		return models.JobPage{}, ErrInvalidMatchFilter
+	}
 	search.Fields = fields
 	return browse.repository.List(ctx, search)
 }

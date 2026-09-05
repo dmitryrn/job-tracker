@@ -202,13 +202,13 @@ func saveResumePhotoHandler(resume *services.ResumeService, logger *zap.Logger) 
 
 func eventsHandler(events *services.EventLog, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		limit, err := eventQueryInt(request, "limit", 50)
+		limit, err := paginationQueryInt(request, "limit", 50)
 		if err != nil {
 			logger.Warn("invalid events limit", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
 			return
 		}
-		offset, err := eventQueryInt(request, "offset", 0)
+		offset, err := paginationQueryInt(request, "offset", 0)
 		if err != nil {
 			logger.Warn("invalid events offset", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
@@ -236,7 +236,7 @@ func eventsHandler(events *services.EventLog, logger *zap.Logger) http.HandlerFu
 	}
 }
 
-func eventQueryInt(request *http.Request, name string, fallback int) (int, error) {
+func paginationQueryInt(request *http.Request, name string, fallback int) (int, error) {
 	value := request.URL.Query().Get(name)
 	if value == "" {
 		return fallback, nil
@@ -472,22 +472,37 @@ func saveResumeHandler(resume *services.ResumeService, logger *zap.Logger) http.
 
 func jobsHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		jobs, err := browse.Jobs(request.Context(), models.JobSearch{
+		limit, err := paginationQueryInt(request, "limit", 50)
+		if err != nil {
+			logger.Warn("invalid jobs limit", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
+			return
+		}
+		offset, err := paginationQueryInt(request, "offset", 0)
+		if err != nil {
+			logger.Warn("invalid jobs offset", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
+			return
+		}
+		page, err := browse.Jobs(request.Context(), models.JobSearch{
 			Search:   request.URL.Query().Get("search"),
 			Provider: request.URL.Query().Get("provider"),
+			Match:    request.URL.Query().Get("match"),
 			Fields:   request.URL.Query()["fields"],
+			Limit:    limit,
+			Offset:   offset,
 		})
 		if err != nil {
-			if errors.Is(err, services.ErrInvalidSearchField) {
-				logger.Warn("invalid job search fields", zap.Error(err))
-				writeError(writer, http.StatusBadRequest, services.ErrInvalidSearchField.Error())
+			if errors.Is(err, services.ErrInvalidSearchField) || errors.Is(err, services.ErrInvalidMatchFilter) {
+				logger.Warn("invalid job search", zap.Error(err))
+				writeError(writer, http.StatusBadRequest, err.Error())
 				return
 			}
 			logger.Error("list jobs failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load jobs")
 			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"jobs": jobs})
+		writeJSON(writer, http.StatusOK, page)
 	}
 }
 

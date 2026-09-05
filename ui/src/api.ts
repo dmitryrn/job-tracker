@@ -21,6 +21,11 @@ export type BrowseCompany = {
   lastSeenAt: string;
 };
 
+export type JobPage = {
+  jobs: BrowseJob[];
+  total: number;
+};
+
 export type UserProfileSkill = {
   name: string;
   level: string;
@@ -234,7 +239,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function fetchJobs(search: string, provider: string, fields: string[], signal: AbortSignal) {
+export function fetchJobs(search: string, provider: string, match: string, fields: string[], limit: number, offset: number, signal: AbortSignal) {
   const parameters = new URLSearchParams();
   if (search.trim()) {
     parameters.set("search", search.trim());
@@ -242,8 +247,13 @@ export function fetchJobs(search: string, provider: string, fields: string[], si
   if (provider) {
     parameters.set("provider", provider);
   }
+  if (match !== "all") {
+    parameters.set("match", match);
+  }
   parameters.set("fields", fields.join(","));
-  return request<{ jobs: BrowseJob[] }>(`jobs?${parameters}`, { signal });
+  parameters.set("limit", String(limit));
+  parameters.set("offset", String(offset));
+  return request<JobPage>(`jobs?${parameters}`, { signal });
 }
 
 export function fetchProviders(signal: AbortSignal) {

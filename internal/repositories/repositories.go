@@ -10,7 +10,7 @@ import (
 type JobRepository interface {
 	JobExists(context.Context, string, string) (bool, error)
 	Upsert(context.Context, []models.Job) error
-	List(context.Context, models.JobSearch) ([]models.BrowseJob, error)
+	List(context.Context, models.JobSearch) (models.JobPage, error)
 	Job(context.Context, int64) (*models.BrowseJob, error)
 	Delete(context.Context, int64) (bool, error)
 	Providers(context.Context) ([]string, error)

@@ -113,47 +113,67 @@ func (repository *SQLite) StartProviderRun(ctx context.Context, provider string,
 	return true, nil
 }
 
-func (repository *SQLite) List(ctx context.Context, search models.JobSearch) ([]models.BrowseJob, error) {
+func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (models.JobPage, error) {
 	query := sqlBuilder.Select(
 		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
 		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
 		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text",
 		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)",
 	).From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
+	countQuery := sqlBuilder.Select("COUNT(*)").From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
 	if search.Search != "" && len(search.Fields) > 0 {
 		matches := squirrel.Or{}
 		for _, field := range search.Fields {
 			matches = append(matches, squirrel.Expr(field+" LIKE ?", "%"+search.Search+"%"))
 		}
 		query = query.Where(matches)
+		countQuery = countQuery.Where(matches)
 	}
 	if search.Provider != "" {
 		query = query.Where(squirrel.Eq{"jobs.source": search.Provider})
+		countQuery = countQuery.Where(squirrel.Eq{"jobs.source": search.Provider})
 	}
-	statement, args, err := query.OrderBy("jobs.posted_at DESC", "jobs.id DESC").Limit(100).ToSql()
+	if search.Match == "has" {
+		match := squirrel.Expr("EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)")
+		query = query.Where(match)
+		countQuery = countQuery.Where(match)
+	}
+	if search.Match == "none" {
+		match := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)")
+		query = query.Where(match)
+		countQuery = countQuery.Where(match)
+	}
+	statement, args, err := query.OrderBy("jobs.posted_at DESC", "jobs.id DESC").Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build jobs query: %w", err)
+		return models.JobPage{}, fmt.Errorf("build jobs query: %w", err)
 	}
 	rows, err := repository.db.QueryContext(ctx, statement, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query jobs: %w", err)
+		return models.JobPage{}, fmt.Errorf("query jobs: %w", err)
 	}
 	defer rows.Close()
 
-	jobs := make([]models.BrowseJob, 0)
+	page := models.JobPage{Jobs: make([]models.BrowseJob, 0)}
 	for rows.Next() {
 		var job models.BrowseJob
 		if err := rows.Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company,
 			&job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
 			&job.PostedAt, &job.BodyText, &job.HasMatch); err != nil {
-			return nil, fmt.Errorf("scan job: %w", err)
+			return models.JobPage{}, fmt.Errorf("scan job: %w", err)
 		}
-		jobs = append(jobs, job)
+		page.Jobs = append(page.Jobs, job)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate jobs: %w", err)
+		return models.JobPage{}, fmt.Errorf("iterate jobs: %w", err)
 	}
-	return jobs, nil
+	countStatement, countArgs, err := countQuery.ToSql()
+	if err != nil {
+		return models.JobPage{}, fmt.Errorf("build jobs count query: %w", err)
+	}
+	if err := repository.db.QueryRowContext(ctx, countStatement, countArgs...).Scan(&page.Total); err != nil {
+		return models.JobPage{}, fmt.Errorf("count jobs: %w", err)
+	}
+	return page, nil
 }
 
 func (repository *SQLite) Job(ctx context.Context, id int64) (*models.BrowseJob, error) {

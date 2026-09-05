@@ -21,7 +21,15 @@ type Job struct {
 type JobSearch struct {
 	Search   string
 	Provider string
+	Match    string
 	Fields   []string
+	Limit    int
+	Offset   int
+}
+
+type JobPage struct {
+	Jobs  []BrowseJob `json:"jobs"`
+	Total int         `json:"total"`
 }
 
 type Event struct {
