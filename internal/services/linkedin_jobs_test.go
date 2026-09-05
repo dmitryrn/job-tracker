@@ -18,14 +18,14 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	details := make(map[string]linkedin.Job, linkedInPageSize+1)
 	for index := range results {
 		id := string(rune('a' + index))
-		results[index] = linkedin.SearchResult{ID: id, URL: "https://www.linkedin.com/jobs/view/" + id, Title: "Engineer", Company: "Example Co", Location: "Berlin"}
-		details[id] = linkedin.Job{Description: "Remote work"}
+		results[index] = linkedin.SearchResult{ID: id, URL: "https://www.linkedin.com/jobs/view/" + id, Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}
+		details[id] = linkedin.Job{Description: "Remote work", EmploymentType: "Full-time"}
 	}
-	details["last"] = linkedin.Job{Description: "Hybrid work"}
+	details["last"] = linkedin.Job{Description: "Hybrid work", EmploymentType: "Full-time"}
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
 			0:  results,
-			25: {{ID: "last", URL: "https://www.linkedin.com/jobs/view/last", Title: "Staff Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02T10:00:00Z"}},
+			25: {{ID: "last", URL: "https://www.linkedin.com/jobs/view/last", Title: "Staff Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}},
 		},
 		details: details,
 	}
@@ -40,7 +40,8 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	assert.Equal(t, "linkedin", jobs[0].Source)
 	assert.Equal(t, "remote", jobs[0].Workplace)
 	assert.Equal(t, "hybrid", jobs[linkedInPageSize].Workplace)
-	assert.Equal(t, "2026-09-02T10:00:00Z", jobs[linkedInPageSize].PostedAt)
+	assert.Equal(t, "2026-09-02T00:00:00Z", jobs[linkedInPageSize].PostedAt)
+	assert.Equal(t, "Full-time", jobs[0].EmploymentType)
 }
 
 func TestLinkedInJobsFetchSkipsIncompleteJobs(t *testing.T) {
@@ -49,13 +50,18 @@ func TestLinkedInJobsFetchSkipsIncompleteJobs(t *testing.T) {
 			0: {
 				{URL: "https://www.linkedin.com/jobs/view/missing-id", Title: "Engineer", Company: "Example Co", Location: "Berlin"},
 				{ID: "missing-title", URL: "https://www.linkedin.com/jobs/view/missing-title", Company: "Example Co", Location: "Berlin"},
-				{ID: "missing-description", URL: "https://www.linkedin.com/jobs/view/missing-description", Title: "Engineer", Company: "Example Co", Location: "Berlin"},
-				{ID: "accepted", URL: "https://www.linkedin.com/jobs/view/accepted", Title: "Engineer", Company: "Example Co", Location: "Berlin"},
+				{ID: "missing-description", URL: "https://www.linkedin.com/jobs/view/missing-description", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "missing-employment", URL: "https://www.linkedin.com/jobs/view/missing-employment", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "missing-posted-at", URL: "https://www.linkedin.com/jobs/view/missing-posted-at", Title: "Engineer", Company: "Example Co", Location: "Berlin"},
+				{ID: "invalid-posted-at", URL: "https://www.linkedin.com/jobs/view/invalid-posted-at", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "not-a-date"},
+				{ID: "accepted", URL: "https://www.linkedin.com/jobs/view/accepted", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
 			},
 		},
 		details: map[string]linkedin.Job{
-			"missing-description": {},
-			"accepted":            {Description: "Build systems"},
+			"missing-description": {EmploymentType: "Full-time"},
+			"missing-employment":  {Description: "Build systems"},
+			"invalid-posted-at":   {Description: "Build systems", EmploymentType: "Full-time"},
+			"accepted":            {Description: "Build systems", EmploymentType: "Full-time"},
 		},
 	}
 	service := LinkedInJobs{client: client}
@@ -66,7 +72,13 @@ func TestLinkedInJobsFetchSkipsIncompleteJobs(t *testing.T) {
 	jobs := fetch.Jobs
 	require.Len(t, jobs, 1)
 	assert.Equal(t, "accepted", jobs[0].SourceID)
-	assert.Equal(t, []string{"missing-description", "accepted"}, client.jobIDs)
+	assert.Equal(t, []string{"missing-description", "missing-employment", "invalid-posted-at", "accepted"}, client.jobIDs)
+}
+
+func TestLinkedInPostedAt(t *testing.T) {
+	assert.Equal(t, "2026-09-02T00:00:00Z", linkedInPostedAt("2026-09-02"))
+	assert.Equal(t, "2026-09-02T10:00:00Z", linkedInPostedAt("2026-09-02T10:00:00Z"))
+	assert.Empty(t, linkedInPostedAt("not-a-date"))
 }
 
 func TestLinkedInJobsFetchReturnsCompletedJobsWhenLaterRequestFails(t *testing.T) {
@@ -74,12 +86,12 @@ func TestLinkedInJobsFetchReturnsCompletedJobsWhenLaterRequestFails(t *testing.T
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
 			0: {
-				{ID: "completed", URL: "https://www.linkedin.com/jobs/view/completed", Title: "Engineer", Company: "Example Co", Location: "Berlin"},
-				{ID: "failed", URL: "https://www.linkedin.com/jobs/view/failed", Title: "Engineer", Company: "Example Co", Location: "Berlin"},
+				{ID: "completed", URL: "https://www.linkedin.com/jobs/view/completed", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "failed", URL: "https://www.linkedin.com/jobs/view/failed", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
 			},
 		},
 		details: map[string]linkedin.Job{
-			"completed": {Description: "Build systems"},
+			"completed": {Description: "Build systems", EmploymentType: "Full-time"},
 		},
 		jobErrors: map[string]error{"failed": fetchErr},
 	}
@@ -97,9 +109,9 @@ func TestLinkedInJobsFetchWaitsBetweenRequests(t *testing.T) {
 	requestInterval := 10 * time.Millisecond
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
-			0: {{ID: "accepted", URL: "https://www.linkedin.com/jobs/view/accepted", Title: "Engineer", Company: "Example Co", Location: "Berlin"}},
+			0: {{ID: "accepted", URL: "https://www.linkedin.com/jobs/view/accepted", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}},
 		},
-		details: map[string]linkedin.Job{"accepted": {Description: "Build systems"}},
+		details: map[string]linkedin.Job{"accepted": {Description: "Build systems", EmploymentType: "Full-time"}},
 	}
 	service := LinkedInJobs{client: client, requestInterval: requestInterval}
 
@@ -114,9 +126,9 @@ func TestLinkedInJobsFetchRecordsRequestEventsWithoutInterruptingFetch(t *testin
 	service := LinkedInJobs{
 		client: &linkedInClientStub{
 			results: map[int][]linkedin.SearchResult{
-				0: {{ID: "accepted", URL: "https://www.linkedin.com/jobs/view/accepted", Title: "Engineer", Company: "Example Co", Location: "Berlin"}},
+				0: {{ID: "accepted", URL: "https://www.linkedin.com/jobs/view/accepted", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}},
 			},
-			details: map[string]linkedin.Job{"accepted": {Description: "Build systems"}},
+			details: map[string]linkedin.Job{"accepted": {Description: "Build systems", EmploymentType: "Full-time"}},
 		},
 		events: events,
 	}
@@ -135,26 +147,27 @@ func TestLinkedInJobsFetchRecordsRequestEventsWithoutInterruptingFetch(t *testin
 }
 
 func TestLinkedInJobsFetchSavesEachFetchedJob(t *testing.T) {
-	service := LinkedInJobs{
-		client: &linkedInClientStub{
-			results: map[int][]linkedin.SearchResult{
-				0: {
-					{ID: "first", URL: "https://www.linkedin.com/jobs/view/first", Title: "First", Company: "Example Co", Location: "Berlin"},
-					{ID: "second", URL: "https://www.linkedin.com/jobs/view/second", Title: "Second", Company: "Example Co", Location: "Berlin"},
-				},
+	client := &linkedInClientStub{
+		results: map[int][]linkedin.SearchResult{
+			0: {
+				{ID: "first", URL: "https://www.linkedin.com/jobs/view/first", Title: "First", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "second", URL: "https://www.linkedin.com/jobs/view/second", Title: "Second", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "incomplete", URL: "https://www.linkedin.com/jobs/view/incomplete", Title: "Incomplete", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
 			},
-			details: map[string]linkedin.Job{"first": {Description: "First description"}, "second": {Description: "Second description"}},
 		},
+		details: map[string]linkedin.Job{"first": {Description: "First description", EmploymentType: "Full-time"}, "second": {Description: "Second description", EmploymentType: "Full-time"}, "incomplete": {Description: "Incomplete description"}},
 	}
+	service := LinkedInJobs{client: client}
 	saved := make([]models.Job, 0, 2)
 
-	fetch, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 2}, "run-1", func(_ context.Context, job models.Job) error {
+	fetch, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 3}, "run-1", func(_ context.Context, job models.Job) error {
 		saved = append(saved, job)
 		return nil
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"first", "second"}, []string{saved[0].SourceID, saved[1].SourceID})
+	assert.Equal(t, []string{"first", "second", "incomplete"}, client.jobIDs)
 	assert.Equal(t, 2, fetch.FetchedJobs)
 	assert.Equal(t, 2, fetch.SavedJobs)
 }

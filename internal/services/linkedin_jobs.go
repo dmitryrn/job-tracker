@@ -111,6 +111,12 @@ func (service *LinkedInJobs) Fetch(ctx context.Context, settings models.LinkedIn
 				continue
 			}
 			job := toLinkedInJob(candidate, details)
+			if !validLinkedInResult(job) {
+				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
+					"jobID": candidate.ID, "accepted": false, "reason": "missing_posted_at_or_employment_type",
+				})
+				continue
+			}
 			fetch.FetchedJobs++
 			service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded", map[string]any{
 				"jobID": candidate.ID, "accepted": true, "fetchedJobCount": fetch.FetchedJobs,
@@ -164,31 +170,41 @@ func validLinkedInSearchResult(result linkedin.SearchResult) bool {
 		strings.TrimSpace(result.URL) != "" &&
 		strings.TrimSpace(result.Title) != "" &&
 		strings.TrimSpace(result.Company) != "" &&
-		strings.TrimSpace(result.Location) != ""
+		strings.TrimSpace(result.Location) != "" &&
+		strings.TrimSpace(result.PostedAt) != ""
 }
 
 func validLinkedInJob(details linkedin.Job) bool {
 	return strings.TrimSpace(details.Description) != ""
 }
 
+func validLinkedInResult(job models.Job) bool {
+	return strings.TrimSpace(job.PostedAt) != "" && strings.TrimSpace(job.EmploymentType) != ""
+}
+
 func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) models.Job {
 	metadata, _ := json.Marshal(map[string]string{"posted_text": result.PostedAt})
 	return models.Job{
-		Source:       "linkedin",
-		SourceID:     result.ID,
-		SourceURL:    result.URL,
-		Title:        result.Title,
-		BodyText:     details.Description,
-		Company:      result.Company,
-		Location:     result.Location,
-		Workplace:    linkedInWorkplace(result.Title, details.Description, result.Location),
-		PostedAt:     linkedInPostedAt(result.PostedAt),
-		MetadataJSON: string(metadata),
+		Source:         "linkedin",
+		SourceID:       result.ID,
+		SourceURL:      result.URL,
+		Title:          result.Title,
+		BodyText:       details.Description,
+		Company:        result.Company,
+		Location:       result.Location,
+		Workplace:      linkedInWorkplace(result.Title, details.Description, result.Location),
+		EmploymentType: details.EmploymentType,
+		PostedAt:       linkedInPostedAt(result.PostedAt),
+		MetadataJSON:   string(metadata),
 	}
 }
 
 func linkedInPostedAt(value string) string {
-	parsed, err := time.Parse(time.RFC3339, value)
+	parsed, err := time.Parse(time.DateOnly, value)
+	if err == nil {
+		return parsed.UTC().Format(time.RFC3339)
+	}
+	parsed, err = time.Parse(time.RFC3339, value)
 	if err != nil {
 		return ""
 	}

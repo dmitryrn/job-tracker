@@ -17,9 +17,9 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 			assert.Equal(t, "software engineer", request.URL.Query().Get("keywords"))
 			assert.Equal(t, "Berlin", request.URL.Query().Get("location"))
 			assert.Equal(t, "0", request.URL.Query().Get("start"))
-			_, _ = writer.Write([]byte(`<li><a href="https://www.linkedin.com/jobs/view/platform-engineer-42?trackingId=abc"></a><h3 class="base-search-card__title">Platform Engineer</h3><h4 class="base-search-card__subtitle"><a>Example Co</a></h4><span class="job-search-card__location">Berlin, Germany</span><time datetime="2026-09-02T10:00:00Z"></time></li>`))
+			_, _ = writer.Write([]byte(`<li><a href="https://www.linkedin.com/jobs/view/platform-engineer-42?trackingId=abc"></a><h3 class="base-search-card__title">Platform Engineer</h3><h4 class="base-search-card__subtitle"><a>Example Co</a></h4><span class="job-search-card__location">Berlin, Germany</span><time datetime="2026-09-02"></time></li>`))
 		case "/jobPosting/42":
-			_, _ = writer.Write([]byte(`<div class="show-more-less-html__markup">Build reliable remote systems.</div>`))
+			_, _ = writer.Write([]byte(`<div class="show-more-less-html__markup">Build reliable remote systems.</div><ul class="description__job-criteria-list"><li class="description__job-criteria-item"><h3 class="description__job-criteria-subheader">Employment type</h3><span class="description__job-criteria-text description__job-criteria-text--criteria">Full-time</span></li></ul>`))
 		default:
 			writer.WriteHeader(http.StatusNotFound)
 		}
@@ -34,9 +34,10 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 	assert.Equal(t, "42", results[0].ID)
 	assert.Equal(t, "Platform Engineer", results[0].Title)
 	assert.Equal(t, "Example Co", results[0].Company)
-	assert.Equal(t, "2026-09-02T10:00:00Z", results[0].PostedAt)
+	assert.Equal(t, "2026-09-02", results[0].PostedAt)
 
 	job, err := client.Job(context.Background(), results[0].ID)
 	require.NoError(t, err)
 	assert.Equal(t, "Build reliable remote systems.", job.Description)
+	assert.Equal(t, "Full-time", job.EmploymentType)
 }

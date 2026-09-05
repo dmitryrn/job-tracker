@@ -38,7 +38,8 @@ type SearchResult struct {
 }
 
 type Job struct {
-	Description string
+	Description    string
+	EmploymentType string
 }
 
 func NewClient() *Client {
@@ -147,13 +148,32 @@ func parseJob(body []byte) Job {
 	if err != nil {
 		return Job{}
 	}
+	job := Job{EmploymentType: jobCriteria(document, "Employment type")}
 	if node := first(document, hasClass("div", "show-more-less-html__markup")); node != nil {
-		return Job{Description: text(node)}
+		job.Description = text(node)
+		return job
 	}
 	if node := first(document, hasClass("div", "description__text")); node != nil {
-		return Job{Description: text(node)}
+		job.Description = text(node)
 	}
-	return Job{}
+	return job
+}
+
+func jobCriteria(document *html.Node, label string) string {
+	var value string
+	visit(document, func(node *html.Node) {
+		if value != "" || !hasClass("li", "description__job-criteria-item")(node) {
+			return
+		}
+		header := first(node, hasClass("h3", "description__job-criteria-subheader"))
+		if header == nil || !strings.EqualFold(text(header), label) {
+			return
+		}
+		if criteria := first(node, hasClass("span", "description__job-criteria-text--criteria")); criteria != nil {
+			value = text(criteria)
+		}
+	})
+	return value
 }
 
 func jobID(jobURL string) string {
