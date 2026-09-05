@@ -22,6 +22,7 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, 24*time.Hour, cfg.Providers.Jobicy.SyncInterval)
 	assert.Equal(t, 48*time.Hour, cfg.Providers.LinkedIn.SyncInterval)
 	assert.Equal(t, 30*time.Second, cfg.Providers.LinkedIn.RequestInterval)
+	assert.Equal(t, 5*time.Second, cfg.Providers.LinkedIn.PreviewRequestInterval)
 	assert.Equal(t, "https://opencode.example.com/v1/chat/completions", cfg.OpenCode.BaseURL)
 	assert.Equal(t, "test-go-key", cfg.OpenCode.APIKey)
 	assert.Equal(t, "opencode", cfg.JobAnalysis.Provider)
@@ -141,6 +142,7 @@ sync_interval = %q
 [providers.linkedin]
 sync_interval = %q
 request_interval = "30s"
+preview_request_interval = "5s"
 `, adzunaInterval, remotiveInterval, jobicyInterval, linkedInInterval)
 }
 

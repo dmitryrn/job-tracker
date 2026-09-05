@@ -45,3 +45,4 @@ sync_interval = "6h"
 [providers.linkedin]
 sync_interval = "6h"
 request_interval = "30s"
+preview_request_interval = "5s"

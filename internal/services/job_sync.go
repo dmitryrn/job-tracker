@@ -20,41 +20,47 @@ import (
 )
 
 type JobSync struct {
-	adzuna           adzunaFetcher
-	ipInfo           ipInfoLookup
-	jobicy           jobicyFetcher
-	linkedin         linkedInFetcher
-	remotive         remotiveFetcher
-	jobs             repositories.JobRepository
-	providerRuns     repositories.ProviderRunRepository
-	events           repositories.EventRecorder
-	settings         repositories.DiscoverySettingsRepository
-	adzunaInterval   time.Duration
-	jobicyInterval   time.Duration
-	linkedinInterval time.Duration
-	remotiveInterval time.Duration
-	logger           *zap.Logger
-	cancel           context.CancelFunc
-	done             chan struct{}
-	mutex            sync.Mutex
+	adzuna                  adzunaFetcher
+	ipInfo                  ipInfoLookup
+	jobicy                  jobicyFetcher
+	linkedin                linkedInSyncer
+	remotive                remotiveFetcher
+	jobs                    repositories.JobRepository
+	providerRuns            repositories.ProviderRunRepository
+	events                  repositories.EventRecorder
+	settings                repositories.DiscoverySettingsRepository
+	adzunaInterval          time.Duration
+	jobicyInterval          time.Duration
+	linkedinInterval        time.Duration
+	linkedInRequestInterval time.Duration
+	remotiveInterval        time.Duration
+	logger                  *zap.Logger
+	cancel                  context.CancelFunc
+	done                    chan struct{}
+	mutex                   sync.Mutex
+}
+
+type linkedInSyncer interface {
+	Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error)
 }
 
 func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, ipInfoClient *ipinfo.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRecorder, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
 	return &JobSync{
-		adzuna:           adzunaClient,
-		ipInfo:           ipInfoClient,
-		jobicy:           jobicyClient,
-		linkedin:         linkedInJobs,
-		remotive:         remotiveClient,
-		jobs:             jobs,
-		providerRuns:     providerRuns,
-		events:           events,
-		settings:         settings,
-		adzunaInterval:   cfg.Providers.Adzuna.SyncInterval,
-		jobicyInterval:   cfg.Providers.Jobicy.SyncInterval,
-		linkedinInterval: cfg.Providers.LinkedIn.SyncInterval,
-		remotiveInterval: cfg.Providers.Remotive.SyncInterval,
-		logger:           logger,
+		adzuna:                  adzunaClient,
+		ipInfo:                  ipInfoClient,
+		jobicy:                  jobicyClient,
+		linkedin:                linkedInJobs,
+		remotive:                remotiveClient,
+		jobs:                    jobs,
+		providerRuns:            providerRuns,
+		events:                  events,
+		settings:                settings,
+		adzunaInterval:          cfg.Providers.Adzuna.SyncInterval,
+		jobicyInterval:          cfg.Providers.Jobicy.SyncInterval,
+		linkedinInterval:        cfg.Providers.LinkedIn.SyncInterval,
+		linkedInRequestInterval: cfg.Providers.LinkedIn.RequestInterval,
+		remotiveInterval:        cfg.Providers.Remotive.SyncInterval,
+		logger:                  logger,
 	}
 }
 
@@ -146,9 +152,7 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 		"query": settings.Query, "location": settings.Location, "requestedLimit": settings.Limit,
 	})
 	syncer.logger.Info("syncing LinkedIn jobs", zap.String("run_id", runID))
-	fetch, fetchErr := syncer.linkedin.Fetch(ctx, settings, runID, func(ctx context.Context, job models.Job) error {
-		return syncer.jobs.Upsert(ctx, []models.Job{job})
-	})
+	fetch, fetchErr := syncer.linkedin.Sync(ctx, settings, runID, syncer.linkedInRequestInterval)
 	if fetchErr != nil {
 		syncer.logger.Error("LinkedIn fetch incomplete", zap.String("run_id", runID), zap.Error(fetchErr), zap.Int("fetched_job_count", fetch.FetchedJobs))
 	}

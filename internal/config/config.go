@@ -82,8 +82,9 @@ type JobicyConfig struct {
 }
 
 type LinkedInConfig struct {
-	SyncInterval    time.Duration
-	RequestInterval time.Duration
+	SyncInterval           time.Duration
+	RequestInterval        time.Duration
+	PreviewRequestInterval time.Duration
 }
 
 type fileConfig struct {
@@ -145,8 +146,9 @@ type fileJobicyConfig struct {
 }
 
 type fileLinkedInConfig struct {
-	SyncInterval    string `toml:"sync_interval" validate:"notblank,duration"`
-	RequestInterval string `toml:"request_interval" validate:"notblank,duration"`
+	SyncInterval           string `toml:"sync_interval" validate:"notblank,duration"`
+	RequestInterval        string `toml:"request_interval" validate:"notblank,duration"`
+	PreviewRequestInterval string `toml:"preview_request_interval" validate:"notblank,duration"`
 }
 
 func Load() (Config, error) {
@@ -210,6 +212,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.linkedin.request_interval: %w", err)
 	}
+	linkedInPreviewRequestInterval, err := time.ParseDuration(source.Providers.LinkedIn.PreviewRequestInterval)
+	if err != nil {
+		return Config{}, fmt.Errorf("parse providers.linkedin.preview_request_interval: %w", err)
+	}
 	jobMatchRunInterval, err := time.ParseDuration(source.JobMatch.RunInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse job_match.run_interval: %w", err)
@@ -241,8 +247,9 @@ func Load() (Config, error) {
 				SyncInterval: jobicyInterval,
 			},
 			LinkedIn: LinkedInConfig{
-				SyncInterval:    linkedInInterval,
-				RequestInterval: linkedInRequestInterval,
+				SyncInterval:           linkedInInterval,
+				RequestInterval:        linkedInRequestInterval,
+				PreviewRequestInterval: linkedInPreviewRequestInterval,
 			},
 		},
 		OpenCode: OpenCodeConfig{

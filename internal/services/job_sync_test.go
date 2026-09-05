@@ -73,10 +73,9 @@ func TestJobSyncRunsProvidersConcurrently(t *testing.T) {
 	assert.ElementsMatch(t, []string{"adzuna", "jobicy", "linkedin", "remotive"}, started)
 }
 
-func TestJobSyncPersistsPartialLinkedInResults(t *testing.T) {
+func TestJobSyncRecordsPartialLinkedInResults(t *testing.T) {
 	fetchErr := errors.New("detail request failed")
 	runs := &providerRunRecorder{}
-	jobs := &jobRepositoryRecorder{}
 	events := &eventRepositoryRecorder{}
 	syncer := JobSync{
 		linkedin: linkedInFetcherStub{
@@ -84,7 +83,6 @@ func TestJobSyncPersistsPartialLinkedInResults(t *testing.T) {
 			err:  fetchErr,
 		},
 		ipInfo:       ipInfoLookupStub{info: ipinfo.Info{Country: "DE"}},
-		jobs:         jobs,
 		providerRuns: runs,
 		events:       events,
 		logger:       zap.NewNop(),
@@ -92,7 +90,6 @@ func TestJobSyncPersistsPartialLinkedInResults(t *testing.T) {
 
 	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
 
-	assert.Equal(t, []models.Job{{Source: "linkedin", SourceID: "completed"}}, jobs.upserted)
 	require.Len(t, events.events, 3)
 	assert.Equal(t, "linkedin.ip_info.resolved", events.events[0].Type)
 	assert.Equal(t, "DE", events.events[0].Data["country"])
@@ -113,23 +110,6 @@ func TestJobSyncFinalizesLinkedInEventsAfterCancellation(t *testing.T) {
 	require.Len(t, events.events, 1)
 	assert.False(t, events.contextCanceled[0])
 	assert.Equal(t, "provider.run.finished", events.events[0].Type)
-}
-
-func TestJobSyncSavesLinkedInJobsIndividually(t *testing.T) {
-	jobs := &jobRepositoryRecorder{}
-	syncer := JobSync{
-		linkedin:     linkedInFetcherStub{jobs: []models.Job{{SourceID: "first"}, {SourceID: "second"}}},
-		ipInfo:       ipInfoLookupStub{info: ipinfo.Info{Country: "DE"}},
-		jobs:         jobs,
-		providerRuns: &providerRunRecorder{},
-		logger:       zap.NewNop(),
-	}
-
-	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true, Limit: 2})
-
-	require.Len(t, jobs.batches, 2)
-	assert.Equal(t, []models.Job{{SourceID: "first"}}, jobs.batches[0])
-	assert.Equal(t, []models.Job{{SourceID: "second"}}, jobs.batches[1])
 }
 
 func TestJobSyncBlocksLinkedInWhenEgressIsInSerbia(t *testing.T) {
@@ -221,7 +201,7 @@ type linkedInBlockingFetcher struct {
 	release <-chan struct{}
 }
 
-func (fetcher linkedInBlockingFetcher) Fetch(context.Context, models.LinkedInSearchSettings, string, linkedInJobSaver) (LinkedInFetchResult, error) {
+func (fetcher linkedInBlockingFetcher) Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error) {
 	fetcher.starts <- "linkedin"
 	<-fetcher.release
 	return LinkedInFetchResult{}, errors.New("failed")
@@ -256,27 +236,13 @@ type linkedInFetcherRecorder struct {
 	calls int
 }
 
-func (fetcher *linkedInFetcherRecorder) Fetch(context.Context, models.LinkedInSearchSettings, string, linkedInJobSaver) (LinkedInFetchResult, error) {
+func (fetcher *linkedInFetcherRecorder) Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error) {
 	fetcher.calls++
 	return LinkedInFetchResult{}, nil
 }
 
-func (stub linkedInFetcherStub) Fetch(ctx context.Context, _ models.LinkedInSearchSettings, _ string, save linkedInJobSaver) (LinkedInFetchResult, error) {
-	fetch := LinkedInFetchResult{Jobs: make([]models.Job, 0, len(stub.jobs))}
-	for _, job := range stub.jobs {
-		fetch.FetchedJobs++
-		if err := save(ctx, job); err != nil {
-			return fetch, err
-		}
-		fetch.SavedJobs++
-		fetch.Jobs = append(fetch.Jobs, job)
-	}
-	return fetch, stub.err
-}
-
-type jobRepositoryRecorder struct {
-	upserted []models.Job
-	batches  [][]models.Job
+func (stub linkedInFetcherStub) Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error) {
+	return LinkedInFetchResult{Jobs: stub.jobs, FetchedJobs: len(stub.jobs), SavedJobs: len(stub.jobs)}, stub.err
 }
 
 type eventRepositoryRecorder struct {
@@ -292,35 +258,4 @@ func (recorder *eventRepositoryRecorder) RecordEvent(ctx context.Context, event 
 
 func (*eventRepositoryRecorder) Events(context.Context, models.EventSearch) (models.EventPage, error) {
 	return models.EventPage{}, nil
-}
-
-func (recorder *jobRepositoryRecorder) Upsert(_ context.Context, jobs []models.Job) error {
-	batch := append([]models.Job(nil), jobs...)
-	recorder.batches = append(recorder.batches, batch)
-	recorder.upserted = append(recorder.upserted, jobs...)
-	return nil
-}
-
-func (*jobRepositoryRecorder) List(context.Context, models.JobSearch) ([]models.BrowseJob, error) {
-	return nil, nil
-}
-
-func (*jobRepositoryRecorder) Job(context.Context, int64) (*models.BrowseJob, error) {
-	return nil, nil
-}
-
-func (*jobRepositoryRecorder) Delete(context.Context, int64) (bool, error) {
-	return false, nil
-}
-
-func (*jobRepositoryRecorder) Providers(context.Context) ([]string, error) {
-	return nil, nil
-}
-
-func (*jobRepositoryRecorder) Companies(context.Context, string) ([]models.BrowseCompany, error) {
-	return nil, nil
-}
-
-func (*jobRepositoryRecorder) AnalysisJob(context.Context, int64) (*models.Job, error) {
-	return nil, nil
 }

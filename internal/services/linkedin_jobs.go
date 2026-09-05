@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 
 	"nice/internal/clients/linkedin"
-	"nice/internal/config"
 	"nice/internal/models"
 	"nice/internal/repositories"
 )
@@ -21,11 +20,16 @@ type linkedInClient interface {
 	Job(context.Context, string) (linkedin.Job, error)
 }
 
+type linkedInJobRepository interface {
+	JobExists(context.Context, string, string) (bool, error)
+	Upsert(context.Context, []models.Job) error
+}
+
 type LinkedInJobs struct {
-	client          linkedInClient
-	requestInterval time.Duration
-	events          repositories.EventRecorder
-	logger          *zap.Logger
+	client linkedInClient
+	jobs   linkedInJobRepository
+	events repositories.EventRecorder
+	logger *zap.Logger
 }
 
 type LinkedInFetchResult struct {
@@ -36,24 +40,45 @@ type LinkedInFetchResult struct {
 	SavedJobs      int
 }
 
-type linkedInJobSaver func(context.Context, models.Job) error
+type linkedInFetchOptions struct {
+	runID           string
+	requestInterval time.Duration
+	save            bool
+}
 
-func NewLinkedInJobs(cfg config.Config, client *linkedin.Client, events repositories.EventRecorder, logger *zap.Logger) *LinkedInJobs {
+func NewLinkedInJobs(client *linkedin.Client, jobs repositories.JobRepository, events repositories.EventRecorder, logger *zap.Logger) *LinkedInJobs {
 	return &LinkedInJobs{
-		client:          client,
-		requestInterval: cfg.Providers.LinkedIn.RequestInterval,
-		events:          events,
-		logger:          logger,
+		client: client,
+		jobs:   jobs,
+		events: events,
+		logger: logger,
 	}
 }
 
-func (service *LinkedInJobs) Fetch(ctx context.Context, settings models.LinkedInSearchSettings, runID string, save linkedInJobSaver) (LinkedInFetchResult, error) {
+func (service *LinkedInJobs) Preview(ctx context.Context, settings models.LinkedInSearchSettings, requestInterval time.Duration) (LinkedInFetchResult, error) {
+	return service.fetch(ctx, settings, linkedInFetchOptions{
+		requestInterval: requestInterval,
+	})
+}
+
+func (service *LinkedInJobs) Sync(ctx context.Context, settings models.LinkedInSearchSettings, runID string, requestInterval time.Duration) (LinkedInFetchResult, error) {
+	return service.fetch(ctx, settings, linkedInFetchOptions{
+		runID:           runID,
+		requestInterval: requestInterval,
+		save:            true,
+	})
+}
+
+func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedInSearchSettings, options linkedInFetchOptions) (LinkedInFetchResult, error) {
+	runID := options.runID
+	requestInterval := options.requestInterval
+	save := options.save
 	fetch := LinkedInFetchResult{Jobs: make([]models.Job, 0, settings.Limit)}
 	seen := make(map[string]struct{}, settings.Limit)
 	requested := false
 	for start := 0; len(fetch.Jobs) < settings.Limit; start += linkedInPageSize {
 		if requested {
-			if err := service.wait(ctx); err != nil {
+			if err := service.wait(ctx, requestInterval); err != nil {
 				return fetch, err
 			}
 		}
@@ -90,7 +115,23 @@ func (service *LinkedInJobs) Fetch(ctx context.Context, settings models.LinkedIn
 				continue
 			}
 			seen[candidate.ID] = struct{}{}
-			if err := service.wait(ctx); err != nil {
+			exists, err := service.jobs.JobExists(ctx, "linkedin", candidate.ID)
+			if err != nil {
+				service.recordEvent(ctx, runID, "linkedin.job_lookup.failed", "error", "LinkedIn job lookup failed", map[string]any{
+					"jobID": candidate.ID, "error": err.Error(),
+				})
+				if service.logger != nil {
+					service.logger.Error("check LinkedIn job existence failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
+				}
+				return fetch, err
+			}
+			if exists {
+				service.recordEvent(ctx, runID, "linkedin.job_fetch.skipped", "info", "LinkedIn job already exists", map[string]any{
+					"jobID": candidate.ID, "reason": "already_exists",
+				})
+				continue
+			}
+			if err := service.wait(ctx, requestInterval); err != nil {
 				return fetch, err
 			}
 			fetch.DetailRequests++
@@ -121,11 +162,14 @@ func (service *LinkedInJobs) Fetch(ctx context.Context, settings models.LinkedIn
 			service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded", map[string]any{
 				"jobID": candidate.ID, "accepted": true, "fetchedJobCount": fetch.FetchedJobs,
 			})
-			if save != nil {
-				if err := save(ctx, job); err != nil {
+			if save {
+				if err := service.jobs.Upsert(ctx, []models.Job{job}); err != nil {
 					service.recordEvent(ctx, runID, "linkedin.job_save.failed", "error", "LinkedIn job save failed", map[string]any{
 						"jobID": candidate.ID, "error": err.Error(),
 					})
+					if service.logger != nil {
+						service.logger.Error("save LinkedIn job failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
+					}
 					return fetch, err
 				}
 				fetch.SavedJobs++
@@ -151,11 +195,11 @@ func (service *LinkedInJobs) recordEvent(ctx context.Context, runID, eventType, 
 	}
 }
 
-func (service *LinkedInJobs) wait(ctx context.Context) error {
-	if service.requestInterval <= 0 {
+func (service *LinkedInJobs) wait(ctx context.Context, requestInterval time.Duration) error {
+	if requestInterval <= 0 {
 		return nil
 	}
-	timer := time.NewTimer(service.requestInterval)
+	timer := time.NewTimer(requestInterval)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"nice/internal/clients/adzuna"
 	"nice/internal/clients/jobicy"
 	"nice/internal/clients/remotive"
+	"nice/internal/config"
 	"nice/internal/models"
 )
 
@@ -22,8 +24,8 @@ type jobicyFetcher interface {
 	Fetch(context.Context, models.JobicySearchSettings) ([]models.Job, error)
 }
 
-type linkedInFetcher interface {
-	Fetch(context.Context, models.LinkedInSearchSettings, string, linkedInJobSaver) (LinkedInFetchResult, error)
+type linkedInPreviewer interface {
+	Preview(context.Context, models.LinkedInSearchSettings, time.Duration) (LinkedInFetchResult, error)
 }
 
 type remotiveFetcher interface {
@@ -31,18 +33,20 @@ type remotiveFetcher interface {
 }
 
 type ProviderPreviewService struct {
-	adzuna   adzunaFetcher
-	jobicy   jobicyFetcher
-	linkedin linkedInFetcher
-	remotive remotiveFetcher
+	adzuna                         adzunaFetcher
+	jobicy                         jobicyFetcher
+	linkedin                       linkedInPreviewer
+	linkedInPreviewRequestInterval time.Duration
+	remotive                       remotiveFetcher
 }
 
-func NewProviderPreviewService(adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client) *ProviderPreviewService {
+func NewProviderPreviewService(cfg config.Config, adzunaClient *adzuna.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client) *ProviderPreviewService {
 	return &ProviderPreviewService{
-		adzuna:   adzunaClient,
-		jobicy:   jobicyClient,
-		linkedin: linkedInJobs,
-		remotive: remotiveClient,
+		adzuna:                         adzunaClient,
+		jobicy:                         jobicyClient,
+		linkedin:                       linkedInJobs,
+		linkedInPreviewRequestInterval: cfg.Providers.LinkedIn.PreviewRequestInterval,
+		remotive:                       remotiveClient,
 	}
 }
 
@@ -78,7 +82,7 @@ func (service *ProviderPreviewService) Preview(ctx context.Context, provider str
 		if settings.LinkedIn.Query == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > 100 {
 			return nil, fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and 100", ErrInvalidDiscoverySettings)
 		}
-		result, err := service.linkedin.Fetch(ctx, settings.LinkedIn, "", nil)
+		result, err := service.linkedin.Preview(ctx, settings.LinkedIn, service.linkedInPreviewRequestInterval)
 		return result.Jobs, err
 	default:
 		return nil, ErrUnknownDiscoveryProvider

@@ -11,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"nice/internal/migrations"
+	"nice/internal/models"
 )
 
 func TestProviderRunHonorsIntervalAndRecordsStartTime(t *testing.T) {
@@ -39,4 +40,24 @@ func TestProviderRunHonorsIntervalAndRecordsStartTime(t *testing.T) {
 
 	require.NoError(t, db.QueryRow(`SELECT last_run_at FROM provider_runs WHERE provider = 'adzuna'`).Scan(&lastRunAt))
 	assert.Equal(t, startedAt.Add(time.Hour).Format(time.RFC3339Nano), lastRunAt)
+}
+
+func TestJobExistsFindsJobBySourceAndSourceID(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "linkedin", SourceID: "123", SourceURL: "https://www.linkedin.com/jobs/view/123", Title: "Engineer", Company: "Example Co", Workplace: "remote", BodyText: "Build systems", MetadataJSON: "{}",
+	}}))
+
+	exists, err := repository.JobExists(context.Background(), "linkedin", "123")
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	exists, err = repository.JobExists(context.Background(), "linkedin", "456")
+	require.NoError(t, err)
+	assert.False(t, exists)
 }

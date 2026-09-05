@@ -50,6 +50,22 @@ func NewSQLite(db *sql.DB) *SQLite {
 	return &SQLite{db: db}
 }
 
+func (repository *SQLite) JobExists(ctx context.Context, source, sourceID string) (bool, error) {
+	statement, args, err := squirrel.Select("id").From("jobs").Where(squirrel.Eq{
+		"source":        source,
+		"source_job_id": sourceID,
+	}).Limit(1).ToSql()
+	if err != nil {
+		return false, err
+	}
+	var id int64
+	err = repository.db.QueryRowContext(ctx, statement, args...).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 	transaction, err := repository.db.BeginTx(ctx, nil)
 	if err != nil {

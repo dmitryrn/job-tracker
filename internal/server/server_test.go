@@ -623,7 +623,7 @@ func newTestServerWithJobCompletionClient(repository *repositories.SQLite, clien
 		services.NewJobBrowse(repository),
 		services.NewEventLog(repository),
 		services.NewDiscoverySettingsService(repository),
-		services.NewProviderPreviewService(nil, nil, nil, nil),
+		services.NewProviderPreviewService(config.Config{}, nil, nil, nil, nil),
 		services.NewUserProfileService(repository),
 		services.NewResumeService(repository),
 		services.NewResumePDFService(services.NewResumeService(repository)),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,7 @@ func TestProviderPreviewRejectsInvalidOrUnknownProvider(t *testing.T) {
 
 func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 	linkedIn := &linkedInPreviewStub{jobs: []models.Job{{Title: "Platform engineer"}}}
-	service := ProviderPreviewService{linkedin: linkedIn}
+	service := ProviderPreviewService{linkedin: linkedIn, linkedInPreviewRequestInterval: 5 * time.Second}
 
 	jobs, err := service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: models.LinkedInSearchSettings{
 		Query:    "  platform engineer ",
@@ -59,6 +60,7 @@ func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 	assert.Equal(t, "platform engineer", linkedIn.settings.Query)
 	assert.Equal(t, "Berlin", linkedIn.settings.Location)
 	assert.Equal(t, 25, linkedIn.settings.Limit)
+	assert.Equal(t, 5*time.Second, linkedIn.requestInterval)
 }
 
 type adzunaPreviewStub struct {
@@ -72,11 +74,13 @@ func (stub *adzunaPreviewStub) Fetch(_ context.Context, settings models.AdzunaSe
 }
 
 type linkedInPreviewStub struct {
-	jobs     []models.Job
-	settings models.LinkedInSearchSettings
+	jobs            []models.Job
+	settings        models.LinkedInSearchSettings
+	requestInterval time.Duration
 }
 
-func (stub *linkedInPreviewStub) Fetch(_ context.Context, settings models.LinkedInSearchSettings, _ string, _ linkedInJobSaver) (LinkedInFetchResult, error) {
+func (stub *linkedInPreviewStub) Preview(_ context.Context, settings models.LinkedInSearchSettings, requestInterval time.Duration) (LinkedInFetchResult, error) {
 	stub.settings = settings
+	stub.requestInterval = requestInterval
 	return LinkedInFetchResult{Jobs: stub.jobs}, nil
 }

@@ -29,9 +29,9 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 		},
 		details: details,
 	}
-	service := LinkedInJobs{client: client}
+	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
 
-	fetch, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Location: "Berlin", Limit: linkedInPageSize + 1}, "", nil)
+	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Location: "Berlin", Limit: linkedInPageSize + 1}, 0)
 
 	require.NoError(t, err)
 	jobs := fetch.Jobs
@@ -64,9 +64,9 @@ func TestLinkedInJobsFetchSkipsIncompleteJobs(t *testing.T) {
 			"accepted":            {Description: "Build systems", EmploymentType: "Full-time"},
 		},
 	}
-	service := LinkedInJobs{client: client}
+	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
 
-	fetch, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 10}, "", nil)
+	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 10}, 0)
 
 	require.NoError(t, err)
 	jobs := fetch.Jobs
@@ -95,9 +95,9 @@ func TestLinkedInJobsFetchReturnsCompletedJobsWhenLaterRequestFails(t *testing.T
 		},
 		jobErrors: map[string]error{"failed": fetchErr},
 	}
-	service := LinkedInJobs{client: client}
+	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
 
-	fetch, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 10}, "", nil)
+	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 10}, 0)
 
 	require.ErrorIs(t, err, fetchErr)
 	jobs := fetch.Jobs
@@ -113,15 +113,15 @@ func TestLinkedInJobsFetchWaitsBetweenRequests(t *testing.T) {
 		},
 		details: map[string]linkedin.Job{"accepted": {Description: "Build systems", EmploymentType: "Full-time"}},
 	}
-	service := LinkedInJobs{client: client, requestInterval: requestInterval}
+	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
 
-	_, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 1}, "", nil)
+	_, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 1}, requestInterval)
 
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, client.jobAt.Sub(client.searchAt), requestInterval)
 }
 
-func TestLinkedInJobsFetchRecordsRequestEventsWithoutInterruptingFetch(t *testing.T) {
+func TestLinkedInJobsSyncRecordsRequestEventsWithoutInterruptingFetch(t *testing.T) {
 	events := &linkedInEventRecorder{err: errors.New("event storage unavailable")}
 	service := LinkedInJobs{
 		client: &linkedInClientStub{
@@ -131,45 +131,62 @@ func TestLinkedInJobsFetchRecordsRequestEventsWithoutInterruptingFetch(t *testin
 			details: map[string]linkedin.Job{"accepted": {Description: "Build systems", EmploymentType: "Full-time"}},
 		},
 		events: events,
+		jobs:   &linkedInJobRepositoryStub{},
 	}
 
-	saved := 0
-	fetch, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 1}, "run-1", func(context.Context, models.Job) error {
-		saved++
-		return nil
-	})
+	fetch, err := service.Sync(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 1}, "run-1", 0)
 
 	require.NoError(t, err)
 	require.Len(t, fetch.Jobs, 1)
-	assert.Equal(t, 1, saved)
+	assert.Equal(t, 1, fetch.SavedJobs)
 	assert.Equal(t, []string{"linkedin.search.started", "linkedin.search.succeeded", "linkedin.job_fetch.started", "linkedin.job_fetch.succeeded", "linkedin.job_save.succeeded"}, events.types())
 	assert.Equal(t, "engineer", events.events[0].Data["query"])
 }
 
-func TestLinkedInJobsFetchSavesEachFetchedJob(t *testing.T) {
+func TestLinkedInJobsPreviewDoesNotRecordEvents(t *testing.T) {
+	events := &linkedInEventRecorder{}
+	jobs := &linkedInJobRepositoryStub{existing: map[string]bool{"accepted": true}}
+	service := LinkedInJobs{
+		client: &linkedInClientStub{
+			results: map[int][]linkedin.SearchResult{
+				0: {{ID: "accepted", URL: "https://www.linkedin.com/jobs/view/accepted", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}},
+			},
+			details: map[string]linkedin.Job{"accepted": {Description: "Build systems", EmploymentType: "Full-time"}},
+		},
+		events: events,
+		jobs:   jobs,
+	}
+
+	_, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 1}, 0)
+
+	require.NoError(t, err)
+	assert.Empty(t, events.events)
+	assert.Equal(t, []string{"accepted"}, jobs.checked)
+	assert.Empty(t, service.client.(*linkedInClientStub).jobIDs)
+}
+
+func TestLinkedInJobsSyncSkipsExistingJobs(t *testing.T) {
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
 			0: {
 				{ID: "first", URL: "https://www.linkedin.com/jobs/view/first", Title: "First", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
-				{ID: "second", URL: "https://www.linkedin.com/jobs/view/second", Title: "Second", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
-				{ID: "incomplete", URL: "https://www.linkedin.com/jobs/view/incomplete", Title: "Incomplete", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "existing", URL: "https://www.linkedin.com/jobs/view/existing", Title: "Existing", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
 			},
 		},
-		details: map[string]linkedin.Job{"first": {Description: "First description", EmploymentType: "Full-time"}, "second": {Description: "Second description", EmploymentType: "Full-time"}, "incomplete": {Description: "Incomplete description"}},
+		details: map[string]linkedin.Job{"first": {Description: "First description", EmploymentType: "Full-time"}},
 	}
-	service := LinkedInJobs{client: client}
-	saved := make([]models.Job, 0, 2)
+	jobs := &linkedInJobRepositoryStub{existing: map[string]bool{"existing": true}}
+	service := LinkedInJobs{client: client, jobs: jobs}
 
-	fetch, err := service.Fetch(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 3}, "run-1", func(_ context.Context, job models.Job) error {
-		saved = append(saved, job)
-		return nil
-	})
+	fetch, err := service.Sync(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 2}, "run-1", 0)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"first", "second"}, []string{saved[0].SourceID, saved[1].SourceID})
-	assert.Equal(t, []string{"first", "second", "incomplete"}, client.jobIDs)
-	assert.Equal(t, 2, fetch.FetchedJobs)
-	assert.Equal(t, 2, fetch.SavedJobs)
+	assert.Equal(t, []string{"first", "existing"}, jobs.checked)
+	assert.Equal(t, []string{"first"}, client.jobIDs)
+	require.Len(t, jobs.upserted, 1)
+	assert.Equal(t, "first", jobs.upserted[0].SourceID)
+	assert.Equal(t, 1, fetch.FetchedJobs)
+	assert.Equal(t, 1, fetch.SavedJobs)
 }
 
 type linkedInClientStub struct {
@@ -197,6 +214,25 @@ func (stub *linkedInClientStub) Job(_ context.Context, id string) (linkedin.Job,
 type linkedInEventRecorder struct {
 	events []models.Event
 	err    error
+}
+
+type linkedInJobRepositoryStub struct {
+	existing map[string]bool
+	checked  []string
+	upserted []models.Job
+}
+
+func (stub *linkedInJobRepositoryStub) JobExists(_ context.Context, source, sourceID string) (bool, error) {
+	if source != "linkedin" {
+		return false, errors.New("unexpected source")
+	}
+	stub.checked = append(stub.checked, sourceID)
+	return stub.existing[sourceID], nil
+}
+
+func (stub *linkedInJobRepositoryStub) Upsert(_ context.Context, jobs []models.Job) error {
+	stub.upserted = append(stub.upserted, jobs...)
+	return nil
 }
 
 func (recorder *linkedInEventRecorder) RecordEvent(_ context.Context, event models.Event) error {
