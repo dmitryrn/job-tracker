@@ -258,7 +258,7 @@ export function fetchCompanies(search: string, signal: AbortSignal) {
   return request<{ companies: BrowseCompany[] }>(`companies?${parameters}`, { signal });
 }
 
-export function fetchEvents(provider: string, runId: string, limit: number, offset: number, signal: AbortSignal) {
+export function fetchEvents(provider: string, runId: string, type: string, level: string, limit: number, offset: number, signal: AbortSignal) {
   const parameters = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (provider) {
     parameters.set("provider", provider);
@@ -266,7 +266,13 @@ export function fetchEvents(provider: string, runId: string, limit: number, offs
   if (runId.trim()) {
     parameters.set("runId", runId.trim());
   }
-  return request<EventPage>(`events?${parameters}`, { signal });
+	if (type.trim()) {
+		parameters.set("type", type.trim());
+	}
+	if (level) {
+		parameters.set("level", level);
+	}
+	return request<EventPage>(`events?${parameters}`, { signal });
 }
 
 export function fetchProfile(signal: AbortSignal) {
@@ -278,19 +284,61 @@ export function fetchDiscoverySettings(signal: AbortSignal) {
 }
 
 export function saveDiscoverySettings(settings: DiscoverySettings) {
-  return request<{ settings: DiscoverySettings }>("discovery-settings", {
+	return request<{ settings: DiscoverySettings }>("discovery-settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
-  });
+	});
 }
 
-export function fetchProviderPreview(provider: keyof DiscoverySettings, settings: DiscoverySettings) {
-  return request<{ jobs: unknown[] }>(`discovery-preview/${provider}`, {
+export function triggerDiscoverySync(provider: keyof DiscoverySettings) {
+	return request<{ started: boolean }>(`sync/${provider}`, { method: "POST" });
+}
+
+export async function streamProviderPreview(provider: keyof DiscoverySettings, settings: DiscoverySettings, onJob: (job: unknown) => void) {
+  const response = await fetch(apiURL(`discovery-preview/${provider}`), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { Accept: "text/event-stream", "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
+  if (!response.ok) {
+    const body = await response.json().catch(() => undefined) as { error?: string } | undefined;
+    throw new Error(body?.error || `Request failed (${response.status})`);
+  }
+  if (!response.headers.get("Content-Type")?.startsWith("text/event-stream")) {
+    throw new Error("Provider preview streaming is not enabled on the server");
+  }
+  if (!response.body) {
+    throw new Error("Provider preview stream is unavailable");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+    for (const event of events) {
+      const type = event.match(/^event: (.+)$/m)?.[1];
+      const data = event.match(/^data: (.+)$/m)?.[1];
+      if (!type || !data) {
+        continue;
+      }
+      const payload = JSON.parse(data) as unknown;
+      if (type === "job") {
+        onJob(payload);
+      }
+      if (type === "error") {
+        const message = (payload as { error?: string }).error;
+        throw new Error(message || "Could not fetch provider preview");
+      }
+    }
+    if (done) {
+      return;
+    }
+  }
 }
 
 export function saveProfile(profile: UserProfile) {

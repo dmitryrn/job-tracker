@@ -37,6 +37,8 @@ type JobSync struct {
 	logger                  *zap.Logger
 	cancel                  context.CancelFunc
 	done                    chan struct{}
+	trigger                 chan string
+	running                 bool
 	mutex                   sync.Mutex
 }
 
@@ -72,8 +74,9 @@ func (syncer *JobSync) Register(lifecycle fx.Lifecycle) {
 			ctx, cancel := context.WithCancel(context.Background())
 			syncer.cancel = cancel
 			syncer.done = make(chan struct{})
+			syncer.trigger = make(chan string, 1)
 			syncer.logger.Info("job sync scheduler started", zap.Duration("check_interval", time.Minute))
-			go syncer.run(ctx)
+			go syncer.run(ctx, syncer.trigger)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -87,6 +90,11 @@ func (syncer *JobSync) Register(lifecycle fx.Lifecycle) {
 			cancel()
 			select {
 			case <-done:
+				syncer.mutex.Lock()
+				syncer.cancel = nil
+				syncer.done = nil
+				syncer.trigger = nil
+				syncer.mutex.Unlock()
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
@@ -95,21 +103,76 @@ func (syncer *JobSync) Register(lifecycle fx.Lifecycle) {
 	})
 }
 
-func (syncer *JobSync) run(ctx context.Context) {
+// Trigger queues one forced provider run when the scheduler is idle.
+func (syncer *JobSync) Trigger(provider string) bool {
+	syncer.mutex.Lock()
+	defer syncer.mutex.Unlock()
+
+	if !isDiscoveryProvider(provider) {
+		syncer.logger.Warn("job sync request ignored", zap.String("provider", provider), zap.String("reason", "unknown provider"))
+		return false
+	}
+	if syncer.trigger == nil {
+		syncer.logger.Info("job sync request ignored", zap.String("provider", provider), zap.String("reason", "scheduler not running"))
+		return false
+	}
+	if syncer.running {
+		syncer.logger.Info("job sync request ignored", zap.String("provider", provider), zap.String("reason", "sync already running"))
+		return false
+	}
+	select {
+	case syncer.trigger <- provider:
+		syncer.logger.Info("job sync requested", zap.String("provider", provider))
+		return true
+	default:
+		syncer.logger.Info("job sync request ignored", zap.String("provider", provider), zap.String("reason", "sync already requested"))
+		return false
+	}
+}
+
+func (syncer *JobSync) run(ctx context.Context, trigger <-chan string) {
 	defer close(syncer.done)
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+	syncer.runSync(ctx, "")
 	for {
-		syncer.sync(ctx)
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			syncer.runSync(ctx, "")
+		case provider := <-trigger:
+			syncer.runSync(ctx, provider)
 		}
 	}
 }
 
 func (syncer *JobSync) sync(ctx context.Context) {
+	syncer.syncProviders(ctx, false)
+}
+
+func (syncer *JobSync) runSync(ctx context.Context, provider string) {
+	syncer.mutex.Lock()
+	syncer.running = true
+	syncer.mutex.Unlock()
+	defer func() {
+		syncer.mutex.Lock()
+		syncer.running = false
+		syncer.mutex.Unlock()
+	}()
+	if provider == "" {
+		syncer.syncProviders(ctx, false)
+		return
+	}
+	settings, err := syncer.settings.DiscoverySettings(ctx)
+	if err != nil {
+		syncer.logger.Error("load discovery settings failed", zap.String("provider", provider), zap.Error(err))
+		return
+	}
+	syncer.syncProvider(ctx, settings, provider, true)
+}
+
+func (syncer *JobSync) syncProviders(ctx context.Context, force bool) {
 	settings, err := syncer.settings.DiscoverySettings(ctx)
 	if err != nil {
 		syncer.logger.Error("load discovery settings failed", zap.Error(err))
@@ -119,29 +182,51 @@ func (syncer *JobSync) sync(ctx context.Context) {
 	group.Add(4)
 	go func() {
 		defer group.Done()
-		syncer.syncAdzuna(ctx, settings.Adzuna)
+		syncer.syncProvider(ctx, settings, "adzuna", force)
 	}()
 	go func() {
 		defer group.Done()
-		syncer.syncJobicy(ctx, settings.Jobicy)
+		syncer.syncProvider(ctx, settings, "jobicy", force)
 	}()
 	go func() {
 		defer group.Done()
-		syncer.syncLinkedIn(ctx, settings.LinkedIn)
+		syncer.syncProvider(ctx, settings, "linkedin", force)
 	}()
 	go func() {
 		defer group.Done()
-		syncer.syncRemotive(ctx, settings.Remotive)
+		syncer.syncProvider(ctx, settings, "remotive", force)
 	}()
 	group.Wait()
 }
 
-func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedInSearchSettings) {
+func (syncer *JobSync) syncProvider(ctx context.Context, settings models.DiscoverySettings, provider string, force bool) {
+	switch provider {
+	case "adzuna":
+		syncer.syncAdzuna(ctx, settings.Adzuna, force)
+	case "jobicy":
+		syncer.syncJobicy(ctx, settings.Jobicy, force)
+	case "linkedin":
+		syncer.syncLinkedIn(ctx, settings.LinkedIn, force)
+	case "remotive":
+		syncer.syncRemotive(ctx, settings.Remotive, force)
+	}
+}
+
+func isDiscoveryProvider(provider string) bool {
+	switch provider {
+	case "adzuna", "jobicy", "linkedin", "remotive":
+		return true
+	default:
+		return false
+	}
+}
+
+func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedInSearchSettings, force bool) {
 	if !settings.Enabled {
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "linkedin"), zap.String("reason", "disabled"))
 		return
 	}
-	if !syncer.startProviderRun(ctx, "linkedin", syncer.linkedinInterval) {
+	if !syncer.startProviderRun(ctx, "linkedin", syncer.linkedinInterval, force) {
 		return
 	}
 	runID := fmt.Sprintf("linkedin-%d", time.Now().UTC().UnixNano())
@@ -212,12 +297,12 @@ func (syncer *JobSync) recordLinkedInEvent(ctx context.Context, runID, eventType
 	}
 }
 
-func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSearchSettings) {
+func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSearchSettings, force bool) {
 	if !settings.Enabled {
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "adzuna"), zap.String("reason", "disabled"))
 		return
 	}
-	if !syncer.startProviderRun(ctx, "adzuna", syncer.adzunaInterval) {
+	if !syncer.startProviderRun(ctx, "adzuna", syncer.adzunaInterval, force) {
 		return
 	}
 	syncer.logger.Info("syncing Adzuna jobs")
@@ -233,12 +318,12 @@ func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSea
 	syncer.logger.Info("stored Adzuna jobs", zap.Int("count", len(jobs)))
 }
 
-func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.RemotiveSearchSettings) {
+func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.RemotiveSearchSettings, force bool) {
 	if !settings.Enabled {
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "remotive"), zap.String("reason", "disabled"))
 		return
 	}
-	if !syncer.startProviderRun(ctx, "remotive", syncer.remotiveInterval) {
+	if !syncer.startProviderRun(ctx, "remotive", syncer.remotiveInterval, force) {
 		return
 	}
 	syncer.logger.Info("syncing Remotive jobs")
@@ -254,12 +339,12 @@ func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.Remotiv
 	syncer.logger.Info("stored Remotive jobs", zap.Int("count", len(jobs)))
 }
 
-func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySearchSettings) {
+func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySearchSettings, force bool) {
 	if !settings.Enabled {
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "jobicy"), zap.String("reason", "disabled"))
 		return
 	}
-	if !syncer.startProviderRun(ctx, "jobicy", syncer.jobicyInterval) {
+	if !syncer.startProviderRun(ctx, "jobicy", syncer.jobicyInterval, force) {
 		return
 	}
 	syncer.logger.Info("syncing Jobicy jobs")
@@ -275,7 +360,10 @@ func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySea
 	syncer.logger.Info("stored Jobicy jobs", zap.Int("count", len(jobs)))
 }
 
-func (syncer *JobSync) startProviderRun(ctx context.Context, provider string, interval time.Duration) bool {
+func (syncer *JobSync) startProviderRun(ctx context.Context, provider string, interval time.Duration, force bool) bool {
+	if force {
+		interval = 0
+	}
 	run, err := syncer.providerRuns.StartProviderRun(ctx, provider, interval, time.Now())
 	if err != nil {
 		syncer.logger.Error("start provider sync failed", zap.String("provider", provider), zap.Error(err))

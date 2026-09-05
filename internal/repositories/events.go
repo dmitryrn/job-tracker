@@ -66,6 +66,14 @@ func (repository *SQLite) Events(ctx context.Context, search models.EventSearch)
 		query = query.Where(squirrel.Eq{"run_id": search.RunID})
 		countQuery = countQuery.Where(squirrel.Eq{"run_id": search.RunID})
 	}
+	if search.Type != "" {
+		query = query.Where(squirrel.Like{"type": "%" + search.Type + "%"})
+		countQuery = countQuery.Where(squirrel.Like{"type": "%" + search.Type + "%"})
+	}
+	if search.Level != "" {
+		query = query.Where(squirrel.Eq{"level": search.Level})
+		countQuery = countQuery.Where(squirrel.Eq{"level": search.Level})
+	}
 	statement, args, err := query.ToSql()
 	if err != nil {
 		return models.EventPage{}, fmt.Errorf("build events query: %w", err)

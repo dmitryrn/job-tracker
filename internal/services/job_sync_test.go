@@ -33,6 +33,19 @@ func TestJobSyncSkipsDisabledProviders(t *testing.T) {
 	assert.Zero(t, runs.started)
 }
 
+func TestJobSyncTriggerQueuesOneProviderOnly(t *testing.T) {
+	syncer := JobSync{trigger: make(chan string, 1), logger: zap.NewNop()}
+
+	assert.True(t, syncer.Trigger("linkedin"))
+	assert.False(t, syncer.Trigger("adzuna"))
+	assert.Equal(t, "linkedin", <-syncer.trigger)
+
+	syncer.running = true
+	assert.False(t, syncer.Trigger("linkedin"))
+	syncer.running = false
+	assert.False(t, syncer.Trigger("unknown"))
+}
+
 func TestJobSyncRunsProvidersConcurrently(t *testing.T) {
 	starts := make(chan string, 4)
 	release := make(chan struct{})
@@ -88,7 +101,7 @@ func TestJobSyncRecordsPartialLinkedInResults(t *testing.T) {
 		logger:       zap.NewNop(),
 	}
 
-	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
+	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true}, false)
 
 	require.Len(t, events.events, 3)
 	assert.Equal(t, "linkedin.ip_info.resolved", events.events[0].Type)
@@ -123,7 +136,7 @@ func TestJobSyncBlocksLinkedInWhenEgressIsInSerbia(t *testing.T) {
 		logger:       zap.NewNop(),
 	}
 
-	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
+	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true}, false)
 
 	assert.Zero(t, fetcher.calls)
 	require.Len(t, events.events, 2)
@@ -143,7 +156,7 @@ func TestJobSyncBlocksLinkedInWhenIPInfoLookupFails(t *testing.T) {
 		logger:       zap.NewNop(),
 	}
 
-	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true})
+	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true}, false)
 
 	assert.Zero(t, fetcher.calls)
 	require.Len(t, events.events, 1)

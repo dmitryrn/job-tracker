@@ -22,14 +22,15 @@ func TestEventsFiltersAndPaginates(t *testing.T) {
 	repository := NewSQLite(db)
 	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "linkedin", RunID: "run-1", Type: "linkedin.search.started", Level: "info", Message: "Search started", Data: map[string]any{"query": "engineer"}}))
 	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "application", Type: "application.started", Level: "info", Message: "Application started"}))
-	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "linkedin", RunID: "run-2", Type: "linkedin.search.succeeded", Level: "info", Message: "Search succeeded"}))
+	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "linkedin", RunID: "run-2", Type: "linkedin.search.succeeded", Level: "error", Message: "Search failed"}))
 
-	page, err := repository.Events(context.Background(), models.EventSearch{Provider: "linkedin", Limit: 1, Offset: 0})
+	page, err := repository.Events(context.Background(), models.EventSearch{Provider: "linkedin", Type: "succeeded", Level: "error", Limit: 1, Offset: 0})
 
 	require.NoError(t, err)
-	assert.Equal(t, 2, page.Total)
+	assert.Equal(t, 1, page.Total)
 	require.Len(t, page.Events, 1)
 	assert.Equal(t, "run-2", page.Events[0].RunID)
+	assert.Equal(t, "error", page.Events[0].Level)
 	assert.NotEmpty(t, page.Events[0].OccurredAt)
 
 	page, err = repository.Events(context.Background(), models.EventSearch{RunID: "run-1", Limit: 50, Offset: 0})

@@ -117,6 +117,31 @@ func TestDiscoverySettingsAPI(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestDiscoverySyncAPITriggersWorker(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	trigger := &syncTriggerStub{started: true}
+	handler := discoverySyncHandler(trigger, zap.NewNop())
+	request := httptest.NewRequest(http.MethodPost, "/api/sync/linkedin", nil)
+	request.SetPathValue("provider", "linkedin")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusAccepted, response.Code)
+	assert.True(t, trigger.called)
+	assert.Equal(t, "linkedin", trigger.provider)
+	assert.JSONEq(t, `{"started":true}`, response.Body.String())
+
+	request = httptest.NewRequest(http.MethodPost, "/api/sync/unknown", nil)
+	request.SetPathValue("provider", "unknown")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
 func TestEventsAPIListsFilteredPaginatedEvents(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -125,10 +150,10 @@ func TestEventsAPIListsFilteredPaginatedEvents(t *testing.T) {
 
 	repository := repositories.NewSQLite(db)
 	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "linkedin", RunID: "run-1", Type: "provider.run.started", Level: "info", Message: "LinkedIn job sync started"}))
-	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "application", Type: "application.started", Level: "info", Message: "Application started"}))
+	require.NoError(t, repository.RecordEvent(context.Background(), models.Event{Provider: "application", Type: "application.started", Level: "error", Message: "Application failed"}))
 	handler := newTestServer(repository).http.Handler
 
-	response := request(handler, http.MethodGet, "/api/events?provider=linkedin&limit=1")
+	response := request(handler, http.MethodGet, "/api/events?provider=linkedin&type=run.started&limit=1")
 
 	require.Equal(t, http.StatusOK, response.Code)
 	var page models.EventPage
@@ -136,6 +161,14 @@ func TestEventsAPIListsFilteredPaginatedEvents(t *testing.T) {
 	assert.Equal(t, 1, page.Total)
 	require.Len(t, page.Events, 1)
 	assert.Equal(t, "run-1", page.Events[0].RunID)
+
+	response = request(handler, http.MethodGet, "/api/events?level=error")
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&page))
+	assert.Equal(t, 1, page.Total)
+	require.Len(t, page.Events, 1)
+	assert.Equal(t, "application", page.Events[0].Provider)
 
 	response = request(handler, http.MethodGet, "/api/events?limit=0")
 	assert.Equal(t, http.StatusBadRequest, response.Code)
@@ -160,10 +193,37 @@ func TestDiscoveryPreviewAPIEncodesNoJobsAsArray(t *testing.T) {
 	assert.JSONEq(t, `{"jobs":[]}`, response.Body.String())
 }
 
+func TestDiscoveryPreviewAPIStreamsJobs(t *testing.T) {
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/discovery-preview/linkedin", strings.NewReader(`{}`))
+	request.Header.Set("Accept", "text/event-stream")
+
+	discoveryPreviewHandler(discoveryPreviewStreamStub{}, zap.NewNop()).ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "text/event-stream", response.Header().Get("Content-Type"))
+	assert.Contains(t, response.Body.String(), "event: job\ndata: {\"source\":\"linkedin\",\"sourceId\":\"first\"")
+	assert.Contains(t, response.Body.String(), "event: complete\ndata: {\"jobCount\":1}")
+}
+
 type discoveryPreviewStub struct{}
 
 func (discoveryPreviewStub) Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error) {
 	return nil, nil
+}
+
+func (discoveryPreviewStub) StreamPreview(context.Context, string, models.DiscoverySettings, func(models.Job) error) error {
+	return nil
+}
+
+type discoveryPreviewStreamStub struct{}
+
+func (discoveryPreviewStreamStub) Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error) {
+	return nil, nil
+}
+
+func (discoveryPreviewStreamStub) StreamPreview(_ context.Context, _ string, _ models.DiscoverySettings, onJob func(models.Job) error) error {
+	return onJob(models.Job{Source: "linkedin", SourceID: "first"})
 }
 
 func TestQueueUnmatchedJobsAPI(t *testing.T) {
@@ -619,6 +679,10 @@ func newTestServer(repository *repositories.SQLite) *Server {
 }
 
 func newTestServerWithJobCompletionClient(repository *repositories.SQLite, client services.JobCompletionClient) *Server {
+	return newTestServerWithDependencies(repository, client)
+}
+
+func newTestServerWithDependencies(repository *repositories.SQLite, client services.JobCompletionClient) *Server {
 	worker := services.NewJobMatchWorker(repository, repository, repository, repository, repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
 	return New(
 		config.Config{},
@@ -626,6 +690,7 @@ func newTestServerWithJobCompletionClient(repository *repositories.SQLite, clien
 		services.NewJobBrowse(repository),
 		services.NewEventLog(repository),
 		services.NewDiscoverySettingsService(repository),
+		&services.JobSync{},
 		services.NewProviderPreviewService(config.Config{}, nil, nil, nil, nil),
 		services.NewUserProfileService(repository),
 		services.NewResumeService(repository),
@@ -634,6 +699,18 @@ func newTestServerWithJobCompletionClient(repository *repositories.SQLite, clien
 		services.NewJobMatchRequests(repository, worker),
 		services.NewJobMatchChat(repository, repository, repository, repository, repository, client, "test-model", "low", zap.NewNop()),
 	)
+}
+
+type syncTriggerStub struct {
+	started  bool
+	called   bool
+	provider string
+}
+
+func (stub *syncTriggerStub) Trigger(provider string) bool {
+	stub.called = true
+	stub.provider = provider
+	return stub.started
 }
 
 func waitForChatTurn(t *testing.T, repository *repositories.SQLite, jobID int64) {

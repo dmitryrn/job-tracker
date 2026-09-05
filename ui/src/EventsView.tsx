@@ -11,8 +11,12 @@ function formatTime(value: string) {
 export default function EventsView() {
   const [provider, setProvider] = useState("");
   const [runID, setRunID] = useState("");
+  const [type, setType] = useState("");
+  const [level, setLevel] = useState("");
   const [activeProvider, setActiveProvider] = useState("");
   const [activeRunID, setActiveRunID] = useState("");
+  const [activeType, setActiveType] = useState("");
+  const [activeLevel, setActiveLevel] = useState("");
   const [offset, setOffset] = useState(0);
   const [reload, setReload] = useState(0);
   const [page, setPage] = useState<EventPage>({ events: [], total: 0 });
@@ -24,7 +28,7 @@ export default function EventsView() {
     async function load() {
       setLoading(true);
       try {
-        const result = await fetchEvents(activeProvider, activeRunID, pageSize, offset, controller.signal);
+        const result = await fetchEvents(activeProvider, activeRunID, activeType, activeLevel, pageSize, offset, controller.signal);
         if (!controller.signal.aborted) {
           setPage(result);
           setError("");
@@ -41,12 +45,14 @@ export default function EventsView() {
     }
     void load();
     return () => controller.abort();
-  }, [activeProvider, activeRunID, offset, reload]);
+  }, [activeProvider, activeRunID, activeType, activeLevel, offset, reload]);
 
   function filter(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActiveProvider(provider);
     setActiveRunID(runID);
+    setActiveType(type);
+    setActiveLevel(level);
     setOffset(0);
     setReload((current) => current + 1);
   }
@@ -68,6 +74,8 @@ export default function EventsView() {
       <form className="events-filter" onSubmit={filter}>
         <label>Source<select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">All events</option><option value="application">Application</option><option value="linkedin">LinkedIn</option></select></label>
         <label>Run ID<input value={runID} onChange={(event) => setRunID(event.target.value)} placeholder="linkedin-..." /></label>
+        <label>Event type<input value={type} onChange={(event) => setType(event.target.value)} placeholder="skipped" /></label>
+        <label>Level<select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">All levels</option><option value="info">Info</option><option value="error">Error</option></select></label>
         <button className="secondary-action">Apply filters</button>
       </form>
 

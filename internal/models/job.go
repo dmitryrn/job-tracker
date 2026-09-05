@@ -38,6 +38,8 @@ type Event struct {
 type EventSearch struct {
 	Provider string
 	RunID    string
+	Type     string
+	Level    string
 	Limit    int
 	Offset   int
 }

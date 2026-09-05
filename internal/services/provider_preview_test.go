@@ -93,3 +93,14 @@ func (stub *linkedInPreviewStub) Preview(_ context.Context, settings models.Link
 	stub.requestInterval = requestInterval
 	return LinkedInFetchResult{Jobs: stub.jobs}, nil
 }
+
+func (stub *linkedInPreviewStub) PreviewStream(_ context.Context, settings models.LinkedInSearchSettings, requestInterval time.Duration, onJob func(models.Job) error) (LinkedInFetchResult, error) {
+	stub.settings = settings
+	stub.requestInterval = requestInterval
+	for _, job := range stub.jobs {
+		if err := onJob(job); err != nil {
+			return LinkedInFetchResult{}, err
+		}
+	}
+	return LinkedInFetchResult{Jobs: stub.jobs}, nil
+}

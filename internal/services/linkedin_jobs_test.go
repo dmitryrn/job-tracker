@@ -107,6 +107,33 @@ func TestLinkedInJobsPreviewReturnsCompletedJobsWhenLaterRequestFails(t *testing
 	assert.Equal(t, "completed", jobs[0].SourceID)
 }
 
+func TestLinkedInJobsPreviewStreamEmitsEachFetchedJob(t *testing.T) {
+	client := &linkedInClientStub{
+		results: map[int][]linkedin.SearchResult{
+			0: {
+				{ID: "first", URL: "https://www.linkedin.com/jobs/view/first", Title: "First", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "second", URL: "https://www.linkedin.com/jobs/view/second", Title: "Second", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+			},
+		},
+		details: map[string]linkedin.Job{
+			"first":  {Description: "First description", EmploymentType: "Full-time"},
+			"second": {Description: "Second description", EmploymentType: "Full-time"},
+		},
+	}
+	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
+	var emitted []models.Job
+
+	fetch, err := service.PreviewStream(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 2}, 0, func(job models.Job) error {
+		emitted = append(emitted, job)
+		return nil
+	})
+
+	require.NoError(t, err)
+	require.Len(t, emitted, 2)
+	assert.Equal(t, []string{"first", "second"}, []string{emitted[0].SourceID, emitted[1].SourceID})
+	assert.Equal(t, fetch.Jobs, emitted)
+}
+
 func TestLinkedInJobsSyncSavesCompletedJobsWhenLaterRequestFails(t *testing.T) {
 	fetchErr := errors.New("LinkedIn unavailable")
 	client := &linkedInClientStub{

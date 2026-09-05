@@ -676,7 +676,7 @@ func readMatchQueue(ctx context.Context, query queryRower) ([]int64, error) {
 }
 
 func writeMatchQueue(ctx context.Context, query matchQueueQuerier, queue []int64) error {
-	encoded, err := json.Marshal(queue)
+	encoded, err := json.Marshal(uniqueMatchRequests(queue))
 	if err != nil {
 		return fmt.Errorf("encode job match queue: %w", err)
 	}
@@ -684,6 +684,19 @@ func writeMatchQueue(ctx context.Context, query matchQueueQuerier, queue []int64
 		return fmt.Errorf("write job match queue: %w", err)
 	}
 	return nil
+}
+
+func uniqueMatchRequests(queue []int64) []int64 {
+	unique := make([]int64, 0, len(queue))
+	seen := make(map[int64]struct{}, len(queue))
+	for _, jobID := range queue {
+		if _, duplicate := seen[jobID]; duplicate {
+			continue
+		}
+		seen[jobID] = struct{}{}
+		unique = append(unique, jobID)
+	}
+	return unique
 }
 
 func removeFirstMatchRequest(queue []int64, jobID int64) ([]int64, bool) {

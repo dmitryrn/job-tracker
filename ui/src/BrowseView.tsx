@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchCompanies, fetchJobs, fetchProviders, queueUnmatchedJobMatches, type BrowseCompany, type BrowseJob } from "./api";
+import { fetchCompanies, fetchJobs, fetchMatchQueue, fetchProviders, queueUnmatchedJobMatches, type BrowseCompany, type BrowseJob } from "./api";
 
 export type BrowseMode = "jobs" | "companies";
 
@@ -57,6 +57,10 @@ function plainText(value: string) {
   return new DOMParser().parseFromString(value, "text/html").body.innerText;
 }
 
+export function jobsReadyToQueue(jobs: BrowseJob[], queuedJobIDs: ReadonlySet<number>) {
+  return jobs.filter((job) => !job.hasMatch && !queuedJobIDs.has(job.id));
+}
+
 function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
   return (
     <article className="job-card">
@@ -100,6 +104,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
   const [providers, setProviders] = useState<string[]>([]);
   const [jobs, setJobs] = useState<BrowseJob[]>([]);
   const [companies, setCompanies] = useState<BrowseCompany[]>([]);
+  const [queuedJobIDs, setQueuedJobIDs] = useState<Set<number>>(() => new Set());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [queueing, setQueueing] = useState(false);
@@ -112,12 +117,14 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       setLoading(true);
       try {
         if (mode === "jobs") {
-          const [jobResult, providerResult] = await Promise.all([
+          const [jobResult, providerResult, queueResult] = await Promise.all([
             fetchJobs(search, provider, searchFields, controller.signal),
             fetchProviders(controller.signal),
+            fetchMatchQueue(controller.signal),
           ]);
           setJobs(jobResult.jobs);
           setProviders(providerResult.providers);
+          setQueuedJobIDs(new Set(queueResult.jobs.map((job) => job.id)));
         } else {
           const result = await fetchCompanies(search, controller.signal);
           setCompanies(result.companies);
@@ -143,11 +150,14 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
   }
 
   const unmatchedJobs = jobs.filter((job) => !job.hasMatch);
+  const queueableJobs = jobsReadyToQueue(jobs, queuedJobIDs);
+  const queuedUnmatchedJobs = unmatchedJobs.length - queueableJobs.length;
 
   async function queueUnmatchedJobs() {
     setQueueing(true);
     try {
-      const result = await queueUnmatchedJobMatches(unmatchedJobs.map((job) => job.id));
+      const result = await queueUnmatchedJobMatches(queueableJobs.map((job) => job.id));
+      setQueuedJobIDs((current) => new Set([...current, ...queueableJobs.map((job) => job.id)]));
       setQueueMessage(result.queued > 0 ? `${result.queued} ${result.queued === 1 ? "role" : "roles"} queued for processing.` : "All unmatched roles in view are already queued.");
       setError("");
     } catch (reason) {
@@ -170,7 +180,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
             <strong>{mode === "jobs" ? jobs.length : companies.length}</strong>
             <span>{mode === "jobs" ? "roles in view" : "companies in view"}</span>
           </div>
-          {mode === "jobs" && <button type="button" className="queue-unmatched-action" disabled={loading || queueing || unmatchedJobs.length === 0} onClick={() => void queueUnmatchedJobs()}>{queueing ? "Queueing..." : `Queue ${unmatchedJobs.length} unmatched ${unmatchedJobs.length === 1 ? "role" : "roles"}`}</button>}
+          {mode === "jobs" && <button type="button" className="queue-unmatched-action" disabled={loading || queueing || queueableJobs.length === 0} onClick={() => void queueUnmatchedJobs()}>{queueing ? "Queueing..." : queueableJobs.length > 0 ? `Queue ${queueableJobs.length} unmatched ${queueableJobs.length === 1 ? "role" : "roles"}${queuedUnmatchedJobs > 0 ? ` (${queuedUnmatchedJobs} queued)` : ""}` : queuedUnmatchedJobs > 0 ? `All ${queuedUnmatchedJobs} unmatched ${queuedUnmatchedJobs === 1 ? "role is" : "roles are"} queued` : "No unmatched roles"}</button>}
         </div>
       </header>
 

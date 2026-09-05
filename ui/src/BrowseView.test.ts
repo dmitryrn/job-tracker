@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate } from "./BrowseView";
+import { formatDate, jobsReadyToQueue } from "./BrowseView";
 
 describe("formatDate", () => {
   const now = new Date("2026-08-27T12:00:00Z");
@@ -17,5 +17,17 @@ describe("formatDate", () => {
     expect(formatDate("2026-07-27T12:00:00Z", now)).toBe(
       new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date("2026-07-27T12:00:00Z")),
     );
+  });
+});
+
+describe("jobsReadyToQueue", () => {
+  it("excludes jobs that already have a match or are already queued", () => {
+    const jobs = [
+      { id: 1, hasMatch: false },
+      { id: 2, hasMatch: true },
+      { id: 3, hasMatch: false },
+    ] as never[];
+
+    expect(jobsReadyToQueue(jobs, new Set([3])).map((job) => job.id)).toEqual([1]);
   });
 });

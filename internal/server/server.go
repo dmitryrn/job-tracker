@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -23,7 +24,11 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, matches *services.JobMatches, requests *services.JobMatchRequests, chat *services.JobMatchChat) *Server {
+type syncTrigger interface {
+	Trigger(string) bool
+}
+
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, syncer *services.JobSync, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, matches *services.JobMatches, requests *services.JobMatchRequests, chat *services.JobMatchChat) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -48,6 +53,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("GET /api/events", eventsHandler(events, logger))
 	mux.HandleFunc("GET /api/discovery-settings", discoverySettingsHandler(settings, logger))
 	mux.HandleFunc("PUT /api/discovery-settings", saveDiscoverySettingsHandler(settings, logger))
+	mux.HandleFunc("POST /api/sync/{provider}", discoverySyncHandler(syncer, logger))
 	mux.HandleFunc("POST /api/discovery-preview/{provider}", discoveryPreviewHandler(previews, logger))
 	mux.HandleFunc("GET /api/profile", profileHandler(profile, logger))
 	mux.HandleFunc("PUT /api/profile", saveProfileHandler(profile, logger))
@@ -211,6 +217,8 @@ func eventsHandler(events *services.EventLog, logger *zap.Logger) http.HandlerFu
 		page, err := events.Events(request.Context(), models.EventSearch{
 			Provider: strings.TrimSpace(request.URL.Query().Get("provider")),
 			RunID:    strings.TrimSpace(request.URL.Query().Get("runId")),
+			Type:     strings.TrimSpace(request.URL.Query().Get("type")),
+			Level:    strings.TrimSpace(request.URL.Query().Get("level")),
 			Limit:    limit,
 			Offset:   offset,
 		})
@@ -248,6 +256,7 @@ func eventQueryInt(request *http.Request, name string, fallback int) (int, error
 
 type discoveryPreviewer interface {
 	Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error)
+	StreamPreview(context.Context, string, models.DiscoverySettings, func(models.Job) error) error
 }
 
 func discoveryPreviewHandler(previews discoveryPreviewer, logger *zap.Logger) http.HandlerFunc {
@@ -260,15 +269,14 @@ func discoveryPreviewHandler(previews discoveryPreviewer, logger *zap.Logger) ht
 		}
 
 		provider := request.PathValue("provider")
+		if request.Header.Get("Accept") == "text/event-stream" {
+			discoveryPreviewStreamHandler(writer, request, previews, logger, provider, settings)
+			return
+		}
+
 		jobs, err := previews.Preview(request.Context(), provider, settings)
 		if err != nil {
-			if errors.Is(err, services.ErrUnknownDiscoveryProvider) || errors.Is(err, services.ErrInvalidDiscoverySettings) {
-				logger.Warn("discovery preview rejected", zap.String("provider", provider), zap.Error(err))
-				writeError(writer, http.StatusBadRequest, err.Error())
-				return
-			}
-			logger.Error("discovery preview failed", zap.String("provider", provider), zap.Error(err))
-			writeError(writer, http.StatusBadGateway, "could not fetch provider preview")
+			writeDiscoveryPreviewError(writer, logger, provider, err)
 			return
 		}
 		if jobs == nil {
@@ -278,6 +286,70 @@ func discoveryPreviewHandler(previews discoveryPreviewer, logger *zap.Logger) ht
 		logger.Info("discovery preview fetched", zap.String("provider", provider), zap.Int("job_count", len(jobs)))
 		writeJSON(writer, http.StatusOK, map[string]any{"jobs": jobs})
 	}
+}
+
+func discoveryPreviewStreamHandler(writer http.ResponseWriter, request *http.Request, previews discoveryPreviewer, logger *zap.Logger, provider string, settings models.DiscoverySettings) {
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		logger.Error("discovery preview SSE is not supported", zap.String("provider", provider))
+		writeError(writer, http.StatusInternalServerError, "discovery preview events are unavailable")
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-cache")
+	writer.Header().Set("Connection", "keep-alive")
+	writer.Header().Set("Content-Type", "text/event-stream")
+	flusher.Flush()
+
+	jobCount := 0
+	err := previews.StreamPreview(request.Context(), provider, settings, func(job models.Job) error {
+		if err := writeSSE(writer, "job", job); err != nil {
+			return err
+		}
+		jobCount++
+		flusher.Flush()
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, services.ErrUnknownDiscoveryProvider) || errors.Is(err, services.ErrInvalidDiscoverySettings) {
+			logger.Warn("discovery preview rejected", zap.String("provider", provider), zap.Error(err))
+			if writeErr := writeSSE(writer, "error", map[string]string{"error": err.Error()}); writeErr != nil {
+				logger.Error("write discovery preview SSE error failed", zap.String("provider", provider), zap.Error(writeErr))
+			}
+		} else {
+			logger.Error("discovery preview failed", zap.String("provider", provider), zap.Error(err))
+			if writeErr := writeSSE(writer, "error", map[string]string{"error": "could not fetch provider preview"}); writeErr != nil {
+				logger.Error("write discovery preview SSE error failed", zap.String("provider", provider), zap.Error(writeErr))
+			}
+		}
+		flusher.Flush()
+		return
+	}
+
+	logger.Info("discovery preview fetched", zap.String("provider", provider), zap.Int("job_count", jobCount))
+	if err := writeSSE(writer, "complete", map[string]int{"jobCount": jobCount}); err != nil {
+		logger.Error("write discovery preview SSE completion failed", zap.String("provider", provider), zap.Error(err))
+		return
+	}
+	flusher.Flush()
+}
+
+func writeDiscoveryPreviewError(writer http.ResponseWriter, logger *zap.Logger, provider string, err error) {
+	if errors.Is(err, services.ErrUnknownDiscoveryProvider) || errors.Is(err, services.ErrInvalidDiscoverySettings) {
+		logger.Warn("discovery preview rejected", zap.String("provider", provider), zap.Error(err))
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	logger.Error("discovery preview failed", zap.String("provider", provider), zap.Error(err))
+	writeError(writer, http.StatusBadGateway, "could not fetch provider preview")
+}
+
+func writeSSE(writer io.Writer, event string, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(writer, "event: %s\ndata: %s\n\n", event, data)
+	return err
 }
 
 func discoverySettingsHandler(settings *services.DiscoverySettingsService, logger *zap.Logger) http.HandlerFunc {
@@ -312,6 +384,29 @@ func saveDiscoverySettingsHandler(settings *services.DiscoverySettingsService, l
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]any{"settings": saved})
+	}
+}
+
+func discoverySyncHandler(syncer syncTrigger, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		provider := request.PathValue("provider")
+		if !isDiscoveryProvider(provider) {
+			logger.Warn("invalid discovery sync provider", zap.String("provider", provider))
+			writeError(writer, http.StatusBadRequest, "unknown discovery provider")
+			return
+		}
+		started := syncer.Trigger(provider)
+		logger.Info("discovery sync requested", zap.String("provider", provider), zap.Bool("started", started))
+		writeJSON(writer, http.StatusAccepted, map[string]bool{"started": started})
+	}
+}
+
+func isDiscoveryProvider(provider string) bool {
+	switch provider {
+	case "adzuna", "jobicy", "linkedin", "remotive":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -43,6 +43,7 @@ type linkedInFetchOptions struct {
 	runID           string
 	requestInterval time.Duration
 	save            bool
+	onJob           func(models.Job) error
 }
 
 type linkedInClientError struct {
@@ -70,6 +71,18 @@ func (service *LinkedInJobs) Preview(ctx context.Context, settings models.Linked
 	fetch, err := service.fetch(ctx, settings, linkedInFetchOptions{
 		requestInterval: requestInterval,
 	})
+	return service.previewResult(fetch, err)
+}
+
+func (service *LinkedInJobs) PreviewStream(ctx context.Context, settings models.LinkedInSearchSettings, requestInterval time.Duration, onJob func(models.Job) error) (LinkedInFetchResult, error) {
+	fetch, err := service.fetch(ctx, settings, linkedInFetchOptions{
+		requestInterval: requestInterval,
+		onJob:           onJob,
+	})
+	return service.previewResult(fetch, err)
+}
+
+func (service *LinkedInJobs) previewResult(fetch LinkedInFetchResult, err error) (LinkedInFetchResult, error) {
 	var clientErr *linkedInClientError
 	if len(fetch.Jobs) > 0 && errors.As(err, &clientErr) {
 		if service.logger != nil {
@@ -92,6 +105,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 	runID := options.runID
 	requestInterval := options.requestInterval
 	save := options.save
+	onJob := options.onJob
 	fetch := LinkedInFetchResult{Jobs: make([]models.Job, 0, settings.Limit)}
 	seen := make(map[string]struct{}, settings.Limit)
 	requested := false
@@ -200,6 +214,11 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				})
 			}
 			fetch.Jobs = append(fetch.Jobs, job)
+			if onJob != nil {
+				if err := onJob(job); err != nil {
+					return fetch, err
+				}
+			}
 		}
 		start += len(results)
 	}

@@ -61,3 +61,34 @@ func TestJobExistsFindsJobBySourceAndSourceID(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
+
+func TestMatchQueueDoesNotStoreDuplicateJobs(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
+		{Source: "example", SourceID: "first", SourceURL: "https://example.com/first", Title: "First", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "second", SourceURL: "https://example.com/second", Title: "Second", Workplace: "remote", MetadataJSON: "{}"},
+	}))
+
+	_, err = repository.QueueJobMatch(context.Background(), 1, false)
+	require.NoError(t, err)
+	_, err = repository.QueueJobMatch(context.Background(), 2, false)
+	require.NoError(t, err)
+	_, err = repository.QueueJobMatch(context.Background(), 1, false)
+	require.NoError(t, err)
+
+	queue, err := repository.MatchQueue(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []int64{1, 2}, []int64{queue[0].ID, queue[1].ID})
+
+	found, err := repository.ReplaceMatchQueue(context.Background(), []int64{2, 1, 2})
+	require.NoError(t, err)
+	require.True(t, found)
+	queue, err = repository.MatchQueue(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []int64{2, 1}, []int64{queue[0].ID, queue[1].ID})
+}
