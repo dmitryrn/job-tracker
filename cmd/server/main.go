@@ -128,8 +128,8 @@ func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMa
 	return services.NewJobMatchChat(jobs, matches, items, profiles, resumes, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort, logger), nil
 }
 
-func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {
-	return services.NewJobMatchWorker(jobs, analyses, matches, queue, profiles, analyzer, matcher, logger, cfg.JobMatch.RunInterval)
+func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {
+	return services.NewJobMatchWorker(jobs, analyses, matches, queue, profiles, analyzer, matcher, events, logger, cfg.JobMatch.RunInterval)
 }
 
 func registerLifecycle(

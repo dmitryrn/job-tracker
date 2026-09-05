@@ -36,6 +36,7 @@ type JobMatchWorker struct {
 	profiles    repositories.UserProfileRepository
 	analyzer    JobAnalysisService
 	matcher     ProfileJobMatcher
+	events      repositories.EventRecorder
 	logger      *zap.Logger
 	runInterval time.Duration
 	cancel      context.CancelFunc
@@ -44,8 +45,8 @@ type JobMatchWorker struct {
 	mutex       sync.Mutex
 }
 
-func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, logger *zap.Logger, runInterval time.Duration) *JobMatchWorker {
-	return &JobMatchWorker{jobs: jobs, analyses: analyses, matches: matches, queue: queue, profiles: profiles, analyzer: analyzer, matcher: matcher, logger: logger, runInterval: runInterval, wake: make(chan struct{}, 1)}
+func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, runInterval time.Duration) *JobMatchWorker {
+	return &JobMatchWorker{jobs: jobs, analyses: analyses, matches: matches, queue: queue, profiles: profiles, analyzer: analyzer, matcher: matcher, events: events, logger: logger, runInterval: runInterval, wake: make(chan struct{}, 1)}
 }
 
 func (worker *JobMatchWorker) Register(lifecycle fx.Lifecycle) {
@@ -125,16 +126,6 @@ func (worker *JobMatchWorker) Wake() {
 }
 
 func (worker *JobMatchWorker) process(ctx context.Context) (bool, error) {
-	profile, err := worker.profiles.UserProfile(ctx)
-	if err != nil {
-		worker.logger.Error("load user profile for job matching failed", zap.Error(err))
-		return false, err
-	}
-	if profile == nil {
-		worker.logger.Warn("job match worker waiting for user profile")
-		return false, nil
-	}
-
 	queue, err := worker.queue.MatchQueue(ctx)
 	if err != nil {
 		worker.logger.Error("load job match queue failed", zap.Error(err))
@@ -143,19 +134,36 @@ func (worker *JobMatchWorker) process(ctx context.Context) (bool, error) {
 	if len(queue) == 0 {
 		return false, nil
 	}
+	profile, err := worker.profiles.UserProfile(ctx)
+	if err != nil {
+		worker.logger.Error("load user profile for job matching failed", zap.Error(err))
+		return false, err
+	}
+	if profile == nil {
+		worker.logger.Warn("job match worker waiting for user profile")
+		worker.recordEvent(ctx, "", "job_match.waiting_for_profile", "warn", "Job match worker waiting for user profile", nil)
+		return false, nil
+	}
 	return true, worker.processJob(ctx, queue[0], *profile)
 }
 
 func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJob, profile models.UserProfile) (err error) {
+	runID := fmt.Sprintf("job-match-%d-%d", job.ID, time.Now().UTC().UnixNano())
+	matchCompleted := false
+	worker.recordEvent(ctx, runID, "job_match.started", "info", "Job match started", map[string]any{"jobId": job.ID})
 	worker.logger.Info("job match worker executing", zap.Int64("job_id", job.ID))
 	defer func() {
 		if err != nil {
 			worker.logger.Error("job match worker failed", zap.Int64("job_id", job.ID), zap.Error(err))
+			worker.recordEvent(ctx, runID, "job_match.failed", "error", "Job match failed", map[string]any{"jobId": job.ID, "error": err.Error()})
 			return
 		}
 		worker.logger.Info("job match worker finished successfully", zap.Int64("job_id", job.ID))
+		if matchCompleted {
+			worker.recordEvent(ctx, runID, "job_match.completed", "info", "Job match completed", map[string]any{"jobId": job.ID})
+		}
 	}()
-	if err := worker.ensureJobAnalysis(ctx, job.ID); err != nil {
+	if err := worker.ensureJobAnalysis(ctx, runID, job.ID); err != nil {
 		return err
 	}
 
@@ -164,7 +172,11 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 		return err
 	}
 	if exists {
-		return worker.queue.RemoveMatchRequest(ctx, job.ID)
+		if err := worker.queue.RemoveMatchRequest(ctx, job.ID); err != nil {
+			return err
+		}
+		worker.recordEvent(ctx, runID, "job_match.skipped_existing", "info", "Job match skipped because an assessment already exists", map[string]any{"jobId": job.ID})
+		return nil
 	}
 
 	analysis, err := worker.analyses.JobAnalysis(ctx, job.ID)
@@ -182,14 +194,20 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 	if err != nil {
 		return fmt.Errorf("encode job match assessment: %w", err)
 	}
-	return worker.queue.CompleteMatchRequest(ctx, job.ID, string(content))
+	if err := worker.queue.CompleteMatchRequest(ctx, job.ID, string(content)); err != nil {
+		return err
+	}
+	matchCompleted = true
+	return nil
 }
 
-func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, jobID int64) (err error) {
+func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID string, jobID int64) (err error) {
+	stage := "load_job"
 	worker.logger.Info("job analysis worker executing", zap.Int64("job_id", jobID))
 	defer func() {
 		if err != nil {
 			worker.logger.Error("job analysis worker failed", zap.Int64("job_id", jobID), zap.Error(err))
+			worker.recordEvent(ctx, runID, "job_match.analysis.failed", "error", "Job match analysis failed", map[string]any{"jobId": jobID, "stage": stage, "error": err.Error()})
 			return
 		}
 		worker.logger.Info("job analysis worker finished successfully", zap.Int64("job_id", jobID))
@@ -203,20 +221,24 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, jobID int64
 		return ErrMatchJobNotFound
 	}
 
+	stage = "load_analysis"
 	existing, err := worker.analyses.JobAnalysis(ctx, jobID)
 	if err != nil {
 		return err
 	}
 	if jobAnalysisCurrent(existing, *job) {
 		worker.logger.Info("job analysis worker reused current analysis", zap.Int64("job_id", jobID))
+		worker.recordEvent(ctx, runID, "job_match.analysis.reused", "info", "Job match analysis reused", map[string]any{"jobId": jobID})
 		return nil
 	}
 
+	stage = "analyze"
 	analysis, err := worker.analyzer.Analyze(ctx, *job)
 	if err != nil {
 		return err
 	}
-	return worker.analyses.SaveJobAnalysis(ctx, models.JobAnalysisRecord{
+	stage = "save_analysis"
+	if err := worker.analyses.SaveJobAnalysis(ctx, models.JobAnalysisRecord{
 		JobID:                 jobID,
 		AnalyzerVersion:       analysis.AnalyzerVersion,
 		PromptVersion:         analysis.PromptVersion,
@@ -225,7 +247,20 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, jobID int64
 		AnalyzedAt:            analysis.AnalyzedAt,
 		NormalizedDescription: analysis.NormalizedDescription,
 		Analysis:              analysis.Analysis,
-	})
+	}); err != nil {
+		return err
+	}
+	worker.recordEvent(ctx, runID, "job_match.analysis.completed", "info", "Job match analysis completed", map[string]any{"jobId": jobID})
+	return nil
+}
+
+func (worker *JobMatchWorker) recordEvent(ctx context.Context, runID, eventType, level, message string, data map[string]any) {
+	if worker.events == nil {
+		return
+	}
+	if err := worker.events.RecordEvent(ctx, models.Event{Provider: "job_match", RunID: runID, Type: eventType, Level: level, Message: message, Data: data}); err != nil {
+		worker.logger.Error("record job match event failed", zap.String("run_id", runID), zap.String("event_type", eventType), zap.Error(err))
+	}
 }
 
 func jobAnalysisCurrent(analysis *models.JobAnalysisRecord, job models.Job) bool {

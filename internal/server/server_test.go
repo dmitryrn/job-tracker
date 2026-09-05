@@ -683,7 +683,7 @@ func newTestServerWithJobCompletionClient(repository *repositories.SQLite, clien
 }
 
 func newTestServerWithDependencies(repository *repositories.SQLite, client services.JobCompletionClient) *Server {
-	worker := services.NewJobMatchWorker(repository, repository, repository, repository, repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, zap.NewNop(), time.Minute)
+	worker := services.NewJobMatchWorker(repository, repository, repository, repository, repository, noOpJobAnalysisService{}, noOpProfileJobMatcher{}, nil, zap.NewNop(), time.Minute)
 	return New(
 		config.Config{},
 		zap.NewNop(),
