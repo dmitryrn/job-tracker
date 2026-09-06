@@ -16,7 +16,7 @@ const searchFieldOptions = [
   { value: "body", label: "Description" },
 ];
 
-const pageSize = 50;
+const pageSizeOptions = [10, 25, 50];
 
 export function formatDate(value: string, now = new Date()) {
   if (!value) {
@@ -108,6 +108,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
   const [jobs, setJobs] = useState<BrowseJob[]>([]);
   const [companies, setCompanies] = useState<BrowseCompany[]>([]);
   const [queuedJobIDs, setQueuedJobIDs] = useState<Set<number>>(() => new Set());
+  const [pageSize, setPageSize] = useState(25);
   const [offset, setOffset] = useState(0);
   const [totalJobs, setTotalJobs] = useState(0);
   const [error, setError] = useState("");
@@ -149,7 +150,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
     }
     void load();
     return () => controller.abort();
-  }, [match, mode, offset, provider, search, searchFields]);
+  }, [match, mode, offset, pageSize, provider, search, searchFields]);
 
   function toggleSearchField(field: string, checked: boolean) {
     setOffset(0);
@@ -249,6 +250,11 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
         <footer className="browse-pagination">
           <span>Showing {totalJobs === 0 ? 0 : offset + 1}-{Math.min(offset + jobs.length, totalJobs)} of {totalJobs}</span>
           <div>
+            <label className="browse-page-size" htmlFor="browse-page-size">Rows per page
+              <select id="browse-page-size" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setOffset(0); }}>
+                {pageSizeOptions.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </label>
             <button type="button" className="secondary-action" disabled={offset === 0} onClick={() => setOffset((current) => Math.max(0, current - pageSize))}>Previous</button>
             <button type="button" className="secondary-action" disabled={offset + jobs.length >= totalJobs} onClick={() => setOffset((current) => current + pageSize)}>Next</button>
           </div>
