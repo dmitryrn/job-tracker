@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# LinkedIn is added here only after the application exposes its custom metrics.
+scrape_configs: []

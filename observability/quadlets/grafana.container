@@ -1,7 +1,7 @@
 [Unit]
 Description=Grafana observability UI
-Requires=loki.service
-After=loki.service
+Requires=loki.service prometheus.service
+After=loki.service prometheus.service
 
 [Container]
 Image=docker.io/grafana/grafana@sha256:de942b207d876d0e0cb7365b284e3230c7b9fa9f2737079b70371bdfb6898c7f

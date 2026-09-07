@@ -1,0 +1,16 @@
+[Unit]
+Description=Local Prometheus metrics store
+
+[Container]
+Image=docker.io/prom/prometheus@sha256:2d25f68eb7aa2e654dadd83b45e5757259b32a1e4b6bc370f1eec927f491265b
+ContainerName=prometheus
+Network=observability.network
+Volume=/home/clanker/projects/nice/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+Volume=prometheus-data.volume:/prometheus:U
+Exec=--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=30d
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
