@@ -39,6 +39,11 @@ function formatAnalysisDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
 function chatRequestID() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -356,6 +361,8 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [queueing, setQueueing] = useState(false);
   const [queued, setQueued] = useState(false);
   const actionsMenuRef = useRef<HTMLDetailsElement>(null);
+  const postedAt = formatTimestamp(job.postedAt);
+  const matchedAt = match ? formatTimestamp(match.createdAt) : "";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -448,10 +455,11 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
         <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
       </nav>
       {error && <p className="query-error">{error}</p>}
-      {tab === "post" ? <p className="job-post">{plainText(job.bodyText)}</p> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
+      {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{plainText(job.bodyText)}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
         <>
           <section className="match-panel">
             <p className="eyebrow">Current match</p>
+            {matchedAt && <p className="detail-timestamp">Matched {matchedAt}</p>}
             {match === undefined ? <p>Loading match...</p> : match === null ? <p>{queued ? "Match request queued." : "No match yet."}</p> : match.assessment ? <JobMatchAssessmentPanel assessment={match.assessment} /> : <p>{match.content}</p>}
             {match !== undefined && <button type="button" className="secondary-action" disabled={queueing} onClick={() => void requestMatch(match !== null)}>{queueing ? "Queueing..." : match === null ? "Create match" : "Redo match"}</button>}
           </section>

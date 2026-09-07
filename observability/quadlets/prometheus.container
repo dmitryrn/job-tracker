@@ -1,5 +1,7 @@
 [Unit]
 Description=Local Prometheus metrics store
+Requires=metrics-proxy.service
+After=metrics-proxy.service
 
 [Container]
 Image=docker.io/prom/prometheus@sha256:2d25f68eb7aa2e654dadd83b45e5757259b32a1e4b6bc370f1eec927f491265b

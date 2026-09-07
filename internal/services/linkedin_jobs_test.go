@@ -75,6 +75,7 @@ func TestLinkedInJobsFetchSkipsIncompleteJobs(t *testing.T) {
 	require.Len(t, jobs, 1)
 	assert.Equal(t, "accepted", jobs[0].SourceID)
 	assert.Equal(t, []string{"missing-description", "missing-employment", "invalid-posted-at", "accepted"}, client.jobIDs)
+	assert.Equal(t, 6, fetch.InvalidJobs)
 }
 
 func TestLinkedInPostedAt(t *testing.T) {
@@ -240,6 +241,7 @@ func TestLinkedInJobsSyncSkipsExistingJobs(t *testing.T) {
 	assert.Equal(t, "first", jobs.upserted[0].SourceID)
 	assert.Equal(t, 1, fetch.FetchedJobs)
 	assert.Equal(t, 1, fetch.SavedJobs)
+	assert.Equal(t, 1, fetch.SkippedJobs)
 }
 
 type linkedInClientStub struct {

@@ -50,6 +50,7 @@ func main() {
 			repositories.NewJobMatchRepository,
 			repositories.NewJobMatchChatRepository,
 			repositories.NewMatchQueueRepository,
+			services.NewLinkedInMetrics,
 			services.NewJobSync,
 			services.NewLinkedInJobs,
 			services.NewJobBrowse,

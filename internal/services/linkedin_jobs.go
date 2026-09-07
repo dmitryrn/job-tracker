@@ -37,6 +37,8 @@ type LinkedInFetchResult struct {
 	DetailRequests int
 	FetchedJobs    int
 	SavedJobs      int
+	SkippedJobs    int
+	InvalidJobs    int
 }
 
 type linkedInFetchOptions struct {
@@ -145,6 +147,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				break
 			}
 			if !validLinkedInSearchResult(candidate) {
+				fetch.InvalidJobs++
 				continue
 			}
 			if _, exists := seen[candidate.ID]; exists {
@@ -162,6 +165,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				return fetch, err
 			}
 			if exists {
+				fetch.SkippedJobs++
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.skipped", "info", "LinkedIn job already exists", map[string]any{
 					"jobID": candidate.ID, "reason": "already_exists",
 				})
@@ -182,6 +186,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				return fetch, &linkedInClientError{cause: err}
 			}
 			if !validLinkedInJob(details) {
+				fetch.InvalidJobs++
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
 					"jobID": candidate.ID, "accepted": false, "reason": "missing_description",
 				})
@@ -189,6 +194,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 			}
 			job := toLinkedInJob(candidate, details)
 			if !validLinkedInResult(job) {
+				fetch.InvalidJobs++
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
 					"jobID": candidate.ID, "accepted": false, "reason": "missing_posted_at_or_employment_type",
 				})

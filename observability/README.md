@@ -66,7 +66,20 @@ Prometheus label: it is unbounded and would create high-cardinality time
 series. The existing SQLite application events remain the source for that
 per-run detail; metrics provide the aggregate counts and timestamps.
 
-The metrics design will use one short-lived gauge per run outcome/count and a
-last-success timestamp. Prometheus counters are not suitable for a per-run bar
-chart because they accumulate across all runs. The exact names and labels will
-be added with the instrumentation after Prometheus is running.
+The application exposes metrics only on a Unix socket. The `jobs-metrics-proxy`
+container bridges that socket to port `4002` inside the rootless Podman
+observability network, where Prometheus scrapes it. It cannot be reached from
+the LAN or the public API.
+
+The service exports only these metrics:
+
+- `linkedin_sync_jobs{outcome="added|skipped|invalid|errors"}`: counts from
+  the most recently completed run. `errors` is `1` when the run failed,
+  including an IP-gate failure, otherwise `0`.
+- `linkedin_sync_last_run_started_timestamp_seconds`
+- `linkedin_sync_last_run_finished_timestamp_seconds`
+- `linkedin_sync_last_success_timestamp_seconds`
+
+Prometheus counters are not suitable for a per-run bar chart because they
+accumulate across all runs. Query text remains in SQLite events, never a metric
+label.

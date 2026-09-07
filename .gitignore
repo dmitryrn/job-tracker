@@ -7,3 +7,4 @@ jobs.log
 ui/node_modules/
 ui/dist/
 ui/*.tsbuildinfo
+observability/metrics/*.sock

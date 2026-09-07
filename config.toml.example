@@ -1,5 +1,6 @@
 [server]
 http_address = ":8080"
+metrics_socket_path = "observability/metrics/jobs-metrics.sock"
 
 [database]
 path = "jobs.db"

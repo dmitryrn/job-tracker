@@ -750,6 +750,7 @@ func newTestServerWithDependencies(repository *repositories.SQLite, client servi
 		services.NewJobMatches(repository, repository),
 		services.NewJobMatchRequests(repository, worker),
 		services.NewJobMatchChat(repository, repository, repository, repository, repository, client, "test-model", "low", zap.NewNop()),
+		services.NewLinkedInMetrics(),
 	)
 }
 

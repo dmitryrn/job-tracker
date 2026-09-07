@@ -40,6 +40,7 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, 1000, cfg.Events.QueueSize)
 	assert.Equal(t, 100, cfg.Events.BatchSize)
 	assert.Equal(t, time.Second, cfg.Events.FlushInterval)
+	assert.Equal(t, "observability/metrics/jobs-metrics.sock", cfg.MetricsSocketPath)
 }
 
 func TestLoadRejectsInvalidProviderDuration(t *testing.T) {
@@ -70,7 +71,7 @@ func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 		},
 		{
 			name:    "server section",
-			content: strings.Replace(config, "[server]\nhttp_address = \":8080\"\n\n", "", 1),
+			content: strings.Replace(config, "[server]\nhttp_address = \":8080\"\nmetrics_socket_path = \"observability/metrics/jobs-metrics.sock\"\n\n", "", 1),
 		},
 		{
 			name:    "task provider",
@@ -97,6 +98,7 @@ func writeTestConfig(t *testing.T, adzunaInterval, remotiveInterval, jobicyInter
 func testConfig(adzunaInterval, remotiveInterval, jobicyInterval, linkedInInterval string) string {
 	return fmt.Sprintf(`[server]
 http_address = ":8080"
+metrics_socket_path = "observability/metrics/jobs-metrics.sock"
 
 [database]
 path = "jobs.db"

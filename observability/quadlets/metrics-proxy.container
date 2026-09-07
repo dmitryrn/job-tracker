@@ -1,0 +1,15 @@
+[Unit]
+Description=Jobs metrics bridge
+
+[Container]
+Image=docker.io/alpine/socat@sha256:bbde00cc25f090d53988e0effacec6899e961a16a7823198a0bbe3e95dfd1f66
+ContainerName=jobs-metrics-proxy
+Network=observability.network
+Volume=/home/clanker/projects/nice/observability/metrics:/run/jobs-metrics:ro
+Exec=TCP-LISTEN:4002,fork,reuseaddr UNIX-CONNECT:/run/jobs-metrics/jobs-metrics.sock
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -17,17 +17,18 @@ const (
 )
 
 type Config struct {
-	HTTPAddress    string
-	DatabasePath   string
-	Providers      ProviderConfig
-	OpenCode       OpenCodeConfig
-	OpenAI         OpenAIConfig
-	JobAnalysis    TaskConfig
-	ProfileMatcher TaskConfig
-	JobChat        TaskConfig
-	JobMatch       JobMatchConfig
-	Events         EventConfig
-	OpenRouter     OpenRouterConfig
+	HTTPAddress       string
+	MetricsSocketPath string
+	DatabasePath      string
+	Providers         ProviderConfig
+	OpenCode          OpenCodeConfig
+	OpenAI            OpenAIConfig
+	JobAnalysis       TaskConfig
+	ProfileMatcher    TaskConfig
+	JobChat           TaskConfig
+	JobMatch          JobMatchConfig
+	Events            EventConfig
+	OpenRouter        OpenRouterConfig
 }
 
 type ProviderConfig struct {
@@ -89,7 +90,8 @@ type LinkedInConfig struct {
 
 type fileConfig struct {
 	Server struct {
-		HTTPAddress string `toml:"http_address" validate:"notblank"`
+		HTTPAddress       string `toml:"http_address" validate:"notblank"`
+		MetricsSocketPath string `toml:"metrics_socket_path" validate:"notblank"`
 	} `toml:"server"`
 	Database struct {
 		Path string `toml:"path" validate:"notblank"`
@@ -232,8 +234,9 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		HTTPAddress:  source.Server.HTTPAddress,
-		DatabasePath: source.Database.Path,
+		HTTPAddress:       source.Server.HTTPAddress,
+		MetricsSocketPath: source.Server.MetricsSocketPath,
+		DatabasePath:      source.Database.Path,
 		Providers: ProviderConfig{
 			Adzuna: AdzunaConfig{
 				AppID:        appID,

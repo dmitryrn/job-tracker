@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -20,15 +23,18 @@ import (
 )
 
 type Server struct {
-	http   *http.Server
-	logger *zap.Logger
+	http              *http.Server
+	metrics           *http.Server
+	metricsSocketPath string
+	listener          net.Listener
+	logger            *zap.Logger
 }
 
 type syncTrigger interface {
 	Trigger(string) bool
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, syncer *services.JobSync, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, matches *services.JobMatches, requests *services.JobMatchRequests, chat *services.JobMatchChat) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, syncer *services.JobSync, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, matches *services.JobMatches, requests *services.JobMatchRequests, chat *services.JobMatchChat, metrics *services.LinkedInMetrics) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -70,6 +76,10 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 			Handler: cors(mux),
 		},
 		logger: logger,
+		metrics: &http.Server{
+			Handler: metrics.Handler(),
+		},
+		metricsSocketPath: cfg.MetricsSocketPath,
 	}
 }
 
@@ -955,8 +965,54 @@ func (server *Server) Register(lifecycle fx.Lifecycle) {
 					server.logger.Error("HTTP server failed", zap.Error(err))
 				}
 			}()
+			listener, err := listenMetrics(server.metricsSocketPath)
+			if err != nil {
+				server.logger.Error("metrics server start failed", zap.String("path", server.metricsSocketPath), zap.Error(err))
+				return err
+			}
+			server.listener = listener
+			server.logger.Info("metrics server starting", zap.String("path", server.metricsSocketPath))
+			go func() {
+				if err := server.metrics.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					server.logger.Error("metrics server failed", zap.Error(err))
+				}
+			}()
 			return nil
 		},
-		OnStop: server.http.Shutdown,
+		OnStop: func(ctx context.Context) error {
+			if err := server.http.Shutdown(ctx); err != nil {
+				server.logger.Error("HTTP server shutdown failed", zap.Error(err))
+				return err
+			}
+			if err := server.metrics.Shutdown(ctx); err != nil {
+				server.logger.Error("metrics server shutdown failed", zap.Error(err))
+				return err
+			}
+			if server.listener != nil {
+				if err := os.Remove(server.listener.Addr().String()); err != nil && !errors.Is(err, os.ErrNotExist) {
+					server.logger.Error("remove metrics socket failed", zap.Error(err))
+					return err
+				}
+			}
+			return nil
+		},
 	})
+}
+
+func listenMetrics(path string) (net.Listener, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return nil, fmt.Errorf("create metrics socket directory: %w", err)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("remove stale metrics socket: %w", err)
+	}
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, fmt.Errorf("listen on metrics socket: %w", err)
+	}
+	if err := os.Chmod(path, 0o660); err != nil {
+		listener.Close()
+		return nil, fmt.Errorf("set metrics socket permissions: %w", err)
+	}
+	return listener, nil
 }

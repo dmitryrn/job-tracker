@@ -35,6 +35,7 @@ type JobSync struct {
 	linkedInRequestInterval time.Duration
 	remotiveInterval        time.Duration
 	logger                  *zap.Logger
+	metrics                 linkedInRunMetrics
 	cancel                  context.CancelFunc
 	done                    chan struct{}
 	trigger                 chan string
@@ -42,11 +43,16 @@ type JobSync struct {
 	mutex                   sync.Mutex
 }
 
+type linkedInRunMetrics interface {
+	Start(time.Time)
+	Complete(time.Time, LinkedInFetchResult, bool)
+}
+
 type linkedInSyncer interface {
 	Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error)
 }
 
-func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, ipInfoClient *ipinfo.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRecorder, settings repositories.DiscoverySettingsRepository, logger *zap.Logger) *JobSync {
+func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, ipInfoClient *ipinfo.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRecorder, settings repositories.DiscoverySettingsRepository, metrics *LinkedInMetrics, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:                  adzunaClient,
 		ipInfo:                  ipInfoClient,
@@ -57,6 +63,7 @@ func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, ipInfoClient *ip
 		providerRuns:            providerRuns,
 		events:                  events,
 		settings:                settings,
+		metrics:                 metrics,
 		adzunaInterval:          cfg.Providers.Adzuna.SyncInterval,
 		jobicyInterval:          cfg.Providers.Jobicy.SyncInterval,
 		linkedinInterval:        cfg.Providers.LinkedIn.SyncInterval,
@@ -230,7 +237,13 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 		return
 	}
 	runID := fmt.Sprintf("linkedin-%d", time.Now().UTC().UnixNano())
+	if syncer.metrics != nil {
+		syncer.metrics.Start(time.Now())
+	}
 	if !syncer.allowLinkedInSync(ctx, runID) {
+		if syncer.metrics != nil {
+			syncer.metrics.Complete(time.Now(), LinkedInFetchResult{}, false)
+		}
 		return
 	}
 	syncer.recordLinkedInEvent(ctx, runID, "provider.run.started", "info", "LinkedIn job sync started", map[string]any{
@@ -242,8 +255,14 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 		syncer.logger.Error("LinkedIn fetch incomplete", zap.String("run_id", runID), zap.Error(fetchErr), zap.Int("fetched_job_count", fetch.FetchedJobs))
 	}
 	if fetchErr != nil {
+		if syncer.metrics != nil {
+			syncer.metrics.Complete(time.Now(), fetch, false)
+		}
 		syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, fetchErr)
 		return
+	}
+	if syncer.metrics != nil {
+		syncer.metrics.Complete(time.Now(), fetch, true)
 	}
 	syncer.logger.Info("stored LinkedIn jobs", zap.String("run_id", runID), zap.Int("count", fetch.SavedJobs))
 	syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, nil)

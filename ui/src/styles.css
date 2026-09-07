@@ -196,6 +196,7 @@ button { cursor: pointer; }
 .detail-tab:hover, .detail-tab.active { border-bottom-color: #e5ac4c; color: #1a2638; }
 .job-post, .match-panel { background: #fff; border: 1px solid #dedcd5; color: #304860; font-size: 14px; line-height: 1.65; margin: 22px 0; padding: 22px; white-space: pre-wrap; }
 .match-panel { white-space: normal; }
+.detail-timestamp { color: #68758a; font-size: 11px; font-weight: 700; letter-spacing: .08em; line-height: 1.4; margin: 0 0 14px; text-transform: uppercase; }
 .match-panel p:last-child { margin: 8px 0 0; }
 .match-panel h3 { font-size: 12px; letter-spacing: .06em; margin: 18px 0 6px; text-transform: uppercase; }
 .match-panel ul { margin: 6px 0; padding-left: 20px; }
