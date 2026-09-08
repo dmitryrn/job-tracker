@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
+import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
 
 type JobDetailViewProps = {
@@ -357,10 +357,14 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [rejectionOpen, setRejectionOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
   const [queueing, setQueueing] = useState(false);
   const [queued, setQueued] = useState(false);
   const actionsMenuRef = useRef<HTMLDetailsElement>(null);
+  const rejectionDialogRef = useRef<HTMLDialogElement>(null);
   const postedAt = formatTimestamp(job.postedAt);
   const matchedAt = match ? formatTimestamp(match.createdAt) : "";
 
@@ -396,6 +400,13 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     return () => document.removeEventListener("pointerdown", closeActions);
   }, [actionsOpen]);
 
+  useEffect(() => {
+    const dialog = rejectionDialogRef.current;
+    if (rejectionOpen && dialog && !dialog.open) {
+      dialog.showModal();
+    }
+  }, [rejectionOpen]);
+
   async function removeJob() {
     if (!window.confirm(`Delete ${job.title} from the database?`)) {
       return;
@@ -407,6 +418,23 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not delete job");
       setDeleting(false);
+    }
+  }
+
+  async function rejectJobApplication(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const reason = rejectionReason.trim();
+    if (!reason || rejecting) {
+      return;
+    }
+    setRejecting(true);
+    try {
+      await rejectJob(job.id, reason);
+      rejectionDialogRef.current?.close();
+      onDeleted();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not mark job as won't apply");
+      setRejecting(false);
     }
   }
 
@@ -439,6 +467,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
             <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
             <div className="job-overflow-menu">
               <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
+              <button type="button" className="reject-action" onClick={() => { setActionsOpen(false); setRejectionReason(""); setRejectionOpen(true); }}>Won't apply</button>
               <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
             </div>
           </details>
@@ -466,6 +495,22 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
           {analysis === undefined ? <p className="analysis-loading">Loading job analysis...</p> : analysis && <JobAnalysisPanel record={analysis} />}
         </>
       )}
+      <dialog className="job-rejection-dialog" ref={rejectionDialogRef} onClose={() => setRejectionOpen(false)}>
+        <form onSubmit={(event) => void rejectJobApplication(event)}>
+          <header>
+            <p className="eyebrow">Won't apply</p>
+            <h2>Why are you passing on this role?</h2>
+            <p>This removes the role and its match from the Jobs and Matches pages.</p>
+          </header>
+          <label htmlFor="job-rejection-reason">Reason
+            <textarea id="job-rejection-reason" autoFocus value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} placeholder="e.g. Only onsite in Berlin" required rows={3} />
+          </label>
+          <div className="job-rejection-actions">
+            <button type="button" className="secondary-action" disabled={rejecting} onClick={() => rejectionDialogRef.current?.close()}>Cancel</button>
+            <button type="submit" className="reject-action" disabled={rejecting || !rejectionReason.trim()}>{rejecting ? "Saving..." : "Mark as won't apply"}</button>
+          </div>
+        </form>
+      </dialog>
     </section>
   );
 }

@@ -187,6 +187,20 @@ button { cursor: pointer; }
 .job-overflow summary svg { fill: currentColor; height: 16px; width: 16px; }
 .job-overflow-menu { background: #fff; border: 1px solid #dedcd5; box-shadow: 0 5px 16px rgb(26 38 56 / 16%); display: grid; gap: 6px; padding: 6px; position: absolute; right: 0; top: calc(100% + 5px); white-space: nowrap; z-index: 2; }
 .job-overflow-menu .download-resume { display: block; text-align: center; }
+.reject-action { background: transparent; border: 1px solid #a26d20; border-radius: 4px; color: #8a5a1b; padding: 8px 10px; }
+.reject-action:hover { background: #fff7e8; }
+.reject-action:disabled { cursor: wait; opacity: .65; }
+.job-rejection-dialog { background: #fff; border: 1px solid #cbd2d7; border-radius: 8px; box-shadow: 0 18px 52px rgb(16 26 43 / 32%); color: #1a2638; margin: auto; max-width: min(480px, calc(100vw - 32px)); padding: 0; width: 100%; }
+.job-rejection-dialog::backdrop { background: rgb(16 26 43 / 55%); }
+.job-rejection-dialog form { display: grid; gap: 18px; padding: 20px; }
+.job-rejection-dialog header { display: grid; gap: 7px; }
+.job-rejection-dialog .eyebrow, .job-rejection-dialog h2, .job-rejection-dialog p { margin: 0; }
+.job-rejection-dialog .eyebrow { color: #8a5a1b; }
+.job-rejection-dialog h2 { font-family: Georgia, serif; font-size: 22px; font-weight: 400; line-height: 1.2; }
+.job-rejection-dialog p { color: #65758a; font-size: 13px; line-height: 1.5; }
+.job-rejection-dialog label { color: #4b6075; display: grid; font-size: 12px; font-weight: 700; gap: 6px; }
+.job-rejection-dialog textarea { border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; font: inherit; line-height: 1.5; padding: 10px; resize: vertical; }
+.job-rejection-actions { display: flex; gap: 10px; justify-content: end; }
 .job-page-meta { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 18px 0 0; }
 .job-page-meta > div { background: #e9edf0; border-radius: 3px; min-width: 0; padding: 8px 10px; }
 .job-page-meta dt { color: #68758a; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiURL, fetchJobMatches, fetchJobs } from "./api";
+import { apiURL, fetchJobMatches, fetchJobs, rejectJob } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -41,4 +41,19 @@ describe("fetchJobMatches", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
+});
+
+describe("rejectJob", () => {
+	it("sends the reason for not applying", async () => {
+		vi.stubGlobal("window", { location: { origin: "http://10.8.0.4:4000" } });
+		const fetch = vi.fn().mockResolvedValue({ ok: true });
+		vi.stubGlobal("fetch", fetch);
+
+		await rejectJob(42, "Only onsite in Berlin");
+
+		expect(fetch).toHaveBeenCalledWith(
+			"http://10.8.0.4:4000/api/jobs/42/rejection",
+			{ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: "Only onsite in Berlin" }) },
+		);
+	});
 });

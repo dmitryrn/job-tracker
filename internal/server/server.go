@@ -40,6 +40,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
 	mux.HandleFunc("GET /api/jobs/{id}", jobHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
+	mux.HandleFunc("POST /api/jobs/{id}/rejection", rejectJobHandler(browse, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match/resume.pdf", jobApplicationResumePDFHandler(chat, resumePDF, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
@@ -561,6 +562,43 @@ func deleteJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 			writeError(writer, http.StatusNotFound, "job not found")
 			return
 		}
+		writer.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func rejectJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			logger.Warn("invalid job ID for rejection", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			logger.Warn("invalid job rejection", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "rejection must be valid JSON")
+			return
+		}
+		rejected, err := browse.RejectJob(request.Context(), id, body.Reason)
+		if errors.Is(err, services.ErrEmptyJobRejectionReason) {
+			logger.Warn("job rejection without a reason", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			logger.Error("reject job failed", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not reject job")
+			return
+		}
+		if !rejected {
+			logger.Warn("reject job not found", zap.Int64("job_id", id))
+			writeError(writer, http.StatusNotFound, "job not found")
+			return
+		}
+		logger.Info("job marked as won't apply", zap.Int64("job_id", id))
 		writer.WriteHeader(http.StatusNoContent)
 	}
 }

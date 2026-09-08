@@ -121,6 +121,9 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)",
 	).From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
+	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
+	query = query.Where(rejected)
+	countQuery = countQuery.Where(rejected)
 	if search.Search != "" && len(search.Fields) > 0 {
 		matches := squirrel.Or{}
 		for _, field := range search.Fields {
@@ -230,6 +233,45 @@ func (repository *SQLite) Delete(ctx context.Context, id int64) (bool, error) {
 		return false, fmt.Errorf("commit delete job: %w", err)
 	}
 	return deleted > 0, nil
+}
+
+func (repository *SQLite) Reject(ctx context.Context, id int64, reason string) (bool, error) {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin reject job transaction: %w", err)
+	}
+	defer transaction.Rollback()
+
+	if _, err := repository.job(ctx, transaction, id); errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	queue, err := readMatchQueue(ctx, transaction)
+	if err != nil {
+		return false, err
+	}
+	if updatedQueue, removed := removeAllMatchRequests(queue, id); removed {
+		if err := writeMatchQueue(ctx, transaction, updatedQueue); err != nil {
+			return false, err
+		}
+	}
+
+	statement, args, err := sqlBuilder.Insert("job_rejections").
+		Columns("job_id", "reason", "rejected_at").
+		Values(id, reason, time.Now().UTC().Format(time.RFC3339)).
+		Suffix("ON CONFLICT(job_id) DO UPDATE SET reason = excluded.reason, rejected_at = excluded.rejected_at").
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build reject job query: %w", err)
+	}
+	if _, err := transaction.ExecContext(ctx, statement, args...); err != nil {
+		return false, fmt.Errorf("reject job: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return false, fmt.Errorf("commit reject job: %w", err)
+	}
+	return true, nil
 }
 
 func (repository *SQLite) Providers(ctx context.Context) ([]string, error) {
@@ -452,6 +494,9 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text", "job_matches.created_at", "job_matches.content",
 	).From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
+	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
+	query = query.Where(rejected)
+	countQuery = countQuery.Where(rejected)
 	if search.MinimumScore != nil {
 		minimumScore := squirrel.Expr(assessmentScore+" >= ?", *search.MinimumScore)
 		query = query.Where(minimumScore)

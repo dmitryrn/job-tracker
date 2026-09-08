@@ -474,6 +474,18 @@ export async function deleteJob(id: number) {
   }
 }
 
+export async function rejectJob(id: number, reason: string) {
+  const response = await fetch(apiURL(`jobs/${id}/rejection`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => undefined) as { error?: string } | undefined;
+    throw new Error(body?.error || `Could not mark job as won't apply (${response.status})`);
+  }
+}
+
 export async function revertJobMatchChat(id: number, sequence: number) {
 	const response = await fetch(apiURL(`jobs/${id}/match/chat/${sequence}`), { method: "DELETE" });
   if (!response.ok) {

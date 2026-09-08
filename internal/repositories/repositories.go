@@ -13,6 +13,7 @@ type JobRepository interface {
 	List(context.Context, models.JobSearch) (models.JobPage, error)
 	Job(context.Context, int64) (*models.BrowseJob, error)
 	Delete(context.Context, int64) (bool, error)
+	Reject(context.Context, int64, string) (bool, error)
 	Providers(context.Context) ([]string, error)
 	Companies(context.Context, string) ([]models.BrowseCompany, error)
 	AnalysisJob(context.Context, int64) (*models.Job, error)

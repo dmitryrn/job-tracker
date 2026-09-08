@@ -103,6 +103,55 @@ func TestJobAPIRejectsUnknownSearchField(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestJobAPIMarksJobsAsWontApply(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
+		{Source: "example", SourceID: "matched", SourceURL: "https://example.com/matched", Title: "Matched", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "queued", SourceURL: "https://example.com/queued", Title: "Queued", Workplace: "remote", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "visible", SourceURL: "https://example.com/visible", Title: "Visible", Workplace: "remote", MetadataJSON: "{}"},
+	}))
+	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "Existing match"))
+	_, err = repository.QueueJobMatch(context.Background(), 2, false)
+	require.NoError(t, err)
+	handler := newTestServer(repository).http.Handler
+
+	response := requestWithBody(handler, http.MethodPost, "/api/jobs/3/rejection", `{"reason":" "}`)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs/1/rejection", `{"reason":"Only onsite in Berlin"}`)
+	assert.Equal(t, http.StatusNoContent, response.Code)
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs/2/rejection", `{"reason":"Not a suitable role"}`)
+	assert.Equal(t, http.StatusNoContent, response.Code)
+
+	response = request(handler, http.MethodGet, "/api/jobs")
+	var jobs models.JobPage
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
+	assert.Equal(t, 1, jobs.Total)
+	require.Len(t, jobs.Jobs, 1)
+	assert.Equal(t, int64(3), jobs.Jobs[0].ID)
+
+	response = request(handler, http.MethodGet, "/api/matches")
+	var matches models.JobMatchPage
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matches))
+	assert.Zero(t, matches.Total)
+	assert.Empty(t, matches.Matches)
+
+	response = request(handler, http.MethodGet, "/api/match-queue")
+	var queue struct {
+		Jobs []models.BrowseJob `json:"jobs"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&queue))
+	assert.Empty(t, queue.Jobs)
+
+	var reason string
+	require.NoError(t, db.QueryRow(`SELECT reason FROM job_rejections WHERE job_id = 1`).Scan(&reason))
+	assert.Equal(t, "Only onsite in Berlin", reason)
+}
+
 func TestJobAPIListsPaginatedResults(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)

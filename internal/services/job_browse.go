@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrInvalidSearchField = errors.New("fields must contain only title, company, location, or body")
-	ErrInvalidMatchFilter = errors.New("match must be all, has, or none")
+	ErrInvalidSearchField      = errors.New("fields must contain only title, company, location, or body")
+	ErrInvalidMatchFilter      = errors.New("match must be all, has, or none")
+	ErrEmptyJobRejectionReason = errors.New("a reason is required")
 )
 
 type JobBrowse struct {
@@ -47,6 +48,14 @@ func (browse *JobBrowse) Job(ctx context.Context, id int64) (*models.BrowseJob, 
 
 func (browse *JobBrowse) DeleteJob(ctx context.Context, id int64) (bool, error) {
 	return browse.repository.Delete(ctx, id)
+}
+
+func (browse *JobBrowse) RejectJob(ctx context.Context, id int64, reason string) (bool, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return false, ErrEmptyJobRejectionReason
+	}
+	return browse.repository.Reject(ctx, id, reason)
 }
 
 func (browse *JobBrowse) Providers(ctx context.Context) ([]string, error) {
