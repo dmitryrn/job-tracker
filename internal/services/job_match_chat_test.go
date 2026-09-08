@@ -207,33 +207,3 @@ func TestChatResumeForLLMIncludesEducationID(t *testing.T) {
 	require.Len(t, chat.Education, 1)
 	assert.Equal(t, int64(7), chat.Education[0].ID)
 }
-
-func TestApplyResumePatchEditsCompetencyTitleAndSections(t *testing.T) {
-	resume := models.Resume{Competencies: []models.ResumeCompetency{{
-		ID: 7, Title: "Backend",
-	}, {
-		ID: 9, Title: "Frontend",
-	}}}
-
-	err := applyResumePatch(&resume, resumePatch{Operations: []resumePatchOperation{
-		{Op: "replace", Section: "competencyTitle", ID: 7, Expected: "Backend", Value: "Platform engineering"},
-		{Op: "remove", Section: "competency", ID: 9, Expected: "Frontend"},
-		{Op: "add", Section: "competency", Value: "Data systems"},
-	}})
-
-	require.NoError(t, err)
-	assert.Equal(t, []models.ResumeCompetency{{ID: 7, Title: "Platform engineering"}, {ID: 8, Title: "Data systems"}}, resume.Competencies)
-}
-
-func TestApplyResumePatchRejectsCompetencyTitleWithWrongExpectedValue(t *testing.T) {
-	resume := models.Resume{Competencies: []models.ResumeCompetency{{
-		ID: 7, Title: "Backend",
-	}}}
-
-	err := applyResumePatch(&resume, resumePatch{Operations: []resumePatchOperation{{
-		Op: "replace", Section: "competencyTitle", ID: 7, Expected: "Frontend", Value: "Platform engineering",
-	}}})
-
-	assert.Error(t, err)
-	assert.Equal(t, "Backend", resume.Competencies[0].Title)
-}

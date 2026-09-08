@@ -139,8 +139,6 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
     {{if .Resume.Links}}<p class="links">{{range $index, $link := .Resume.Links}}{{if $index}}<span></span>{{end}}<span><a href="{{$link.URL}}">{{$link.Label}}</a></span>{{end}}</p>{{end}}
   </section>
 
-   {{if .Resume.Competencies}}<section><h2>Competencies</h2>{{range .Resume.Competencies}}<div class="section"><h3>{{.Title}}</h3>{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}</div>{{end}}</section>{{end}}
-
    {{if .Resume.Experience}}<section><h2>Professional Experience</h2>{{range .Resume.Experience}}<article class="role"><div class="role-heading"><h3>{{.Company}}{{if .Title}} | {{.Title}}{{end}}</h3><span class="dates">{{.StartDate}}{{if .IsCurrent}} - present{{else if .EndDate}} - {{.EndDate}}{{end}}</span></div>{{if .Location}}<p class="location">{{.Location}}</p>{{end}}{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}{{if .Stack}}<p class="stack">Stack: {{.Stack}}</p>{{end}}</article>{{end}}</section>{{end}}
 
    {{if .Resume.Education}}<section><h2>Education</h2>{{range .Resume.Education}}<article class="education"><div class="education-heading"><h3>{{.Institution}}{{if .Location}}, {{.Location}}{{end}}</h3><span class="dates">{{.StartDate}}{{if .EndDate}} - {{.EndDate}}{{end}}</span></div>{{if .Degree}}<p><strong>{{.Degree}}</strong>{{if .FieldOfStudy}}, {{.FieldOfStudy}}{{end}}</p>{{end}}{{if .Details}}<p>{{.Details}}</p>{{end}}</article>{{end}}</section>{{end}}

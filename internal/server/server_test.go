@@ -687,12 +687,12 @@ func TestResumeAPI(t *testing.T) {
 		"fullName":" Ada Lovelace ","headline":" Backend engineer ","town":" Berlin ","country":" Germany ","email":" ada@example.com ","phone":" +49 123 ","summaryParagraphs":[{"content":" Builds systems. "},{"content":""},{"content":" Delivers reliable software. "}],
 		"links":[{"label":" GitHub ","url":" https://github.com/ada "},{"label":"","url":""}],
 		"skills":[{"name":" Go "},{"name":""}],
-		"competencies":[{"title":" Backend systems ","bullets":[{"content":" Built APIs "},{"content":""}]}],
 		"experience":[{"company":" Acme ","title":" Engineer ","location":" Berlin ","startDate":"2023-01","endDate":"","isCurrent":true,"stack":" Go, PostgreSQL ","bullets":[{"content":" Shipped a service "},{"content":""}]}],
 		"education":[{"institution":" University ","location":" Berlin ","degree":" MSc ","fieldOfStudy":" Computer science ","startDate":"2019","endDate":"2021","details":" Distributed systems "},{"institution":"","location":"","degree":"","fieldOfStudy":"","startDate":"","endDate":"","details":""}]
 	}`)
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.NotContains(t, response.Body.String(), `"level"`)
+	assert.NotContains(t, response.Body.String(), `"competencies"`)
 
 	var result struct {
 		Resume models.Resume `json:"resume"`
@@ -708,9 +708,6 @@ func TestResumeAPI(t *testing.T) {
 	assert.Equal(t, "Go", result.Resume.Skills[0].Name)
 	require.Len(t, result.Resume.Links, 1)
 	assert.Equal(t, "GitHub", result.Resume.Links[0].Label)
-	require.Len(t, result.Resume.Competencies, 1)
-	assert.Equal(t, "Built APIs", result.Resume.Competencies[0].Bullets[0].Content)
-	assert.Positive(t, result.Resume.Competencies[0].Bullets[0].ID)
 	require.Len(t, result.Resume.Experience, 1)
 	assert.True(t, result.Resume.Experience[0].IsCurrent)
 	require.Len(t, result.Resume.Education, 1)

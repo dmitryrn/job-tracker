@@ -32,9 +32,6 @@ func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 	if resume.Skills, err = readResumeSkills(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
-	if resume.Competencies, err = readResumeCompetencies(ctx, repository.db, resume.ID); err != nil {
-		return nil, err
-	}
 	if resume.Experience, err = readResumeExperience(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
@@ -130,9 +127,6 @@ func reconcileResumeSections(ctx context.Context, transaction *sql.Tx, resume *m
 	if resume.Skills, err = reconcileResumeSkills(ctx, transaction, resume.ID, resume.Skills); err != nil {
 		return fmt.Errorf("save base resume skills: %w", err)
 	}
-	if resume.Competencies, err = reconcileResumeCompetencies(ctx, transaction, resume.ID, resume.Competencies); err != nil {
-		return fmt.Errorf("save base resume competencies: %w", err)
-	}
 	if resume.Experience, err = reconcileResumeExperience(ctx, transaction, resume.ID, resume.Experience); err != nil {
 		return fmt.Errorf("save base resume experience: %w", err)
 	}
@@ -224,38 +218,6 @@ func reconcileResumeSkills(ctx context.Context, transaction *sql.Tx, resumeID in
 		seen[value.ID] = true
 	}
 	return values, deleteUnseenSections(ctx, transaction, "resume_skills", existing, seen)
-}
-
-func reconcileResumeCompetencies(ctx context.Context, transaction *sql.Tx, resumeID int64, values []models.ResumeCompetency) ([]models.ResumeCompetency, error) {
-	existing, err := sectionIDs(ctx, transaction, "resume_competencies", "resume_id", resumeID)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[int64]bool, len(values))
-	for index := range values {
-		value := &values[index]
-		if value.ID == 0 {
-			result, err := transaction.ExecContext(ctx, `INSERT INTO resume_competencies (resume_id, title, sort_order) VALUES (?, ?, ?)`, resumeID, value.Title, index)
-			if err != nil {
-				return nil, err
-			}
-			value.ID, err = result.LastInsertId()
-			if err != nil {
-				return nil, err
-			}
-		} else if !existing[value.ID] || seen[value.ID] {
-			return nil, fmt.Errorf("invalid resume competency ID %d", value.ID)
-		} else if _, err := transaction.ExecContext(ctx, `UPDATE resume_competencies SET title = ?, sort_order = ? WHERE id = ? AND resume_id = ?`, value.Title, index, value.ID, resumeID); err != nil {
-			return nil, err
-		}
-		var bulletErr error
-		value.Bullets, bulletErr = reconcileResumeText(ctx, transaction, "resume_competency_bullets", "competency_id", value.ID, value.Bullets)
-		if bulletErr != nil {
-			return nil, bulletErr
-		}
-		seen[value.ID] = true
-	}
-	return values, deleteUnseenSections(ctx, transaction, "resume_competencies", existing, seen)
 }
 
 func reconcileResumeExperience(ctx context.Context, transaction *sql.Tx, resumeID int64, values []models.ResumeExperience) ([]models.ResumeExperience, error) {
@@ -397,55 +359,6 @@ func readResumeSkills(ctx context.Context, database *sql.DB, resumeID int64) ([]
 		skills = append(skills, skill)
 	}
 	return skills, rows.Err()
-}
-
-func readResumeCompetencies(ctx context.Context, database *sql.DB, resumeID int64) ([]models.ResumeCompetency, error) {
-	rows, err := database.QueryContext(ctx, `SELECT id, title FROM resume_competencies WHERE resume_id = ? ORDER BY sort_order, id`, resumeID)
-	if err != nil {
-		return nil, fmt.Errorf("get base resume competencies: %w", err)
-	}
-	type competencyRow struct {
-		id    int64
-		title string
-	}
-	stored := make([]competencyRow, 0)
-	for rows.Next() {
-		var row competencyRow
-		if err := rows.Scan(&row.id, &row.title); err != nil {
-			rows.Close()
-			return nil, fmt.Errorf("scan base resume competency: %w", err)
-		}
-		stored = append(stored, row)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, fmt.Errorf("iterate base resume competencies: %w", err)
-	}
-	rows.Close()
-
-	competencies := make([]models.ResumeCompetency, 0, len(stored))
-	for _, row := range stored {
-		bulletRows, err := database.QueryContext(ctx, `SELECT id, content FROM resume_competency_bullets WHERE competency_id = ? ORDER BY sort_order, id`, row.id)
-		if err != nil {
-			return nil, fmt.Errorf("get base resume competency bullets: %w", err)
-		}
-		competency := models.ResumeCompetency{ID: row.id, Title: row.title, Bullets: make([]models.ResumeText, 0)}
-		for bulletRows.Next() {
-			var bullet models.ResumeText
-			if err := bulletRows.Scan(&bullet.ID, &bullet.Content); err != nil {
-				bulletRows.Close()
-				return nil, fmt.Errorf("scan base resume competency bullet: %w", err)
-			}
-			competency.Bullets = append(competency.Bullets, bullet)
-		}
-		if err := bulletRows.Err(); err != nil {
-			bulletRows.Close()
-			return nil, fmt.Errorf("iterate base resume competency bullets: %w", err)
-		}
-		bulletRows.Close()
-		competencies = append(competencies, competency)
-	}
-	return competencies, nil
 }
 
 func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64) ([]models.ResumeExperience, error) {

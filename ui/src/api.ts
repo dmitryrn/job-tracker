@@ -79,12 +79,6 @@ export type ResumeSkill = {
   name: string;
 };
 
-export type ResumeCompetency = {
-  id: number;
-  title: string;
-  bullets: ResumeText[];
-};
-
 export type ResumeExperience = {
   id: number;
   company: string;
@@ -119,7 +113,6 @@ export type Resume = {
   summaryParagraphs: ResumeText[];
   links: ResumeLink[];
   skills: ResumeSkill[];
-  competencies: ResumeCompetency[];
   experience: ResumeExperience[];
   education: ResumeEducation[];
   hasPhoto: boolean;

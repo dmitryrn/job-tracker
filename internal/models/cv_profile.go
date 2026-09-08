@@ -44,7 +44,6 @@ type Resume struct {
 	SummaryParagraphs []ResumeText       `json:"summaryParagraphs"`
 	Links             []ResumeLink       `json:"links"`
 	Skills            []ResumeSkill      `json:"skills"`
-	Competencies      []ResumeCompetency `json:"competencies"`
 	Experience        []ResumeExperience `json:"experience"`
 	Education         []ResumeEducation  `json:"education"`
 	HasPhoto          bool               `json:"hasPhoto"`
@@ -70,12 +69,6 @@ type ResumeText struct {
 type ResumeSkill struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
-}
-
-type ResumeCompetency struct {
-	ID      int64        `json:"id"`
-	Title   string       `json:"title"`
-	Bullets []ResumeText `json:"bullets"`
 }
 
 type ResumeExperience struct {

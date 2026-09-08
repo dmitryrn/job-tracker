@@ -20,7 +20,7 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 
 	for _, table := range []string{
 		"companies", "jobs", "provider_runs", "user_profiles", "job_matches", "job_match_queue", "job_analyses",
-		"resumes", "resume_links", "resume_skills", "resume_competencies", "resume_competency_bullets",
+		"resumes", "resume_links", "resume_skills",
 		"resume_experience", "resume_experience_bullets", "resume_education", "resume_summary_paragraphs", "job_match_chat_items",
 	} {
 		var count int
@@ -51,6 +51,29 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	var ftsTables int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'jobs_fts%'`).Scan(&ftsTables))
 	assert.Zero(t, ftsTables)
+}
+
+func TestRemoveResumeCompetenciesMigrationDropsTables(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	goose.SetBaseFS(files)
+	require.NoError(t, goose.SetDialect("sqlite3"))
+	require.NoError(t, goose.UpTo(db, "sql", 28))
+
+	for _, table := range []string{"resume_competencies", "resume_competency_bullets"} {
+		var count int
+		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count))
+		assert.Equal(t, 1, count)
+	}
+
+	require.NoError(t, goose.Up(db, "sql"))
+	for _, table := range []string{"resume_competencies", "resume_competency_bullets"} {
+		var count int
+		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count))
+		assert.Zero(t, count)
+	}
 }
 
 func TestResumeLocationMigrationSplitsTownAndCountry(t *testing.T) {

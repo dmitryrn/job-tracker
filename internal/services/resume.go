@@ -42,7 +42,6 @@ func (service *ResumeService) Save(ctx context.Context, resume models.Resume) (m
 	resume.SummaryParagraphs = cleanResumeParagraphs(resume.SummaryParagraphs)
 	resume.Links = cleanResumeLinks(resume.Links)
 	resume.Skills = cleanResumeSkills(resume.Skills)
-	resume.Competencies = cleanResumeCompetencies(resume.Competencies)
 	resume.Experience = cleanResumeExperience(resume.Experience)
 	resume.Education = cleanResumeEducation(resume.Education)
 	return service.repository.SaveResume(ctx, resume)
@@ -104,18 +103,6 @@ func cleanResumeSkills(skills []models.ResumeSkill) []models.ResumeSkill {
 		skill.Name = strings.TrimSpace(skill.Name)
 		if skill.Name != "" {
 			cleaned = append(cleaned, skill)
-		}
-	}
-	return cleaned
-}
-
-func cleanResumeCompetencies(competencies []models.ResumeCompetency) []models.ResumeCompetency {
-	cleaned := make([]models.ResumeCompetency, 0, len(competencies))
-	for _, competency := range competencies {
-		competency.Title = strings.TrimSpace(competency.Title)
-		competency.Bullets = cleanResumeBullets(competency.Bullets)
-		if competency.Title != "" {
-			cleaned = append(cleaned, competency)
 		}
 	}
 	return cleaned

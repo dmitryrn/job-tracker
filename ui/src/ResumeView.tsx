@@ -12,7 +12,6 @@ const emptyResume: Resume = {
   summaryParagraphs: [],
   links: [],
   skills: [],
-  competencies: [],
   experience: [],
   education: [],
   hasPhoto: false,
@@ -118,7 +117,6 @@ export default function ResumeView() {
 
           <SummarySection resume={resume} setResume={setResume} />
           <LinksSection resume={resume} setResume={setResume} />
-          <CompetenciesSection resume={resume} setResume={setResume} />
           <ExperienceSection resume={resume} setResume={setResume} />
           <EducationSection resume={resume} setResume={setResume} />
           <SkillsSection resume={resume} setResume={setResume} />
@@ -162,17 +160,6 @@ function SkillsSection({ resume, setResume }: ResumeSectionProps) {
     {resume.skills.length === 0 ? <Empty message="No skills yet." /> : <div className="resume-skill-editor">{resume.skills.map((skill, index) => <div className="resume-skill-row" key={skill.id || `new-${index}`}>
       <label>Skill<input value={skill.name} onChange={(event) => setResume((current) => ({ ...current, skills: current.skills.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) }))} placeholder="Go" /></label>
       <RemoveButton label="Remove" onClick={() => setResume((current) => ({ ...current, skills: current.skills.filter((_, itemIndex) => itemIndex !== index) }))} />
-    </div>)}</div>}
-  </section>;
-}
-
-function CompetenciesSection({ resume, setResume }: ResumeSectionProps) {
-  return <section className="profile-section">
-    <SectionHeading title="Key competencies" description="Group high-value evidence into short, focused sections." action="Add competency" onAdd={() => setResume((current) => ({ ...current, competencies: [...current.competencies, { id: 0, title: "", bullets: [] }] }))} />
-    {resume.competencies.length === 0 ? <Empty message="No competency sections yet." /> : <div className="history-editor">{resume.competencies.map((competency, index) => <div className="history-entry" key={competency.id || `new-${index}`}>
-      <label>Heading<input value={competency.title} onChange={(event) => setResume((current) => ({ ...current, competencies: current.competencies.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item) }))} placeholder="Backend systems" /></label>
-      <BulletEditor bullets={competency.bullets} onChange={(bulletIndex, value) => setResume((current) => ({ ...current, competencies: current.competencies.map((item, itemIndex) => itemIndex === index ? { ...item, bullets: item.bullets.map((bullet, index) => index === bulletIndex ? { ...bullet, content: value } : bullet) } : item) }))} onAdd={() => setResume((current) => ({ ...current, competencies: current.competencies.map((item, itemIndex) => itemIndex === index ? { ...item, bullets: [...item.bullets, { id: 0, content: "" }] } : item) }))} onRemove={(bulletIndex) => setResume((current) => ({ ...current, competencies: current.competencies.map((item, itemIndex) => itemIndex === index ? { ...item, bullets: item.bullets.filter((_, index) => index !== bulletIndex) } : item) }))} />
-      <RemoveButton label="Remove competency" onClick={() => setResume((current) => ({ ...current, competencies: current.competencies.filter((_, itemIndex) => itemIndex !== index) }))} />
     </div>)}</div>}
   </section>;
 }

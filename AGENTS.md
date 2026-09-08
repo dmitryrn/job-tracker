@@ -39,3 +39,4 @@ changing a unit definition. Read recent service logs with
 - verify Go builds with `go build -o /dev/null ./cmd/server` to avoid build artifacts
 - live analyzer fixtures may use available free OpenRouter models; authentication loads from `.env.tokens` at runtime
 - when restarting a service, make sure it works, check logs, etc
+- check sqlite db (in this dir) schema if needed

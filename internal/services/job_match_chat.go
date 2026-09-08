@@ -37,7 +37,7 @@ var resumePatchTool = openai.Tool{
 	Type: "function",
 	Function: openai.ToolFunction{
 		Name:        "revise_application_resume",
-		Description: "Apply narrowly targeted, factual resume tailoring changes. Use exact expected text from the application resume and never invent experience, credentials, employers, or dates. Use competency to add or remove a competency section and competencyTitle to rename a section. To add bullets to a new competency, first add it, then use its ID from the accepted revision in a follow-up call.",
+		Description: "Apply narrowly targeted, factual resume tailoring changes. Use exact expected text from the application resume and never invent experience, credentials, employers, or dates.",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"additionalProperties": false,
@@ -62,7 +62,7 @@ var resumePatchTool = openai.Tool{
 							},
 							"section": {
 								"type": "string",
-								"enum": ["headline", "summary", "skill", "competency", "competencyTitle", "competencyBullet", "experienceBullet", "educationDetails"]
+								"enum": ["headline", "summary", "skill", "experienceBullet", "educationDetails"]
 							},
 							"id": {
 								"type": "integer",
@@ -516,13 +516,12 @@ type chatResumeRevisionPayload struct {
 }
 
 type chatResume struct {
-	Headline          string                    `json:"headline"`
-	Country           string                    `json:"country"`
-	SummaryParagraphs []models.ResumeText       `json:"summaryParagraphs"`
-	Skills            []models.ResumeSkill      `json:"skills"`
-	Competencies      []models.ResumeCompetency `json:"competencies"`
-	Experience        []chatResumeExperience    `json:"experience"`
-	Education         []chatResumeEducation     `json:"education"`
+	Headline          string                 `json:"headline"`
+	Country           string                 `json:"country"`
+	SummaryParagraphs []models.ResumeText    `json:"summaryParagraphs"`
+	Skills            []models.ResumeSkill   `json:"skills"`
+	Experience        []chatResumeExperience `json:"experience"`
+	Education         []chatResumeEducation  `json:"education"`
 }
 
 type chatResumeExperience struct {
@@ -753,7 +752,6 @@ func chatResumeForLLM(resume models.Resume, country string) chatResume {
 		Country:           country,
 		SummaryParagraphs: resume.SummaryParagraphs,
 		Skills:            resume.Skills,
-		Competencies:      resume.Competencies,
 		Experience:        make([]chatResumeExperience, 0, len(resume.Experience)),
 		Education:         make([]chatResumeEducation, 0, len(resume.Education)),
 	}
@@ -962,24 +960,6 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			if err := patchResumeSkill(&resume.Skills, operation, value, expected); err != nil {
 				return fmt.Errorf("skill patch: %w", err)
 			}
-		case "competency":
-			if err := patchResumeCompetency(&resume.Competencies, operation, value, expected); err != nil {
-				return fmt.Errorf("competency patch: %w", err)
-			}
-		case "competencyTitle":
-			competency := findCompetency(resume.Competencies, operation.ID)
-			if competency == nil || operation.Op != "replace" || operation.ParentID != 0 || strings.TrimSpace(competency.Title) != expected || value == "" {
-				return errors.New("competency title replacement did not match the current value")
-			}
-			competency.Title = value
-		case "competencyBullet":
-			competency := findCompetency(resume.Competencies, operation.ParentID)
-			if competency == nil {
-				return fmt.Errorf("competency %d does not exist", operation.ParentID)
-			}
-			if err := patchResumeText(&competency.Bullets, operation, value, expected); err != nil {
-				return fmt.Errorf("competency bullet patch: %w", err)
-			}
 		case "experienceBullet":
 			experience := findExperience(resume.Experience, operation.ParentID)
 			if experience == nil {
@@ -1069,42 +1049,6 @@ func patchResumeSkill(values *[]models.ResumeSkill, operation resumePatchOperati
 	return fmt.Errorf("skill ID %d does not exist", operation.ID)
 }
 
-func patchResumeCompetency(values *[]models.ResumeCompetency, operation resumePatchOperation, value, expected string) error {
-	switch operation.Op {
-	case "add":
-		if operation.ID != 0 || operation.ParentID != 0 || value == "" {
-			return errors.New("new competency must have no IDs and a nonempty title")
-		}
-		*values = append(*values, models.ResumeCompetency{ID: nextResumeCompetencyID(*values), Title: value})
-		return nil
-	case "remove":
-		if operation.ParentID != 0 {
-			return errors.New("competency removal must not have a parent ID")
-		}
-		for index := range *values {
-			if (*values)[index].ID == operation.ID {
-				if strings.TrimSpace((*values)[index].Title) != expected {
-					return errors.New("expected competency title did not match")
-				}
-				*values = append((*values)[:index], (*values)[index+1:]...)
-				return nil
-			}
-		}
-		return fmt.Errorf("competency ID %d does not exist", operation.ID)
-	default:
-		return fmt.Errorf("unsupported operation %q", operation.Op)
-	}
-}
-
-func findCompetency(values []models.ResumeCompetency, id int64) *models.ResumeCompetency {
-	for index := range values {
-		if values[index].ID == id {
-			return &values[index]
-		}
-	}
-	return nil
-}
-
 func findExperience(values []models.ResumeExperience, id int64) *models.ResumeExperience {
 	for index := range values {
 		if values[index].ID == id {
@@ -1134,16 +1078,6 @@ func nextResumeTextID(values []models.ResumeText) int64 {
 }
 
 func nextResumeSkillID(values []models.ResumeSkill) int64 {
-	var maximum int64
-	for _, value := range values {
-		if value.ID > maximum {
-			maximum = value.ID
-		}
-	}
-	return maximum + 1
-}
-
-func nextResumeCompetencyID(values []models.ResumeCompetency) int64 {
 	var maximum int64
 	for _, value := range values {
 		if value.ID > maximum {

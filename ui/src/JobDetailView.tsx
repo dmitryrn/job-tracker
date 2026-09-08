@@ -347,9 +347,7 @@ function resumeDiff(previous: Resume, next: Resume) {
   if (previous.headline !== next.headline) changes.push({ key: "headline", label: "Headline", removed: previous.headline, added: next.headline });
   appendChanges("Summary", "summary", previous.summaryParagraphs, next.summaryParagraphs);
   appendChanges("Skill", "skill", previous.skills.map((item) => ({ id: item.id, content: item.name })), next.skills.map((item) => ({ id: item.id, content: item.name })));
-  appendChanges("Competency", "competency", previous.competencies.map((entry) => ({ id: entry.id, content: entry.title })), next.competencies.map((entry) => ({ id: entry.id, content: entry.title })));
   appendChanges("Experience bullet", "experience-bullet", previous.experience.flatMap((entry) => entry.bullets), next.experience.flatMap((entry) => entry.bullets));
-  appendChanges("Competency bullet", "competency-bullet", previous.competencies.flatMap((entry) => entry.bullets), next.competencies.flatMap((entry) => entry.bullets));
   appendChanges("Education details", "education-details", previous.education.map((entry) => ({ id: entry.id, content: entry.details })), next.education.map((entry) => ({ id: entry.id, content: entry.details })));
   return changes;
 }
