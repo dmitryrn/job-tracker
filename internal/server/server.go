@@ -132,6 +132,11 @@ func jobApplicationResumePDFHandler(chat applicationResumeProvider, pdf applicat
 			writeError(writer, http.StatusNotFound, "application resume not found")
 			return
 		}
+		if errors.Is(err, services.ErrResumeNotFound) {
+			logger.Warn("generate application resume PDF without a base resume", zap.Int64("job_id", jobID), zap.Error(err))
+			writeError(writer, http.StatusNotFound, "base resume not found")
+			return
+		}
 		if err != nil {
 			logger.Error("load latest application resume failed", zap.Int64("job_id", jobID), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load application resume")
@@ -586,14 +591,54 @@ func jobMatchHandler(matches *services.JobMatches, logger *zap.Logger) http.Hand
 
 func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		listed, err := matches.List(request.Context())
+		limit, err := paginationQueryInt(request, "limit", 25)
+		if err != nil {
+			logger.Warn("invalid job matches limit", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
+			return
+		}
+		offset, err := paginationQueryInt(request, "offset", 0)
+		if err != nil {
+			logger.Warn("invalid job matches offset", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
+			return
+		}
+		minimumScore, err := minimumMatchScore(request)
+		if err != nil {
+			logger.Warn("invalid job matches minimum score", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "minimumScore must be an integer from 0 to 100")
+			return
+		}
+		page, err := matches.List(request.Context(), models.JobMatchSearch{
+			MinimumScore: minimumScore,
+			Sort:         request.URL.Query().Get("sort"),
+			Limit:        limit,
+			Offset:       offset,
+		})
+		if errors.Is(err, services.ErrInvalidJobMatchSort) {
+			logger.Warn("invalid job matches sort", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
 		if err != nil {
 			logger.Error("list job matches failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load job matches")
 			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"matches": listed})
+		writeJSON(writer, http.StatusOK, page)
 	}
+}
+
+func minimumMatchScore(request *http.Request) (*int, error) {
+	value := strings.TrimSpace(request.URL.Query().Get("minimumScore"))
+	if value == "" {
+		return nil, nil
+	}
+	score, err := strconv.Atoi(value)
+	if err != nil || score < 0 || score > 100 {
+		return nil, errors.New("score out of range")
+	}
+	return &score, nil
 }
 
 func jobMatchChatItemsHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {

@@ -165,7 +165,15 @@ func (service *JobMatchChat) LatestResume(ctx context.Context, jobID int64) (*mo
 	if err != nil {
 		return nil, fmt.Errorf("load latest application resume revision: %w", err)
 	}
-	return &latest.Resume, nil
+	base, err := service.resumes.Resume(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load base resume for application download: %w", err)
+	}
+	if base == nil {
+		return nil, ErrResumeNotFound
+	}
+	resume := applicationResumeForDownload(*base, latest.Resume)
+	return &resume, nil
 }
 
 func (service *JobMatchChat) Subscribe(jobID int64) (<-chan JobMatchChatUpdate, func()) {
@@ -319,7 +327,7 @@ func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64
 		{JobID: jobID, Type: "initial_instructions", Payload: payload(map[string]string{"content": jobMatchChatInstructions})},
 		{JobID: jobID, Type: "initial_context", Payload: payload(jobMatchChatInitialContext{Job: job, Match: match, Profile: profile})},
 		{JobID: jobID, Type: "tool_definition", Payload: payload(resumePatchTool)},
-		{JobID: jobID, Type: "resume_revision", Payload: payload(resumeRevisionPayload{Revision: 0, Resume: *resume})},
+		{JobID: jobID, Type: "resume_revision", Payload: payload(resumeRevisionPayload{Revision: 0, Resume: applicationResumeSnapshot(*resume)})},
 	} {
 		if _, err := service.append(ctx, item); err != nil {
 			return fmt.Errorf("save initial chat item: %w", err)
@@ -356,6 +364,13 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 	if err != nil {
 		return fmt.Errorf("load current application resume revision: %w", err)
 	}
+	baseResume, err := service.resumes.Resume(ctx)
+	if err != nil {
+		return fmt.Errorf("load base resume for chat: %w", err)
+	}
+	if baseResume == nil {
+		return ErrResumeNotFound
+	}
 	sessionID := newLLMSessionID()
 	patchAttempts := 0
 	for {
@@ -364,7 +379,7 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
 			return nil
 		}
-		request, err := providerRequest(history, service.reasoning)
+		request, err := providerRequest(history, service.reasoning, baseResume.Country)
 		if err != nil {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("assemble provider request: %w", err))
 		}
@@ -545,7 +560,7 @@ type toolResultPayload struct {
 	Resume     *models.Resume `json:"resume,omitempty"`
 }
 
-func providerRequest(items []models.JobMatchChatItem, reasoning string) (openai.ChatRequest, error) {
+func providerRequest(items []models.JobMatchChatItem, reasoning, country string) (openai.ChatRequest, error) {
 	request := openai.ChatRequest{ReasoningEffort: reasoning, Tools: []openai.Tool{resumePatchTool}}
 	redactions, err := chatRedactionValues(items)
 	if err != nil {
@@ -568,7 +583,7 @@ func providerRequest(items []models.JobMatchChatItem, reasoning string) (openai.
 			}
 			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Immutable application context:\n" + content})
 		case "resume_revision":
-			content, err := redactedResumeRevision(item.Payload)
+			content, err := redactedResumeRevision(item.Payload, country)
 			if err != nil {
 				return request, err
 			}
@@ -596,7 +611,7 @@ func providerRequest(items []models.JobMatchChatItem, reasoning string) (openai.
 			if err := json.Unmarshal(item.Payload, &result); err != nil {
 				return request, err
 			}
-			content, err := redactedToolResult(item.Payload)
+			content, err := redactedToolResult(item.Payload, country)
 			if err != nil {
 				return request, err
 			}
@@ -685,21 +700,21 @@ func redactedInitialContext(payload json.RawMessage) (string, error) {
 	return marshalChatPayload(chatContext)
 }
 
-func redactedResumeRevision(payload json.RawMessage) (string, error) {
+func redactedResumeRevision(payload json.RawMessage, country string) (string, error) {
 	var revision resumeRevisionPayload
 	if err := json.Unmarshal(payload, &revision); err != nil {
 		return "", err
 	}
-	return marshalChatPayload(chatResumeRevisionPayload{Revision: revision.Revision, Resume: chatResumeForLLM(revision.Resume)})
+	return marshalChatPayload(chatResumeRevisionPayload{Revision: revision.Revision, Resume: chatResumeForLLM(revision.Resume, country)})
 }
 
-func redactedToolResult(payload json.RawMessage) (string, error) {
+func redactedToolResult(payload json.RawMessage, country string) (string, error) {
 	var result toolResultPayload
 	if err := json.Unmarshal(payload, &result); err != nil {
 		return "", err
 	}
 	if result.Resume != nil {
-		resume := chatResumeForLLM(*result.Resume)
+		resume := chatResumeForLLM(*result.Resume, country)
 		return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision, Resume: &resume})
 	}
 	return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision})
@@ -731,10 +746,10 @@ func chatProfile(profile models.UserProfile) chatUserProfile {
 	return chat
 }
 
-func chatResumeForLLM(resume models.Resume) chatResume {
+func chatResumeForLLM(resume models.Resume, country string) chatResume {
 	chat := chatResume{
 		Headline:          resume.Headline,
-		Country:           resume.Country,
+		Country:           country,
 		SummaryParagraphs: resume.SummaryParagraphs,
 		Skills:            resume.Skills,
 		Competencies:      resume.Competencies,
@@ -796,6 +811,62 @@ func latestResumeRevision(items []models.JobMatchChatItem) (resumeRevisionPayloa
 		return current, ErrApplicationResumeNotFound
 	}
 	return current, nil
+}
+
+func applicationResumeSnapshot(resume models.Resume) models.Resume {
+	snapshot := resume
+	snapshot.ID = 0
+	snapshot.FullName = ""
+	snapshot.Town = ""
+	snapshot.Country = ""
+	snapshot.Email = ""
+	snapshot.Phone = ""
+	snapshot.Links = nil
+	snapshot.HasPhoto = false
+	snapshot.UpdatedAt = ""
+	snapshot.Experience = append([]models.ResumeExperience(nil), resume.Experience...)
+	for index := range snapshot.Experience {
+		snapshot.Experience[index].Location = ""
+	}
+	snapshot.Education = append([]models.ResumeEducation(nil), resume.Education...)
+	for index := range snapshot.Education {
+		snapshot.Education[index].Institution = ""
+		snapshot.Education[index].Location = ""
+	}
+	return snapshot
+}
+
+func applicationResumeForDownload(base, revision models.Resume) models.Resume {
+	resume := revision
+	resume.ID = base.ID
+	resume.FullName = base.FullName
+	resume.Town = base.Town
+	resume.Country = base.Country
+	resume.Email = base.Email
+	resume.Phone = base.Phone
+	resume.Links = base.Links
+	resume.HasPhoto = base.HasPhoto
+	resume.UpdatedAt = base.UpdatedAt
+	resume.Experience = append([]models.ResumeExperience(nil), revision.Experience...)
+	baseExperience := make(map[int64]string, len(base.Experience))
+	for _, experience := range base.Experience {
+		baseExperience[experience.ID] = experience.Location
+	}
+	for index := range resume.Experience {
+		resume.Experience[index].Location = baseExperience[resume.Experience[index].ID]
+	}
+	resume.Education = append([]models.ResumeEducation(nil), revision.Education...)
+	baseEducation := make(map[int64]models.ResumeEducation, len(base.Education))
+	for _, education := range base.Education {
+		baseEducation[education.ID] = education
+	}
+	for index := range resume.Education {
+		if education, ok := baseEducation[resume.Education[index].ID]; ok {
+			resume.Education[index].Institution = education.Institution
+			resume.Education[index].Location = education.Location
+		}
+	}
+	return resume
 }
 
 func unansweredUserMessage(items []models.JobMatchChatItem) bool {

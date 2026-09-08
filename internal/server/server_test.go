@@ -391,7 +391,11 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.NoError(t, repository.CreateJobMatch(context.Background(), 2, "Second match"))
 	assessmentContent, err := json.Marshal(models.JobMatchAssessment{MatcherVersion: "test", Score: 91, Label: "Strong match"})
 	require.NoError(t, err)
+	secondAssessmentContent, err := json.Marshal(models.JobMatchAssessment{MatcherVersion: "test", Score: 60, Label: "Worth applying"})
+	require.NoError(t, err)
 	_, err = db.Exec(`UPDATE job_matches SET content = ? WHERE job_id = 1`, string(assessmentContent))
+	require.NoError(t, err)
+	_, err = db.Exec(`UPDATE job_matches SET content = ? WHERE job_id = 2`, string(secondAssessmentContent))
 	require.NoError(t, err)
 	_, err = db.Exec(`UPDATE job_matches SET created_at = CASE job_id WHEN 1 THEN '2026-08-27T12:00:00Z' WHEN 2 THEN '2026-08-28T12:00:00Z' END`)
 	require.NoError(t, err)
@@ -399,6 +403,7 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	var matchesResponse struct {
 		Matches []models.JobMatchSummary `json:"matches"`
+		Total   int                      `json:"total"`
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
 	require.Len(t, matchesResponse.Matches, 2)
@@ -406,6 +411,15 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, "2026-08-28T12:00:00Z", matchesResponse.Matches[0].CreatedAt)
 	assert.Equal(t, "Strong match", matchesResponse.Matches[1].Label)
 	assert.Equal(t, 91, matchesResponse.Matches[1].Score)
+	assert.Equal(t, 2, matchesResponse.Total)
+
+	response = request(handler, http.MethodGet, "/api/matches?minimumScore=60&sort=score-asc&limit=1&offset=1")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	require.Len(t, matchesResponse.Matches, 1)
+	assert.Equal(t, 2, matchesResponse.Total)
+	assert.Equal(t, int64(1), matchesResponse.Matches[0].Job.ID)
+	assert.Equal(t, 91, matchesResponse.Matches[0].Score)
 
 	response = request(handler, http.MethodGet, "/api/jobs/1")
 	require.Equal(t, http.StatusOK, response.Code)
@@ -559,13 +573,21 @@ func TestJobMatchChatCreatesApplicationResumeRevision(t *testing.T) {
 	waitForChatTurn(t, repository, 1)
 	items, err := repository.JobMatchChatItems(context.Background(), 1, 0)
 	require.NoError(t, err)
+	initial := models.JobMatchChatItem{}
 	accepted := models.JobMatchChatItem{}
 	for _, item := range items {
+		if item.Type == "resume_revision" {
+			initial = item
+		}
 		if item.Type == "tool_result" {
 			accepted = item
-			break
 		}
 	}
+	var baseRevision struct {
+		Resume models.Resume `json:"resume"`
+	}
+	require.NoError(t, json.Unmarshal(initial.Payload, &baseRevision))
+	assert.Empty(t, baseRevision.Resume.FullName)
 	assert.Equal(t, "tool_result", accepted.Type)
 	var revision struct {
 		Resume   models.Resume `json:"resume"`
@@ -695,6 +717,11 @@ func TestJobApplicationResumePDFHandler(t *testing.T) {
 	assert.Equal(t, `attachment; filename="application-resume.pdf"`, response.Header().Get("Content-Disposition"))
 	assert.Equal(t, []byte("application pdf"), response.Body.Bytes())
 	assert.Equal(t, "Backend engineer", renderer.resume.Headline)
+
+	missingBaseHandler := jobApplicationResumePDFHandler(applicationResumeStub{err: services.ErrResumeNotFound}, renderer, zap.NewNop())
+	response = httptest.NewRecorder()
+	missingBaseHandler.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusNotFound, response.Code)
 }
 
 type resumePDFStub struct {

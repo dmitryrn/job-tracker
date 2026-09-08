@@ -43,7 +43,7 @@ func TestProviderRequestOmitsCandidateIdentityAndInstitutions(t *testing.T) {
 		FullName: "Avery Patel",
 		Phone:    "+1 555 0100",
 		Town:     "Mapleton",
-		Country:  "Canada",
+		Country:  "Stale country",
 		Email:    "avery.patel@example.test",
 		SummaryParagraphs: []models.ResumeText{{
 			Content: "Avery Patel built systems at Orchid Labs in Mapleton, Canada.",
@@ -87,7 +87,7 @@ func TestProviderRequestOmitsCandidateIdentityAndInstitutions(t *testing.T) {
 		{Type: "user_message", Payload: payload(map[string]string{"content": "Please update Avery Patel's application for Orchid Labs."})},
 		{Type: "assistant_tool_call", Payload: toolCall},
 		{Type: "tool_result", Payload: acceptedRevision},
-	}, "low")
+	}, "low", "Canada")
 	require.NoError(t, err)
 
 	providerPayload, err := json.Marshal(request)
@@ -110,8 +110,63 @@ func TestProviderRequestOmitsCandidateIdentityAndInstitutions(t *testing.T) {
 		assert.Contains(t, string(providerPayload), company)
 	}
 	assert.Contains(t, string(providerPayload), `\"country\":\"Canada\"`)
+	assert.NotContains(t, string(providerPayload), "Stale country")
 	assert.Contains(t, string(providerPayload), "Authorized to work in Canada")
 	assert.NotContains(t, string(providerPayload), "[redacted]")
 	assert.Equal(t, "Avery Patel", resume.FullName)
 	assert.Equal(t, "Orchid Labs", resume.Experience[0].Company)
+}
+
+func TestApplicationResumeSnapshotOmitsBaseDetailsAndRestoresThemForDownload(t *testing.T) {
+	base := models.Resume{
+		ID:        1,
+		FullName:  "Avery Patel",
+		Headline:  "Software engineer",
+		Town:      "Mapleton",
+		Country:   "Canada",
+		Email:     "avery.patel@example.test",
+		Phone:     "+1 555 0100",
+		Links:     []models.ResumeLink{{ID: 2, Label: "Portfolio", URL: "https://example.test"}},
+		HasPhoto:  true,
+		UpdatedAt: "2026-09-07T00:00:00Z",
+		Experience: []models.ResumeExperience{{
+			ID: 3, Company: "Orchid Labs", Title: "Engineer", Location: "Mapleton", Bullets: []models.ResumeText{{ID: 4, Content: "Built systems."}},
+		}},
+		Education: []models.ResumeEducation{{
+			ID: 5, Institution: "Northfield Institute", Location: "Mapleton", Degree: "MSc",
+		}},
+	}
+
+	snapshot := applicationResumeSnapshot(base)
+
+	assert.Zero(t, snapshot.ID)
+	assert.Empty(t, snapshot.FullName)
+	assert.Empty(t, snapshot.Town)
+	assert.Empty(t, snapshot.Country)
+	assert.Empty(t, snapshot.Email)
+	assert.Empty(t, snapshot.Phone)
+	assert.Empty(t, snapshot.Links)
+	assert.False(t, snapshot.HasPhoto)
+	assert.Empty(t, snapshot.UpdatedAt)
+	assert.Empty(t, snapshot.Experience[0].Location)
+	assert.Empty(t, snapshot.Education[0].Institution)
+	assert.Empty(t, snapshot.Education[0].Location)
+	assert.Equal(t, "Software engineer", snapshot.Headline)
+	assert.Equal(t, "Built systems.", snapshot.Experience[0].Bullets[0].Content)
+	assert.Equal(t, "Mapleton", base.Experience[0].Location)
+
+	snapshot.Headline = "Backend engineer"
+	resume := applicationResumeForDownload(base, snapshot)
+
+	assert.Equal(t, "Backend engineer", resume.Headline)
+	assert.Equal(t, base.FullName, resume.FullName)
+	assert.Equal(t, base.Town, resume.Town)
+	assert.Equal(t, base.Country, resume.Country)
+	assert.Equal(t, base.Email, resume.Email)
+	assert.Equal(t, base.Phone, resume.Phone)
+	assert.Equal(t, base.Links, resume.Links)
+	assert.Equal(t, base.HasPhoto, resume.HasPhoto)
+	assert.Equal(t, base.Experience[0].Location, resume.Experience[0].Location)
+	assert.Equal(t, base.Education[0].Institution, resume.Education[0].Institution)
+	assert.Equal(t, base.Education[0].Location, resume.Education[0].Location)
 }

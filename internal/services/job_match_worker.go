@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -319,8 +320,17 @@ func (matches *JobMatches) Analysis(ctx context.Context, jobID int64) (*models.J
 	return matches.analyses.JobAnalysis(ctx, jobID)
 }
 
-func (matches *JobMatches) List(ctx context.Context) ([]models.JobMatchSummary, error) {
-	return matches.matches.JobMatches(ctx)
+var ErrInvalidJobMatchSort = errors.New("sort must be created-desc, created-asc, score-desc, or score-asc")
+
+func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearch) (models.JobMatchPage, error) {
+	search.Sort = strings.TrimSpace(strings.ToLower(search.Sort))
+	if search.Sort == "" {
+		search.Sort = "created-desc"
+	}
+	if search.Sort != "created-desc" && search.Sort != "created-asc" && search.Sort != "score-desc" && search.Sort != "score-asc" {
+		return models.JobMatchPage{}, ErrInvalidJobMatchSort
+	}
+	return matches.matches.JobMatches(ctx, search)
 }
 
 type JobMatchRequests struct {

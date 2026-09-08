@@ -15,7 +15,10 @@ import (
 
 const MaxResumePhotoBytes = 5 << 20
 
-var ErrInvalidResumePhoto = errors.New("resume photo must be a JPEG or PNG smaller than 5 MB")
+var (
+	ErrInvalidResumePhoto = errors.New("resume photo must be a JPEG or PNG smaller than 5 MB")
+	ErrResumeNotFound     = errors.New("base resume not found")
+)
 
 type ResumeService struct {
 	repository repositories.ResumeRepository

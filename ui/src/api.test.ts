@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiURL, fetchJobs } from "./api";
+import { apiURL, fetchJobMatches, fetchJobs } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -23,6 +23,21 @@ describe("fetchJobs", () => {
 
     expect(fetch).toHaveBeenCalledWith(
       "http://10.8.0.4:4000/api/jobs?search=engineer&provider=adzuna&match=has&fields=title%2Ccompany&limit=50&offset=100",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+});
+
+describe("fetchJobMatches", () => {
+  it("sends the minimum score, sort, and pagination values", async () => {
+    vi.stubGlobal("window", { location: { origin: "http://10.8.0.4:4000" } });
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ matches: [], total: 0 }) });
+    vi.stubGlobal("fetch", fetch);
+
+    await fetchJobMatches(75, "score-desc", 50, 100, new AbortController().signal);
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://10.8.0.4:4000/api/matches?sort=score-desc&limit=50&offset=100&minimumScore=75",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });

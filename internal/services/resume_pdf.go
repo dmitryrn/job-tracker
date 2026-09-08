@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"html/template"
 	"time"
@@ -14,8 +13,6 @@ import (
 
 	"nice/internal/models"
 )
-
-var ErrResumeNotFound = errors.New("base resume not found")
 
 type ResumePDFService struct {
 	resume *ResumeService

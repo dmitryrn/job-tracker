@@ -53,7 +53,7 @@ type JobMatchRepository interface {
 	JobMatchExists(context.Context, int64) (bool, error)
 	CreateJobMatch(context.Context, int64, string) error
 	JobMatch(context.Context, int64) (*models.JobMatchRecord, error)
-	JobMatches(context.Context) ([]models.JobMatchSummary, error)
+	JobMatches(context.Context, models.JobMatchSearch) (models.JobMatchPage, error)
 }
 
 type JobMatchChatRepository interface {

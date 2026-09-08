@@ -443,41 +443,67 @@ func (repository *SQLite) JobMatch(ctx context.Context, jobID int64) (*models.Jo
 	return &match, nil
 }
 
-func (repository *SQLite) JobMatches(ctx context.Context) ([]models.JobMatchSummary, error) {
-	rows, err := repository.db.QueryContext(ctx, `
-		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
-			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
-			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text, job_matches.created_at, job_matches.content
-		FROM job_matches
-		JOIN jobs ON jobs.id = job_matches.job_id
-		LEFT JOIN companies ON companies.id = jobs.company_id
-		ORDER BY job_matches.created_at DESC, job_matches.job_id DESC
-		LIMIT 100`)
+func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatchSearch) (models.JobMatchPage, error) {
+	assessmentScore := "CASE WHEN json_valid(job_matches.content) AND json_type(job_matches.content, '$.score') IN ('integer', 'real') THEN CAST(json_extract(job_matches.content, '$.score') AS INTEGER) END"
+	score := "COALESCE(" + assessmentScore + ", 0)"
+	query := sqlBuilder.Select(
+		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
+		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
+		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text", "job_matches.created_at", "job_matches.content",
+	).From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
+	countQuery := sqlBuilder.Select("COUNT(*)").From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
+	if search.MinimumScore != nil {
+		minimumScore := squirrel.Expr(assessmentScore+" >= ?", *search.MinimumScore)
+		query = query.Where(minimumScore)
+		countQuery = countQuery.Where(minimumScore)
+	}
+	switch search.Sort {
+	case "created-asc":
+		query = query.OrderBy("job_matches.created_at ASC", "job_matches.job_id ASC")
+	case "score-desc":
+		query = query.OrderBy(score+" DESC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	case "score-asc":
+		query = query.OrderBy(score+" ASC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	default:
+		query = query.OrderBy("job_matches.created_at DESC", "job_matches.job_id DESC")
+	}
+	statement, arguments, err := query.Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("query job matches: %w", err)
+		return models.JobMatchPage{}, fmt.Errorf("build job matches query: %w", err)
+	}
+	rows, err := repository.db.QueryContext(ctx, statement, arguments...)
+	if err != nil {
+		return models.JobMatchPage{}, fmt.Errorf("query job matches: %w", err)
 	}
 	defer rows.Close()
 
-	matches := make([]models.JobMatchSummary, 0)
+	page := models.JobMatchPage{Matches: make([]models.JobMatchSummary, 0)}
 	for rows.Next() {
 		var match models.JobMatchSummary
 		var content string
 		if err := rows.Scan(&match.Job.ID, &match.Job.Source, &match.Job.SourceURL, &match.Job.Title, &match.Job.Company,
 			&match.Job.Location, &match.Job.Workplace, &match.Job.EmploymentType, &match.Job.SalaryMin, &match.Job.SalaryMax,
 			&match.Job.PostedAt, &match.Job.BodyText, &match.CreatedAt, &content); err != nil {
-			return nil, fmt.Errorf("scan job match: %w", err)
+			return models.JobMatchPage{}, fmt.Errorf("scan job match: %w", err)
 		}
 		var assessment models.JobMatchAssessment
 		if err := json.Unmarshal([]byte(content), &assessment); err == nil && assessment.MatcherVersion != "" {
 			match.Score = assessment.Score
 			match.Label = assessment.Label
 		}
-		matches = append(matches, match)
+		page.Matches = append(page.Matches, match)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate job matches: %w", err)
+		return models.JobMatchPage{}, fmt.Errorf("iterate job matches: %w", err)
 	}
-	return matches, nil
+	countStatement, countArguments, err := countQuery.ToSql()
+	if err != nil {
+		return models.JobMatchPage{}, fmt.Errorf("build job matches count query: %w", err)
+	}
+	if err := repository.db.QueryRowContext(ctx, countStatement, countArguments...).Scan(&page.Total); err != nil {
+		return models.JobMatchPage{}, fmt.Errorf("count job matches: %w", err)
+	}
+	return page, nil
 }
 
 func (repository *SQLite) MatchQueue(ctx context.Context) ([]models.BrowseJob, error) {

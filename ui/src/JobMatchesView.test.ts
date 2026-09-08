@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { formatJobPostedDate, formatMatchDate, sortJobMatches } from "./JobMatchesView";
+import { formatJobPostedDate, formatMatchDate, matchSearchFromParams, matchSearchPath } from "./JobMatchesView";
 
-const matches = [
-  { job: { id: 1 }, createdAt: "2026-08-26T12:00:00Z", score: 67, label: "Possible match" },
-  { job: { id: 2 }, createdAt: "2026-08-28T12:00:00Z", score: 91, label: "Strong match" },
-  { job: { id: 3 }, createdAt: "2026-08-27T12:00:00Z", score: 29, label: "Weak match" },
-] as never[];
-
-describe("sortJobMatches", () => {
-  it("sorts newest assessments first by default", () => {
-    expect(sortJobMatches(matches, "created-desc").map((match) => match.job.id)).toEqual([2, 3, 1]);
+describe("match search URL", () => {
+  it("reads the selected fit, sort, page size, and offset", () => {
+    expect(matchSearchFromParams(new URLSearchParams("minimumScore=75&sort=score-desc&limit=50&offset=100"))).toEqual({
+      minimumScore: 75,
+      sort: "score-desc",
+      pageSize: 50,
+      offset: 100,
+    });
   });
 
-  it("sorts by numeric match score", () => {
-    expect(sortJobMatches(matches, "score-desc").map((match) => match.job.id)).toEqual([2, 1, 3]);
-    expect(sortJobMatches(matches, "score-asc").map((match) => match.job.id)).toEqual([3, 1, 2]);
+  it("uses the default values when search params are absent or invalid", () => {
+    expect(matchSearchFromParams(new URLSearchParams("minimumScore=101&sort=unknown&limit=10&offset=-1"))).toEqual({
+      minimumScore: null,
+      sort: "created-desc",
+      pageSize: 25,
+      offset: 0,
+    });
+  });
+
+  it("omits default values from the matches URL", () => {
+    expect(matchSearchPath({ minimumScore: null, sort: "created-desc", pageSize: 25, offset: 0 }, "/matches")).toBe("/matches");
+    expect(matchSearchPath({ minimumScore: 90, sort: "score-desc", pageSize: 50, offset: 100 }, "/matches")).toBe("/matches?minimumScore=90&sort=score-desc&limit=50&offset=100");
   });
 });
 

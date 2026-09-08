@@ -190,6 +190,11 @@ export type JobMatchSummary = {
 	label: string;
 };
 
+export type JobMatchPage = {
+	matches: JobMatchSummary[];
+	total: number;
+};
+
 export type AppEvent = {
   id: number;
   occurredAt: string;
@@ -417,8 +422,12 @@ export async function stopJobMatchChat(id: number, requestId: string) {
 	}
 }
 
-export function fetchJobMatches(signal: AbortSignal) {
-  return request<{ matches: JobMatchSummary[] }>("matches", { signal });
+export function fetchJobMatches(minimumScore: number | null, sort: string, limit: number, offset: number, signal: AbortSignal) {
+	const parameters = new URLSearchParams({ sort, limit: String(limit), offset: String(offset) });
+	if (minimumScore !== null) {
+		parameters.set("minimumScore", String(minimumScore));
+	}
+	return request<JobMatchPage>(`matches?${parameters}`, { signal });
 }
 
 export function fetchJob(id: number, signal: AbortSignal) {

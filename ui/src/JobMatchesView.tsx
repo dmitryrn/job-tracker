@@ -8,6 +8,13 @@ type JobMatchesViewProps = {
 
 type MatchSort = "created-desc" | "created-asc" | "score-desc" | "score-asc";
 
+type MatchSearch = {
+  minimumScore: number | null;
+  sort: MatchSort;
+  pageSize: number;
+  offset: number;
+};
+
 const matchSortDescriptions: Record<MatchSort, string> = {
   "created-desc": "Newest assessments first.",
   "created-asc": "Oldest assessments first.",
@@ -16,12 +23,57 @@ const matchSortDescriptions: Record<MatchSort, string> = {
 };
 
 const matchStatusLegend = [
-  { label: "Skip", score: 0 },
-  { label: "Possible fit", score: 40 },
-  { label: "Worth applying", score: 60 },
-  { label: "Strong fit", score: 75 },
   { label: "Exceptional fit", score: 90 },
+  { label: "Strong fit", score: 75 },
+  { label: "Worth applying", score: 60 },
+  { label: "Possible fit", score: 40 },
+  { label: "Skip", score: 0 },
 ];
+
+const pageSizeOptions = [25, 50];
+
+const defaultMatchSearch: MatchSearch = {
+  minimumScore: null,
+  sort: "created-desc",
+  pageSize: 25,
+  offset: 0,
+};
+
+function isMatchSort(value: string | null): value is MatchSort {
+  return value === "created-desc" || value === "created-asc" || value === "score-desc" || value === "score-asc";
+}
+
+export function matchSearchFromParams(parameters: URLSearchParams): MatchSearch {
+  const minimumScoreValue = parameters.get("minimumScore");
+  const minimumScore = Number(minimumScoreValue);
+  const sort = parameters.get("sort");
+  const pageSize = Number(parameters.get("limit"));
+  const offset = Number(parameters.get("offset"));
+  return {
+    minimumScore: minimumScoreValue !== null && minimumScoreValue !== "" && Number.isInteger(minimumScore) && minimumScore >= 0 && minimumScore <= 100 ? minimumScore : null,
+    sort: isMatchSort(sort) ? sort : defaultMatchSearch.sort,
+    pageSize: pageSizeOptions.includes(pageSize) ? pageSize : defaultMatchSearch.pageSize,
+    offset: Number.isInteger(offset) && offset >= 0 ? offset : defaultMatchSearch.offset,
+  };
+}
+
+export function matchSearchPath(search: MatchSearch, pathname = window.location.pathname) {
+  const parameters = new URLSearchParams();
+  if (search.minimumScore !== null) {
+    parameters.set("minimumScore", String(search.minimumScore));
+  }
+  if (search.sort !== defaultMatchSearch.sort) {
+    parameters.set("sort", search.sort);
+  }
+  if (search.pageSize !== defaultMatchSearch.pageSize) {
+    parameters.set("limit", String(search.pageSize));
+  }
+  if (search.offset !== 0) {
+    parameters.set("offset", String(search.offset));
+  }
+  const query = parameters.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
 
 export function formatMatchDate(value: string, now = new Date()) {
   const date = new Date(value);
@@ -43,35 +95,37 @@ export function formatJobPostedDate(value: string, now = new Date()) {
   return `Posted ${formatDate(value, now)}`;
 }
 
-export function sortJobMatches(matches: JobMatchSummary[], sort: MatchSort) {
-  return [...matches].sort((left, right) => {
-    if (sort === "created-desc") {
-      return right.createdAt.localeCompare(left.createdAt);
-    }
-    if (sort === "created-asc") {
-      return left.createdAt.localeCompare(right.createdAt);
-    }
-    const comparison = left.score - right.score;
-    if (comparison !== 0) {
-      return sort === "score-asc" ? comparison : -comparison;
-    }
-    return right.createdAt.localeCompare(left.createdAt);
-  });
-}
-
 export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
   const [matches, setMatches] = useState<JobMatchSummary[]>([]);
-  const [sort, setSort] = useState<MatchSort>("created-desc");
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [search, setSearch] = useState<MatchSearch>(() => matchSearchFromParams(new URLSearchParams(window.location.search)));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { minimumScore, sort, pageSize, offset } = search;
+
+  function updateSearch(next: Partial<MatchSearch>) {
+    const updated = { ...search, ...next };
+    window.history.pushState({}, "", matchSearchPath(updated));
+    setSearch(updated);
+  }
+
+  useEffect(() => {
+    function onPopState() {
+      setSearch(matchSearchFromParams(new URLSearchParams(window.location.search)));
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
+      setLoading(true);
       try {
-        const result = await fetchJobMatches(controller.signal);
+        const result = await fetchJobMatches(minimumScore, sort, pageSize, offset, controller.signal);
         if (!controller.signal.aborted) {
           setMatches(result.matches);
+          setTotalMatches(result.total);
           setError("");
         }
       } catch (reason) {
@@ -86,14 +140,14 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
     }
     void load();
     return () => controller.abort();
-  }, []);
+  }, [minimumScore, offset, pageSize, sort]);
 
   return (
     <section className="matches-page">
       <header className="matches-header">
         <div><p className="eyebrow">Matches</p><h1>Completed job matches</h1><p>{matchSortDescriptions[sort]}</p></div>
         <label className="matches-sort">Sort by
-          <select value={sort} onChange={(event) => setSort(event.target.value as MatchSort)}>
+          <select value={sort} onChange={(event) => updateSearch({ sort: event.target.value as MatchSort, offset: 0 })}>
             <option value="created-desc">Created at: newest</option>
             <option value="created-asc">Created at: oldest</option>
             <option value="score-desc">Match score: highest</option>
@@ -101,14 +155,16 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
           </select>
         </label>
       </header>
-      <aside className="match-legend" aria-label="Match status legend">
-        {matchStatusLegend.map((status) => <span className="match-label" key={status.label} style={{ "--match-score": status.score } as CSSProperties}>{status.label}</span>)}
+      <aside className="match-legend" aria-label="Filter matches by minimum fit">
+        {matchStatusLegend.map((status) => <button type="button" className="match-label match-filter" key={status.label} aria-pressed={minimumScore === status.score} aria-label={`Show ${status.label} and higher`} onClick={() => updateSearch({ minimumScore: minimumScore === status.score ? null : status.score, offset: 0 })} style={{ "--match-score": status.score } as CSSProperties}>{status.label}</button>)}
         <span className="match-label unlabeled">Unlabeled</span>
       </aside>
       {error && <p className="query-error">{error}</p>}
-      {loading ? <p className="browse-loading">Loading matches...</p> : matches.length === 0 ? <p className="empty browse-empty">No completed matches yet.</p> : (
+      {loading && <p className="browse-loading">Loading matches...</p>}
+      {!loading && !error && matches.length === 0 && <p className="empty browse-empty">{totalMatches === 0 && minimumScore === null ? "No completed matches yet." : "No matches meet this fit threshold."}</p>}
+      {matches.length > 0 && (
         <ol className="matches-list">
-          {sortJobMatches(matches, sort).map((match) => {
+          {matches.map((match) => {
             const postedDate = formatJobPostedDate(match.job.postedAt);
             return (
               <li key={match.job.id}>
@@ -121,6 +177,20 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
             );
           })}
         </ol>
+      )}
+      {!loading && !error && (
+        <footer className="browse-pagination">
+          <span>Showing {totalMatches === 0 ? 0 : offset + 1}-{Math.min(offset + matches.length, totalMatches)} of {totalMatches}</span>
+          <div>
+            <label className="browse-page-size" htmlFor="matches-page-size">Matches per page
+              <select id="matches-page-size" value={pageSize} onChange={(event) => updateSearch({ pageSize: Number(event.target.value), offset: 0 })}>
+                {pageSizeOptions.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </label>
+            <button type="button" className="secondary-action" disabled={offset === 0} onClick={() => updateSearch({ offset: Math.max(0, offset - pageSize) })}>Previous</button>
+            <button type="button" className="secondary-action" disabled={offset + matches.length >= totalMatches} onClick={() => updateSearch({ offset: offset + pageSize })}>Next</button>
+          </div>
+        </footer>
       )}
     </section>
   );

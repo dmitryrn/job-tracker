@@ -155,3 +155,15 @@ type JobMatchSummary struct {
 	Score     int       `json:"score"`
 	Label     string    `json:"label"`
 }
+
+type JobMatchSearch struct {
+	MinimumScore *int
+	Sort         string
+	Limit        int
+	Offset       int
+}
+
+type JobMatchPage struct {
+	Matches []JobMatchSummary `json:"matches"`
+	Total   int               `json:"total"`
+}
