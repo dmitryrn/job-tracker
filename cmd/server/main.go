@@ -53,6 +53,7 @@ func main() {
 			services.NewLinkedInMetrics,
 			services.NewJobSync,
 			services.NewLinkedInJobs,
+			fx.Annotate(newCustomJobImporter, fx.As(new(services.CustomJobImportService))),
 			services.NewJobBrowse,
 			services.NewEventLog,
 			services.NewDiscoverySettingsService,
@@ -107,6 +108,14 @@ func newJobAnalyzer(clients completionClients, cfg config.Config) (*services.Job
 		return nil, fmt.Errorf("select job analysis client: %w", err)
 	}
 	return services.NewJobAnalyzer(client, cfg.JobAnalysis.Model, cfg.JobAnalysis.ReasoningEffort), nil
+}
+
+func newCustomJobImporter(clients completionClients, cfg config.Config) (*services.CustomJobImporter, error) {
+	client, err := clients.forProvider(cfg.CustomJobImport.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("select custom job import client: %w", err)
+	}
+	return services.NewCustomJobImporter(services.NewHTTPJobPageFetcher(), client, cfg.CustomJobImport.Model, cfg.CustomJobImport.ReasoningEffort), nil
 }
 
 func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisService {

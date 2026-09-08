@@ -16,6 +16,11 @@ provider = "opencode"
 model = "glm-5.2"
 reasoning_effort = "high"
 
+[custom_job_import]
+provider = "opencode"
+model = "glm-5.2"
+reasoning_effort = "high"
+
 [profile_matcher]
 provider = "opencode"
 model = "glm-5.2"

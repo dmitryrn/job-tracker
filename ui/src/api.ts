@@ -14,6 +14,10 @@ export type BrowseJob = {
   hasMatch: boolean;
 };
 
+export type CustomJob = {
+  sourceURL: string;
+};
+
 export type BrowseCompany = {
   id: number;
   name: string;
@@ -432,6 +436,14 @@ export function fetchJobMatches(minimumScore: number | null, sort: string, limit
 
 export function fetchJob(id: number, signal: AbortSignal) {
   return request<{ job: BrowseJob }>(`jobs/${id}`, { signal });
+}
+
+export function createCustomJob(job: CustomJob) {
+  return request<{ job: BrowseJob }>("jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(job),
+  });
 }
 
 export function queueJobMatch(id: number, redo: boolean) {

@@ -28,6 +28,9 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "opencode", cfg.JobAnalysis.Provider)
 	assert.Equal(t, "job-analysis-model", cfg.JobAnalysis.Model)
 	assert.Equal(t, "high", cfg.JobAnalysis.ReasoningEffort)
+	assert.Equal(t, "opencode", cfg.CustomJobImport.Provider)
+	assert.Equal(t, "custom-job-import-model", cfg.CustomJobImport.Model)
+	assert.Equal(t, "high", cfg.CustomJobImport.ReasoningEffort)
 	assert.Equal(t, "opencode", cfg.ProfileMatcher.Provider)
 	assert.Equal(t, "profile-matcher-model", cfg.ProfileMatcher.Model)
 	assert.Equal(t, "medium", cfg.ProfileMatcher.ReasoningEffort)
@@ -112,6 +115,11 @@ base_url = "http://127.0.0.1:8080/v1/chat/completions"
 [job_analysis]
 provider = "opencode"
 model = "job-analysis-model"
+reasoning_effort = "high"
+
+[custom_job_import]
+provider = "opencode"
+model = "custom-job-import-model"
 reasoning_effort = "high"
 
 [profile_matcher]

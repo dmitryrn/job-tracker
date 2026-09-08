@@ -79,6 +79,48 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 	return transaction.Commit()
 }
 
+func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (models.BrowseJob, error) {
+	transaction, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.BrowseJob{}, fmt.Errorf("begin custom job transaction: %w", err)
+	}
+	defer transaction.Rollback()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	companyID, err := upsertCompany(ctx, transaction, job.Company, now)
+	if err != nil {
+		return models.BrowseJob{}, fmt.Errorf("upsert custom job company: %w", err)
+	}
+	statement, args, err := sqlBuilder.Insert("jobs").
+		Columns("source", "source_job_id", "company_id", "source_url", "title", "body_text", "location", "workplace", "employment_type", "salary_min", "salary_max", "posted_at", "first_seen_at", "last_seen_at", "metadata_json").
+		Values(job.Source, job.SourceID, companyID, job.SourceURL, job.Title, job.BodyText, job.Location, job.Workplace, job.EmploymentType, job.SalaryMin, job.SalaryMax, job.PostedAt, now, now, job.MetadataJSON).
+		Suffix("ON CONFLICT(source, source_job_id) DO UPDATE SET source_url = excluded.source_url, company_id = excluded.company_id, title = excluded.title, body_text = excluded.body_text, location = excluded.location, workplace = excluded.workplace, employment_type = excluded.employment_type, salary_min = excluded.salary_min, salary_max = excluded.salary_max, posted_at = excluded.posted_at, last_seen_at = excluded.last_seen_at, metadata_json = excluded.metadata_json").
+		ToSql()
+	if err != nil {
+		return models.BrowseJob{}, fmt.Errorf("build custom job insert: %w", err)
+	}
+	if _, err := transaction.ExecContext(ctx, statement, args...); err != nil {
+		return models.BrowseJob{}, fmt.Errorf("insert custom job: %w", err)
+	}
+
+	statement, args, err = sqlBuilder.Select("id").From("jobs").Where(squirrel.Eq{"source": job.Source, "source_job_id": job.SourceID}).ToSql()
+	if err != nil {
+		return models.BrowseJob{}, fmt.Errorf("build custom job lookup: %w", err)
+	}
+	var jobID int64
+	if err := transaction.QueryRowContext(ctx, statement, args...).Scan(&jobID); err != nil {
+		return models.BrowseJob{}, fmt.Errorf("lookup custom job: %w", err)
+	}
+	created, err := repository.job(ctx, transaction, jobID)
+	if err != nil {
+		return models.BrowseJob{}, fmt.Errorf("load custom job: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return models.BrowseJob{}, fmt.Errorf("commit custom job: %w", err)
+	}
+	return *created, nil
+}
+
 func (repository *SQLite) StartProviderRun(ctx context.Context, provider string, interval time.Duration, now time.Time) (bool, error) {
 	transaction, err := repository.db.BeginTx(ctx, nil)
 	if err != nil {

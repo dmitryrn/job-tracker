@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { fetchCompanies, fetchJobs, fetchMatchQueue, fetchProviders, queueUnmatchedJobMatches, type BrowseCompany, type BrowseJob } from "./api";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { createCustomJob, fetchCompanies, fetchJobs, fetchMatchQueue, fetchProviders, queueUnmatchedJobMatches, type BrowseCompany, type BrowseJob } from "./api";
 
 export type BrowseMode = "jobs" | "companies";
 
@@ -71,7 +71,7 @@ function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
           <span className="job-card-status"><span className="source-label">{job.source}</span><span className={job.hasMatch ? "match-status ready" : "match-status"}>{job.hasMatch ? "Match ready" : "No match yet"}</span></span>
           <span className="posted-label">{formatDate(job.postedAt)}</span>
         </div>
-        <h2>{job.title}</h2>
+        <h2>{job.title || "Untitled job"}</h2>
         <p className="company-name">{job.company || "Company not listed"}</p>
         <p className="job-excerpt">{plainText(job.bodyText).replace(/\s+/g, " ").trim()}</p>
         <div className="job-meta">
@@ -115,6 +115,11 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
   const [loading, setLoading] = useState(true);
   const [queueing, setQueueing] = useState(false);
   const [queueMessage, setQueueMessage] = useState("");
+  const [customJobOpen, setCustomJobOpen] = useState(false);
+  const [customJobURL, setCustomJobURL] = useState("");
+  const [creatingCustomJob, setCreatingCustomJob] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const customJobDialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -150,16 +155,23 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
     }
     void load();
     return () => controller.abort();
-  }, [match, mode, offset, pageSize, provider, search, searchFields]);
+  }, [match, mode, offset, pageSize, provider, refresh, search, searchFields]);
+
+  useEffect(() => {
+    const dialog = customJobDialogRef.current;
+    if (customJobOpen && dialog && !dialog.open) {
+      dialog.showModal();
+    }
+  }, [customJobOpen]);
 
   function toggleSearchField(field: string, checked: boolean) {
     setOffset(0);
     setSearchFields((current) => checked ? [...current, field] : current.filter((value) => value !== field));
   }
 
-  const unmatchedJobs = jobs.filter((job) => !job.hasMatch);
-  const queueableJobs = jobsReadyToQueue(jobs, queuedJobIDs);
-  const queuedUnmatchedJobs = unmatchedJobs.length - queueableJobs.length;
+  const matchableUnmatchedJobs = jobs.filter((job) => !job.hasMatch && job.bodyText.trim());
+  const queueableJobs = jobsReadyToQueue(matchableUnmatchedJobs, queuedJobIDs);
+  const queuedUnmatchedJobs = matchableUnmatchedJobs.length - queueableJobs.length;
 
   async function queueUnmatchedJobs() {
     setQueueing(true);
@@ -172,6 +184,30 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       setError(reason instanceof Error ? reason.message : "Could not queue unmatched roles");
     } finally {
       setQueueing(false);
+    }
+  }
+
+  async function submitCustomJob(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const sourceURL = customJobURL.trim();
+    if (!sourceURL || creatingCustomJob) {
+      return;
+    }
+    setCreatingCustomJob(true);
+    try {
+      await createCustomJob({ sourceURL });
+      customJobDialogRef.current?.close();
+      setCustomJobURL("");
+      setProvider("");
+      setMatch("all");
+      setSearch("");
+      setOffset(0);
+      setRefresh((current) => current + 1);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not add job");
+    } finally {
+      setCreatingCustomJob(false);
     }
   }
 
@@ -188,6 +224,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
             <strong>{mode === "jobs" ? totalJobs : companies.length}</strong>
             <span>{mode === "jobs" ? "roles found" : "companies in view"}</span>
           </div>
+          {mode === "jobs" && <button type="button" className="add-job-action" onClick={() => setCustomJobOpen(true)}>Add job</button>}
           {mode === "jobs" && <button type="button" className="queue-unmatched-action" disabled={loading || queueing || queueableJobs.length === 0} onClick={() => void queueUnmatchedJobs()}>{queueing ? "Queueing..." : queueableJobs.length > 0 ? `Queue ${queueableJobs.length} unmatched ${queueableJobs.length === 1 ? "role" : "roles"}${queuedUnmatchedJobs > 0 ? ` (${queuedUnmatchedJobs} queued)` : ""}` : queuedUnmatchedJobs > 0 ? `All ${queuedUnmatchedJobs} unmatched ${queuedUnmatchedJobs === 1 ? "role is" : "roles are"} queued` : "No unmatched roles"}</button>}
         </div>
       </header>
@@ -262,6 +299,22 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       )}
       {!loading && !error && mode === "jobs" && jobs.length === 0 && <p className="empty browse-empty">No roles match this search.</p>}
       {!loading && !error && mode === "companies" && companies.length === 0 && <p className="empty browse-empty">No companies match this search.</p>}
+      <dialog className="custom-job-dialog" ref={customJobDialogRef} onClose={() => setCustomJobOpen(false)}>
+        <form onSubmit={(event) => void submitCustomJob(event)}>
+          <header>
+            <p className="eyebrow">Custom job</p>
+            <h2>Add a job posting</h2>
+            <p>Paste a posting URL. We will fetch its content, convert it to Markdown, and extract the job details.</p>
+          </header>
+          <label htmlFor="custom-job-url">Posting URL
+            <input id="custom-job-url" type="url" autoFocus required value={customJobURL} onChange={(event) => setCustomJobURL(event.target.value)} placeholder="https://careers.example.com/jobs/..." />
+          </label>
+          <div className="custom-job-actions">
+            <button type="button" className="secondary-action" disabled={creatingCustomJob} onClick={() => customJobDialogRef.current?.close()}>Cancel</button>
+            <button type="submit" className="add-job-action" disabled={creatingCustomJob || !customJobURL.trim()}>{creatingCustomJob ? "Importing..." : "Import job"}</button>
+          </div>
+        </form>
+      </dialog>
     </section>
   );
 }

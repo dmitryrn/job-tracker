@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"nice/internal/models"
@@ -14,14 +15,16 @@ var (
 	ErrInvalidSearchField      = errors.New("fields must contain only title, company, location, or body")
 	ErrInvalidMatchFilter      = errors.New("match must be all, has, or none")
 	ErrEmptyJobRejectionReason = errors.New("a reason is required")
+	ErrInvalidCustomJobURL     = errors.New("a valid HTTP or HTTPS job posting URL is required")
 )
 
 type JobBrowse struct {
 	repository repositories.JobRepository
+	importer   CustomJobImportService
 }
 
-func NewJobBrowse(repository repositories.JobRepository) *JobBrowse {
-	return &JobBrowse{repository: repository}
+func NewJobBrowse(repository repositories.JobRepository, importer CustomJobImportService) *JobBrowse {
+	return &JobBrowse{repository: repository, importer: importer}
 }
 
 func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) (models.JobPage, error) {
@@ -44,6 +47,19 @@ func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) (mod
 
 func (browse *JobBrowse) Job(ctx context.Context, id int64) (*models.BrowseJob, error) {
 	return browse.repository.Job(ctx, id)
+}
+
+func (browse *JobBrowse) CreateCustomJob(ctx context.Context, custom models.CustomJob) (models.BrowseJob, error) {
+	custom.SourceURL = strings.TrimSpace(custom.SourceURL)
+	parsed, err := url.ParseRequestURI(custom.SourceURL)
+	if err != nil || validateFetchURL(parsed) != nil {
+		return models.BrowseJob{}, ErrInvalidCustomJobURL
+	}
+	job, err := browse.importer.Import(ctx, custom.SourceURL)
+	if err != nil {
+		return models.BrowseJob{}, err
+	}
+	return browse.repository.CreateCustomJob(ctx, job)
 }
 
 func (browse *JobBrowse) DeleteJob(ctx context.Context, id int64) (bool, error) {

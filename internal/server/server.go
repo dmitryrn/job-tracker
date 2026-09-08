@@ -38,6 +38,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
+	mux.HandleFunc("POST /api/jobs", createCustomJobHandler(browse, logger))
 	mux.HandleFunc("GET /api/jobs/{id}", jobHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/rejection", rejectJobHandler(browse, logger))
@@ -544,6 +545,31 @@ func jobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc
 	}
 }
 
+func createCustomJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		request.Body = http.MaxBytesReader(writer, request.Body, 64*1024)
+		var custom models.CustomJob
+		if err := json.NewDecoder(request.Body).Decode(&custom); err != nil {
+			logger.Warn("invalid custom job", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "job must be valid JSON")
+			return
+		}
+		job, err := browse.CreateCustomJob(request.Context(), custom)
+		if errors.Is(err, services.ErrInvalidCustomJobURL) {
+			logger.Warn("invalid custom job URL", zap.String("source_url", custom.SourceURL), zap.Error(err))
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			logger.Error("import custom job failed", zap.String("source_url", custom.SourceURL), zap.Error(err))
+			writeError(writer, http.StatusBadGateway, "could not import job posting")
+			return
+		}
+		logger.Info("custom job imported", zap.Int64("job_id", job.ID), zap.String("source_url", job.SourceURL))
+		writeJSON(writer, http.StatusCreated, map[string]any{"job": job})
+	}
+}
+
 func deleteJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
@@ -889,6 +915,11 @@ func queueJobMatchHandler(requests *services.JobMatchRequests, logger *zap.Logge
 		if err := requests.Queue(request.Context(), id, redo); err != nil {
 			if errors.Is(err, services.ErrMatchJobNotFound) {
 				writeError(writer, http.StatusNotFound, "job not found")
+				return
+			}
+			if errors.Is(err, services.ErrJobDescriptionRequired) {
+				logger.Warn("queue job match without a description", zap.Int64("id", id), zap.Bool("redo", redo), zap.Error(err))
+				writeError(writer, http.StatusBadRequest, err.Error())
 				return
 			}
 			logger.Error("queue job match failed", zap.Int64("id", id), zap.Bool("redo", redo), zap.Error(err))

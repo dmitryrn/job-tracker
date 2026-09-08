@@ -41,6 +41,9 @@ button { cursor: pointer; }
 .queue-unmatched-action { background: #263d56; border: 0; border-radius: 4px; color: #fff; font-size: 12px; padding: 9px 12px; }
 .queue-unmatched-action:hover { background: #1c3047; }
 .queue-unmatched-action:disabled { cursor: not-allowed; opacity: .55; }
+.add-job-action { background: #b1751c; border: 0; border-radius: 4px; color: #fff; font-size: 12px; padding: 9px 12px; }
+.add-job-action:hover { background: #8f5b11; }
+.add-job-action:disabled { cursor: wait; opacity: .65; }
 .queue-message { background: #e5f0eb; border-left: 3px solid #1e5948; color: #1e5948; font-size: 13px; margin: 0 0 12px; padding: 10px; }
 .browse-tabs { border-bottom: 1px solid #d6d5d0; display: flex; gap: 5px; margin: 22px 0 0; }
 .browse-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: #68758a; font-size: 13px; padding: 10px 12px; }
@@ -200,6 +203,17 @@ button { cursor: pointer; }
 .job-rejection-dialog p { color: #65758a; font-size: 13px; line-height: 1.5; }
 .job-rejection-dialog label { color: #4b6075; display: grid; font-size: 12px; font-weight: 700; gap: 6px; }
 .job-rejection-dialog textarea { border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; font: inherit; line-height: 1.5; padding: 10px; resize: vertical; }
+.custom-job-dialog { background: #fff; border: 1px solid #cbd2d7; border-radius: 8px; box-shadow: 0 18px 52px rgb(16 26 43 / 32%); color: #1a2638; margin: auto; max-width: min(540px, calc(100vw - 32px)); padding: 0; width: 100%; }
+.custom-job-dialog::backdrop { background: rgb(16 26 43 / 55%); }
+.custom-job-dialog form { display: grid; gap: 18px; padding: 20px; }
+.custom-job-dialog header { display: grid; gap: 7px; }
+.custom-job-dialog .eyebrow, .custom-job-dialog h2, .custom-job-dialog p { margin: 0; }
+.custom-job-dialog .eyebrow { color: #a26d20; }
+.custom-job-dialog h2 { font-family: Georgia, serif; font-size: 22px; font-weight: 400; line-height: 1.2; }
+.custom-job-dialog p { color: #65758a; font-size: 13px; line-height: 1.5; }
+.custom-job-dialog label { color: #4b6075; display: grid; font-size: 12px; font-weight: 700; gap: 6px; }
+.custom-job-dialog input { border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; font: inherit; padding: 10px; width: 100%; }
+.custom-job-actions { display: flex; gap: 10px; justify-content: end; }
 .job-rejection-actions { display: flex; gap: 10px; justify-content: end; }
 .job-page-meta { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 18px 0 0; }
 .job-page-meta > div { background: #e9edf0; border-radius: 3px; min-width: 0; padding: 8px 10px; }

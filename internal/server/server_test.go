@@ -90,6 +90,31 @@ func TestJobAPI(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, response.Code)
 }
 
+func TestJobAPICreatesCustomJobFromURL(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	handler := newTestServer(repositories.NewSQLite(db)).http.Handler
+	response := requestWithBody(handler, http.MethodPost, "/api/jobs", `{"sourceURL":"https://careers.example.com/jobs/platform-engineer"}`)
+	require.Equal(t, http.StatusCreated, response.Code)
+	var result struct {
+		Job models.BrowseJob `json:"job"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+	assert.Equal(t, "custom", result.Job.Source)
+	assert.Equal(t, "https://careers.example.com/jobs/platform-engineer", result.Job.SourceURL)
+	assert.Equal(t, "Platform Engineer", result.Job.Title)
+	assert.Equal(t, "Build platform APIs.", result.Job.BodyText)
+	assert.Equal(t, "remote", result.Job.Workplace)
+
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs", `{"sourceURL":"not a URL"}`)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	response = requestWithBody(handler, http.MethodPost, "/api/jobs", `{"sourceURL":"https://user:password@careers.example.com/job"}`)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
 func TestJobAPIRejectsUnknownSearchField(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -815,7 +840,7 @@ func newTestServerWithDependencies(repository *repositories.SQLite, client servi
 	return New(
 		config.Config{},
 		zap.NewNop(),
-		services.NewJobBrowse(repository),
+		services.NewJobBrowse(repository, customJobImportStub{}),
 		services.NewEventLog(repository),
 		services.NewDiscoverySettingsService(repository),
 		&services.JobSync{},
@@ -824,7 +849,7 @@ func newTestServerWithDependencies(repository *repositories.SQLite, client servi
 		services.NewResumeService(repository),
 		services.NewResumePDFService(services.NewResumeService(repository)),
 		services.NewJobMatches(repository, repository),
-		services.NewJobMatchRequests(repository, worker),
+		services.NewJobMatchRequests(repository, repository, worker),
 		services.NewJobMatchChat(repository, repository, repository, repository, repository, client, "test-model", "low", zap.NewNop()),
 		services.NewLinkedInMetrics(),
 	)
@@ -880,6 +905,16 @@ type noOpJobCompletionClient struct{}
 
 func (noOpJobCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
 	return openai.ChatResponse{Model: "test-model", Content: "Test chat reply."}, nil
+}
+
+type customJobImportStub struct{}
+
+func (customJobImportStub) Import(_ context.Context, sourceURL string) (models.Job, error) {
+	return models.Job{
+		Source: "custom", SourceID: sourceURL, SourceURL: sourceURL,
+		Title: "Platform Engineer", BodyText: "Build platform APIs.", Workplace: "remote",
+		MetadataJSON: `{"added_manually":true}`,
+	}, nil
 }
 
 type failingJobCompletionClient struct{}

@@ -18,6 +18,10 @@ type Job struct {
 	MetadataJSON   string `json:"metadataJSON"`
 }
 
+type CustomJob struct {
+	SourceURL string `json:"sourceURL"`
+}
+
 type JobSearch struct {
 	Search   string
 	Provider string

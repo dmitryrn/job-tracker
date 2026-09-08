@@ -458,7 +458,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       <header className="job-page-header">
         <div>
           <p className="eyebrow">{job.source}</p>
-          <h1>{job.title}</h1>
+          <h1>{job.title || "Untitled job"}</h1>
           <p>{job.company || "Company not listed"}</p>
         </div>
         <div className="job-page-header-actions">
@@ -484,13 +484,14 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
         <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
       </nav>
       {error && <p className="query-error">{error}</p>}
-      {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{plainText(job.bodyText)}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
+      {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
         <>
           <section className="match-panel">
             <p className="eyebrow">Current match</p>
             {matchedAt && <p className="detail-timestamp">Matched {matchedAt}</p>}
             {match === undefined ? <p>Loading match...</p> : match === null ? <p>{queued ? "Match request queued." : "No match yet."}</p> : match.assessment ? <JobMatchAssessmentPanel assessment={match.assessment} /> : <p>{match.content}</p>}
-            {match !== undefined && <button type="button" className="secondary-action" disabled={queueing} onClick={() => void requestMatch(match !== null)}>{queueing ? "Queueing..." : match === null ? "Create match" : "Redo match"}</button>}
+            {match !== undefined && <button type="button" className="secondary-action" disabled={queueing || !job.bodyText.trim()} onClick={() => void requestMatch(match !== null)}>{queueing ? "Queueing..." : match === null ? "Create match" : "Redo match"}</button>}
+            {!job.bodyText.trim() && <p>Add the job description before creating a match.</p>}
           </section>
           {analysis === undefined ? <p className="analysis-loading">Loading job analysis...</p> : analysis && <JobAnalysisPanel record={analysis} />}
         </>

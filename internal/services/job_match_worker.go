@@ -18,7 +18,10 @@ import (
 
 const jobMatchRetryInterval = 30 * time.Second
 
-var ErrMatchJobNotFound = errors.New("job not found")
+var (
+	ErrMatchJobNotFound       = errors.New("job not found")
+	ErrJobDescriptionRequired = errors.New("a job description is required before creating a match")
+)
 
 type ProfileJobMatcher interface {
 	Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (ProfileJobMatch, error)
@@ -334,15 +337,23 @@ func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearc
 }
 
 type JobMatchRequests struct {
+	jobs   repositories.JobRepository
 	queue  repositories.MatchQueueRepository
 	worker *JobMatchWorker
 }
 
-func NewJobMatchRequests(queue repositories.MatchQueueRepository, worker *JobMatchWorker) *JobMatchRequests {
-	return &JobMatchRequests{queue: queue, worker: worker}
+func NewJobMatchRequests(jobs repositories.JobRepository, queue repositories.MatchQueueRepository, worker *JobMatchWorker) *JobMatchRequests {
+	return &JobMatchRequests{jobs: jobs, queue: queue, worker: worker}
 }
 
 func (requests *JobMatchRequests) Queue(ctx context.Context, jobID int64, redo bool) error {
+	job, err := requests.jobs.Job(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(job.BodyText) == "" {
+		return ErrJobDescriptionRequired
+	}
 	found, err := requests.queue.QueueJobMatch(ctx, jobID, redo)
 	if err != nil {
 		return err
