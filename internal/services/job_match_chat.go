@@ -37,7 +37,7 @@ var resumePatchTool = openai.Tool{
 	Type: "function",
 	Function: openai.ToolFunction{
 		Name:        "revise_application_resume",
-		Description: "Apply narrowly targeted, factual resume tailoring changes. Use exact expected text from the application resume and never invent experience, credentials, employers, or dates.",
+		Description: "Apply narrowly targeted, factual resume tailoring changes. Use exact expected text from the application resume and never invent experience, credentials, employers, or dates. Use competency to add or remove a competency section and competencyTitle to rename a section. To add bullets to a new competency, first add it, then use its ID from the accepted revision in a follow-up call.",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"additionalProperties": false,
@@ -62,7 +62,7 @@ var resumePatchTool = openai.Tool{
 							},
 							"section": {
 								"type": "string",
-								"enum": ["headline", "summary", "skill", "competencyBullet", "experienceBullet"]
+								"enum": ["headline", "summary", "skill", "competency", "competencyTitle", "competencyBullet", "experienceBullet", "educationDetails"]
 							},
 							"id": {
 								"type": "integer",
@@ -537,6 +537,7 @@ type chatResumeExperience struct {
 }
 
 type chatResumeEducation struct {
+	ID           int64  `json:"id"`
 	Degree       string `json:"degree"`
 	FieldOfStudy string `json:"fieldOfStudy"`
 	StartDate    string `json:"startDate"`
@@ -760,7 +761,7 @@ func chatResumeForLLM(resume models.Resume, country string) chatResume {
 		chat.Experience = append(chat.Experience, chatResumeExperience{ID: experience.ID, Company: experience.Company, Title: experience.Title, StartDate: experience.StartDate, EndDate: experience.EndDate, IsCurrent: experience.IsCurrent, Stack: experience.Stack, Bullets: experience.Bullets})
 	}
 	for _, education := range resume.Education {
-		chat.Education = append(chat.Education, chatResumeEducation{Degree: education.Degree, FieldOfStudy: education.FieldOfStudy, StartDate: education.StartDate, EndDate: education.EndDate, Details: education.Details})
+		chat.Education = append(chat.Education, chatResumeEducation{ID: education.ID, Degree: education.Degree, FieldOfStudy: education.FieldOfStudy, StartDate: education.StartDate, EndDate: education.EndDate, Details: education.Details})
 	}
 	return chat
 }
@@ -961,6 +962,16 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			if err := patchResumeSkill(&resume.Skills, operation, value, expected); err != nil {
 				return fmt.Errorf("skill patch: %w", err)
 			}
+		case "competency":
+			if err := patchResumeCompetency(&resume.Competencies, operation, value, expected); err != nil {
+				return fmt.Errorf("competency patch: %w", err)
+			}
+		case "competencyTitle":
+			competency := findCompetency(resume.Competencies, operation.ID)
+			if competency == nil || operation.Op != "replace" || operation.ParentID != 0 || strings.TrimSpace(competency.Title) != expected || value == "" {
+				return errors.New("competency title replacement did not match the current value")
+			}
+			competency.Title = value
 		case "competencyBullet":
 			competency := findCompetency(resume.Competencies, operation.ParentID)
 			if competency == nil {
@@ -977,6 +988,12 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			if err := patchResumeText(&experience.Bullets, operation, value, expected); err != nil {
 				return fmt.Errorf("experience bullet patch: %w", err)
 			}
+		case "educationDetails":
+			education := findEducation(resume.Education, operation.ID)
+			if education == nil || operation.Op != "replace" || operation.ParentID != 0 || strings.TrimSpace(education.Details) != expected || value == "" {
+				return errors.New("education details replacement did not match the current value")
+			}
+			education.Details = value
 		default:
 			return fmt.Errorf("unsupported patch section %q", operation.Section)
 		}
@@ -1052,6 +1069,33 @@ func patchResumeSkill(values *[]models.ResumeSkill, operation resumePatchOperati
 	return fmt.Errorf("skill ID %d does not exist", operation.ID)
 }
 
+func patchResumeCompetency(values *[]models.ResumeCompetency, operation resumePatchOperation, value, expected string) error {
+	switch operation.Op {
+	case "add":
+		if operation.ID != 0 || operation.ParentID != 0 || value == "" {
+			return errors.New("new competency must have no IDs and a nonempty title")
+		}
+		*values = append(*values, models.ResumeCompetency{ID: nextResumeCompetencyID(*values), Title: value})
+		return nil
+	case "remove":
+		if operation.ParentID != 0 {
+			return errors.New("competency removal must not have a parent ID")
+		}
+		for index := range *values {
+			if (*values)[index].ID == operation.ID {
+				if strings.TrimSpace((*values)[index].Title) != expected {
+					return errors.New("expected competency title did not match")
+				}
+				*values = append((*values)[:index], (*values)[index+1:]...)
+				return nil
+			}
+		}
+		return fmt.Errorf("competency ID %d does not exist", operation.ID)
+	default:
+		return fmt.Errorf("unsupported operation %q", operation.Op)
+	}
+}
+
 func findCompetency(values []models.ResumeCompetency, id int64) *models.ResumeCompetency {
 	for index := range values {
 		if values[index].ID == id {
@@ -1062,6 +1106,15 @@ func findCompetency(values []models.ResumeCompetency, id int64) *models.ResumeCo
 }
 
 func findExperience(values []models.ResumeExperience, id int64) *models.ResumeExperience {
+	for index := range values {
+		if values[index].ID == id {
+			return &values[index]
+		}
+	}
+	return nil
+}
+
+func findEducation(values []models.ResumeEducation, id int64) *models.ResumeEducation {
 	for index := range values {
 		if values[index].ID == id {
 			return &values[index]
@@ -1081,6 +1134,16 @@ func nextResumeTextID(values []models.ResumeText) int64 {
 }
 
 func nextResumeSkillID(values []models.ResumeSkill) int64 {
+	var maximum int64
+	for _, value := range values {
+		if value.ID > maximum {
+			maximum = value.ID
+		}
+	}
+	return maximum + 1
+}
+
+func nextResumeCompetencyID(values []models.ResumeCompetency) int64 {
 	var maximum int64
 	for _, value := range values {
 		if value.ID > maximum {
