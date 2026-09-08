@@ -101,7 +101,7 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
   h1, h2, h3, p { margin-top: 0; }
   h1, h2, h3, strong { font-weight: 800; }
   h1 { font-size: 34pt; letter-spacing: -.04em; line-height: 1; margin-bottom: 7mm; }
-  h2 { font-size: 20pt; letter-spacing: -.025em; line-height: 1.05; margin: 12mm 0 5mm; }
+  h2 { break-after: avoid; font-size: 20pt; letter-spacing: -.025em; line-height: 1.05; margin: 12mm 0 5mm; }
   h3 { font-size: 13pt; line-height: 1.2; margin: 0 0 3mm; }
   .intro { break-inside: avoid; }
   .photo { display: block; height: 43mm; margin: 0 0 6mm; object-fit: cover; width: 43mm; }
@@ -112,7 +112,8 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
   .links { color: #555; font-size: 9.5pt; margin-bottom: 7mm; }
   .links a { color: inherit; text-decoration: none; }
   .links span + span::before { content: " | "; padding: 0 .15em; }
-  .skills { font-size: 12pt; font-weight: 800; line-height: 1.35; }
+  .skills { display: flex; flex-wrap: wrap; gap: 4mm; }
+  .skills span { border: .25mm solid #d7dbe1; border-radius: 1.5mm; font-size: 12pt; line-height: 1.2; padding: 2.5mm 4mm; }
   .section { break-inside: avoid; }
   .section + .section { margin-top: 7mm; }
   ul { margin: 0; padding-left: 8mm; }
@@ -138,13 +139,13 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
     {{if .Resume.Links}}<p class="links">{{range $index, $link := .Resume.Links}}{{if $index}}<span></span>{{end}}<span><a href="{{$link.URL}}">{{$link.Label}}</a></span>{{end}}</p>{{end}}
   </section>
 
-  {{if .Resume.Skills}}<section><h2>Key Competences</h2><ul class="skills">{{range .Resume.Skills}}<li>{{.Name}}</li>{{end}}</ul></section>{{end}}
+   {{if .Resume.Competencies}}<section><h2>Competencies</h2>{{range .Resume.Competencies}}<div class="section"><h3>{{.Title}}</h3>{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}</div>{{end}}</section>{{end}}
 
-  {{if .Resume.Competencies}}<section><h2>Competencies</h2>{{range .Resume.Competencies}}<div class="section"><h3>{{.Title}}</h3>{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}</div>{{end}}</section>{{end}}
+   {{if .Resume.Experience}}<section><h2>Professional Experience</h2>{{range .Resume.Experience}}<article class="role"><div class="role-heading"><h3>{{.Company}}{{if .Title}} | {{.Title}}{{end}}</h3><span class="dates">{{.StartDate}}{{if .IsCurrent}} - present{{else if .EndDate}} - {{.EndDate}}{{end}}</span></div>{{if .Location}}<p class="location">{{.Location}}</p>{{end}}{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}{{if .Stack}}<p class="stack">Stack: {{.Stack}}</p>{{end}}</article>{{end}}</section>{{end}}
 
-  {{if .Resume.Experience}}<section><h2>Work Experience</h2>{{range .Resume.Experience}}<article class="role"><div class="role-heading"><h3>{{.Company}}{{if .Title}} | {{.Title}}{{end}}</h3><span class="dates">{{.StartDate}}{{if .IsCurrent}} - present{{else if .EndDate}} - {{.EndDate}}{{end}}</span></div>{{if .Location}}<p class="location">{{.Location}}</p>{{end}}{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}{{if .Stack}}<p class="stack">Stack: {{.Stack}}</p>{{end}}</article>{{end}}</section>{{end}}
+   {{if .Resume.Education}}<section><h2>Education</h2>{{range .Resume.Education}}<article class="education"><div class="education-heading"><h3>{{.Institution}}{{if .Location}}, {{.Location}}{{end}}</h3><span class="dates">{{.StartDate}}{{if .EndDate}} - {{.EndDate}}{{end}}</span></div>{{if .Degree}}<p><strong>{{.Degree}}</strong>{{if .FieldOfStudy}}, {{.FieldOfStudy}}{{end}}</p>{{end}}{{if .Details}}<p>{{.Details}}</p>{{end}}</article>{{end}}</section>{{end}}
 
-  {{if .Resume.Education}}<section><h2>Education</h2>{{range .Resume.Education}}<article class="education"><div class="education-heading"><h3>{{.Institution}}{{if .Location}}, {{.Location}}{{end}}</h3><span class="dates">{{.StartDate}}{{if .EndDate}} - {{.EndDate}}{{end}}</span></div>{{if .Degree}}<p><strong>{{.Degree}}</strong>{{if .FieldOfStudy}}, {{.FieldOfStudy}}{{end}}</p>{{end}}{{if .Details}}<p>{{.Details}}</p>{{end}}</article>{{end}}</section>{{end}}
+   {{if .Resume.Skills}}<section><h2>Skills</h2><div class="skills">{{range .Resume.Skills}}<span>{{.Name}}</span>{{end}}</div></section>{{end}}
 </main>
 </body>
 </html>`))
