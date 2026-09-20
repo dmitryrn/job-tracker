@@ -184,6 +184,19 @@ func TestApplyResumePatchEditsEducationDetails(t *testing.T) {
 	assert.Equal(t, "Thesis: distributed systems", resume.Education[0].Details)
 }
 
+func TestApplyResumePatchAddsEmptyEducationDetails(t *testing.T) {
+	resume := models.Resume{Education: []models.ResumeEducation{{
+		ID: 7,
+	}}}
+
+	err := applyResumePatch(&resume, resumePatch{Operations: []resumePatchOperation{{
+		Op: "add", Section: "educationDetails", ID: 7, Expected: "", Value: "Thesis: distributed systems",
+	}}})
+
+	require.NoError(t, err)
+	assert.Equal(t, "Thesis: distributed systems", resume.Education[0].Details)
+}
+
 func TestApplyResumePatchRejectsEducationDetailsWithWrongExpectedValue(t *testing.T) {
 	resume := models.Resume{Education: []models.ResumeEducation{{
 		ID: 7, Details: "Dean's list",
@@ -195,6 +208,65 @@ func TestApplyResumePatchRejectsEducationDetailsWithWrongExpectedValue(t *testin
 
 	assert.Error(t, err)
 	assert.Equal(t, "Dean's list", resume.Education[0].Details)
+	assert.ErrorContains(t, err, `education ID 7, expected "Honors", current "Dean's list"`)
+}
+
+func TestCloneResumeDoesNotSharePatchableFields(t *testing.T) {
+	resume := models.Resume{
+		SummaryParagraphs: []models.ResumeText{{ID: 1, Content: "Original summary"}},
+		Skills:            []models.ResumeSkill{{ID: 1, Name: "Go"}},
+		Experience: []models.ResumeExperience{{
+			ID:      1,
+			Bullets: []models.ResumeText{{ID: 1, Content: "Original bullet"}},
+		}},
+		Education: []models.ResumeEducation{{ID: 1, Details: "Original details"}},
+	}
+
+	clone := cloneResume(resume)
+	clone.SummaryParagraphs[0].Content = "Changed summary"
+	clone.Skills[0].Name = "Python"
+	clone.Experience[0].Bullets[0].Content = "Changed bullet"
+	clone.Education[0].Details = "Changed details"
+
+	assert.Equal(t, "Original summary", resume.SummaryParagraphs[0].Content)
+	assert.Equal(t, "Go", resume.Skills[0].Name)
+	assert.Equal(t, "Original bullet", resume.Experience[0].Bullets[0].Content)
+	assert.Equal(t, "Original details", resume.Education[0].Details)
+}
+
+func TestProviderRequestIncludesRejectedPatchFeedback(t *testing.T) {
+	base := models.Resume{Education: []models.ResumeEducation{{ID: 7, Details: "Dean's list"}}}
+	basePayload, err := json.Marshal(resumeRevisionPayload{Revision: 0, Resume: base})
+	require.NoError(t, err)
+	toolCallPayload, err := json.Marshal(openai.ToolCall{
+		ID:   "call-1",
+		Type: "function",
+		Function: openai.ToolFunction{
+			Name:      resumePatchTool.Function.Name,
+			Arguments: `{"baseRevision":0,"operations":[{"op":"replace","section":"educationDetails","id":7,"parentId":0,"expected":"Honors","value":"Thesis: distributed systems"}]}`,
+		},
+	})
+	require.NoError(t, err)
+	rejectedPayload, err := json.Marshal(toolResultPayload{
+		ToolCallID: "call-1",
+		Status:     "rejected",
+		Error:      `education details did not match current value (education ID 7, expected "Honors", current "Dean's list")`,
+	})
+	require.NoError(t, err)
+
+	request, err := providerRequest([]models.JobMatchChatItem{
+		{Type: "initial_instructions", Payload: payload(map[string]string{"content": jobMatchChatInstructions})},
+		{Type: "resume_revision", Payload: basePayload},
+		{Type: "assistant_tool_call", Payload: toolCallPayload},
+		{Type: "tool_result", Payload: rejectedPayload},
+	}, "low", "Canada")
+
+	require.NoError(t, err)
+	require.Len(t, request.Messages, 4)
+	assert.Equal(t, "assistant", request.Messages[2].Role)
+	assert.Equal(t, "tool", request.Messages[3].Role)
+	assert.Contains(t, request.Messages[3].Content, "education ID 7")
+	assert.Contains(t, request.Messages[3].Content, `current \"Dean's list\"`)
 }
 
 func TestChatResumeForLLMIncludesEducationID(t *testing.T) {

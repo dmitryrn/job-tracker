@@ -37,7 +37,7 @@ var resumePatchTool = openai.Tool{
 	Type: "function",
 	Function: openai.ToolFunction{
 		Name:        "revise_application_resume",
-		Description: "Apply narrowly targeted, factual resume tailoring changes. Use exact expected text from the application resume and never invent experience, credentials, employers, or dates.",
+		Description: "Apply narrowly targeted, factual resume tailoring changes. Use exact expected text from the application resume and never invent experience, credentials, employers, or dates. For educationDetails, use the existing education ID; use add only when details are empty and replace when details already exist.",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"additionalProperties": false,
@@ -94,6 +94,34 @@ type resumePatchOperation struct {
 	ParentID int64  `json:"parentId"`
 	Expected string `json:"expected"`
 	Value    string `json:"value"`
+}
+
+func resumePatchOperationSummaries(operations []resumePatchOperation) []string {
+	summaries := make([]string, 0, len(operations))
+	for _, operation := range operations {
+		summary := fmt.Sprintf("%s:%s:%d", operation.Op, operation.Section, operation.ID)
+		if operation.ParentID != 0 {
+			summary += fmt.Sprintf("(parent:%d)", operation.ParentID)
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries
+}
+
+func resumePatchAvailableIDs(resume models.Resume) (summary, skills, experiences, education []int64) {
+	for _, value := range resume.SummaryParagraphs {
+		summary = append(summary, value.ID)
+	}
+	for _, value := range resume.Skills {
+		skills = append(skills, value.ID)
+	}
+	for _, value := range resume.Experience {
+		experiences = append(experiences, value.ID)
+	}
+	for _, value := range resume.Education {
+		education = append(education, value.ID)
+	}
+	return summary, skills, experiences, education
 }
 
 type JobMatchChat struct {
@@ -430,6 +458,15 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 		}
 		history = append(history, toolItem)
 		patchAttempts++
+		service.logger.Info("job match resume patch received",
+			zap.Int64("job_id", jobID),
+			zap.String("request_id", requestID),
+			zap.Int("attempt", patchAttempts),
+			zap.String("tool_call_id", toolCall.ID),
+			zap.String("tool_type", toolCall.Type),
+			zap.String("tool_name", toolCall.Function.Name),
+			zap.Int("arguments_bytes", len(toolCall.Function.Arguments)),
+		)
 		if toolCall.Type != "function" || toolCall.Function.Name != resumePatchTool.Function.Name {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
 		}
@@ -438,21 +475,51 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 		if err == nil && patch.BaseRevision != current.Revision {
 			err = fmt.Errorf("patch was based on revision %d, but the current revision is %d", patch.BaseRevision, current.Revision)
 		}
-		updated := current.Resume
+		updated := cloneResume(current.Resume)
 		if err == nil {
 			err = applyResumePatch(&updated, patch)
 		}
 		if err != nil {
+			summaryIDs, skillIDs, experienceIDs, educationIDs := resumePatchAvailableIDs(current.Resume)
+			service.logger.Warn("job match resume patch rejected",
+				zap.Int64("job_id", jobID),
+				zap.String("request_id", requestID),
+				zap.Int("attempt", patchAttempts),
+				zap.String("tool_call_id", toolCall.ID),
+				zap.Int("base_revision", patch.BaseRevision),
+				zap.Int("current_revision", current.Revision),
+				zap.Int("operation_count", len(patch.Operations)),
+				zap.Strings("operations", resumePatchOperationSummaries(patch.Operations)),
+				zap.Int64s("available_summary_ids", summaryIDs),
+				zap.Int64s("available_skill_ids", skillIDs),
+				zap.Int64s("available_experience_ids", experienceIDs),
+				zap.Int64s("available_education_ids", educationIDs),
+				zap.Error(err),
+			)
 			result, resultErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "rejected", Error: err.Error()})})
 			if resultErr != nil {
 				return fmt.Errorf("record rejected tool result: %w", resultErr)
 			}
 			history = append(history, result)
 			if patchAttempts >= resumePatchAttempts {
+				service.logger.Error("job match resume patch retries exhausted",
+					zap.Int64("job_id", jobID),
+					zap.String("request_id", requestID),
+					zap.Int("attempts", patchAttempts),
+					zap.Int("current_revision", current.Revision),
+					zap.String("last_error", err.Error()),
+				)
 				service.recordTerminal(ctx, jobID, requestID, "retry_limit_reached", "no resume changes were made after three rejected patches")
 				service.recordTerminal(ctx, jobID, requestID, "turn_halted", "resume patch retry limit reached")
 				return nil
 			}
+			service.logger.Info("job match resume patch retrying",
+				zap.Int64("job_id", jobID),
+				zap.String("request_id", requestID),
+				zap.Int("rejected_attempt", patchAttempts),
+				zap.Int("next_attempt", patchAttempts+1),
+				zap.String("feedback_sent_to_model", err.Error()),
+			)
 			retry, retryErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "patch_retrying", RequestID: requestID, Payload: payload(map[string]any{"attempt": patchAttempts, "detail": "patch rejected; request a corrected patch"})})
 			if retryErr != nil {
 				return fmt.Errorf("record patch retry: %w", retryErr)
@@ -460,6 +527,15 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			history = append(history, retry)
 			continue
 		}
+		service.logger.Info("job match resume patch accepted",
+			zap.Int64("job_id", jobID),
+			zap.String("request_id", requestID),
+			zap.Int("attempt", patchAttempts),
+			zap.String("tool_call_id", toolCall.ID),
+			zap.Int("revision", current.Revision+1),
+			zap.Int("operation_count", len(patch.Operations)),
+			zap.Strings("operations", resumePatchOperationSummaries(patch.Operations)),
+		)
 		result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: current.Revision + 1, Resume: &updated})})
 		if err != nil {
 			return fmt.Errorf("record accepted tool result: %w", err)
@@ -813,7 +889,7 @@ func latestResumeRevision(items []models.JobMatchChatItem) (resumeRevisionPayloa
 }
 
 func applicationResumeSnapshot(resume models.Resume) models.Resume {
-	snapshot := resume
+	snapshot := cloneResume(resume)
 	snapshot.ID = 0
 	snapshot.FullName = ""
 	snapshot.Town = ""
@@ -823,16 +899,27 @@ func applicationResumeSnapshot(resume models.Resume) models.Resume {
 	snapshot.Links = nil
 	snapshot.HasPhoto = false
 	snapshot.UpdatedAt = ""
-	snapshot.Experience = append([]models.ResumeExperience(nil), resume.Experience...)
 	for index := range snapshot.Experience {
 		snapshot.Experience[index].Location = ""
 	}
-	snapshot.Education = append([]models.ResumeEducation(nil), resume.Education...)
 	for index := range snapshot.Education {
 		snapshot.Education[index].Institution = ""
 		snapshot.Education[index].Location = ""
 	}
 	return snapshot
+}
+
+func cloneResume(resume models.Resume) models.Resume {
+	clone := resume
+	clone.SummaryParagraphs = append([]models.ResumeText(nil), resume.SummaryParagraphs...)
+	clone.Links = append([]models.ResumeLink(nil), resume.Links...)
+	clone.Skills = append([]models.ResumeSkill(nil), resume.Skills...)
+	clone.Experience = append([]models.ResumeExperience(nil), resume.Experience...)
+	for index := range clone.Experience {
+		clone.Experience[index].Bullets = append([]models.ResumeText(nil), resume.Experience[index].Bullets...)
+	}
+	clone.Education = append([]models.ResumeEducation(nil), resume.Education...)
+	return clone
 }
 
 func applicationResumeForDownload(base, revision models.Resume) models.Resume {
@@ -949,7 +1036,7 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 		switch operation.Section {
 		case "headline":
 			if operation.Op != "replace" || operation.ID != 0 || strings.TrimSpace(resume.Headline) != expected || value == "" {
-				return errors.New("headline replacement did not match the current value")
+				return fmt.Errorf("headline replacement did not match current value (expected %q, current %q)", expected, strings.TrimSpace(resume.Headline))
 			}
 			resume.Headline = value
 		case "summary":
@@ -970,8 +1057,27 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			}
 		case "educationDetails":
 			education := findEducation(resume.Education, operation.ID)
-			if education == nil || operation.Op != "replace" || operation.ParentID != 0 || strings.TrimSpace(education.Details) != expected || value == "" {
-				return errors.New("education details replacement did not match the current value")
+			if education == nil {
+				return fmt.Errorf("education ID %d does not exist", operation.ID)
+			}
+			if operation.ParentID != 0 {
+				return fmt.Errorf("education details must not have a parent ID (education ID %d, parent ID %d)", operation.ID, operation.ParentID)
+			}
+			current := strings.TrimSpace(education.Details)
+			if value == "" {
+				return fmt.Errorf("education details value must not be empty (education ID %d)", operation.ID)
+			}
+			switch operation.Op {
+			case "add":
+				if current != "" || expected != "" {
+					return fmt.Errorf("education details already has content; use replace (education ID %d, expected %q, current %q)", operation.ID, expected, current)
+				}
+			case "replace":
+				if current != expected {
+					return fmt.Errorf("education details did not match current value (education ID %d, expected %q, current %q)", operation.ID, expected, current)
+				}
+			default:
+				return fmt.Errorf("education details supports add for empty details or replace (education ID %d, op %q)", operation.ID, operation.Op)
 			}
 			education.Details = value
 		default:
@@ -986,8 +1092,9 @@ func patchResumeText(values *[]models.ResumeText, operation resumePatchOperation
 	case "replace":
 		for index := range *values {
 			if (*values)[index].ID == operation.ID {
-				if strings.TrimSpace((*values)[index].Content) != expected || value == "" {
-					return errors.New("expected text did not match")
+				current := strings.TrimSpace((*values)[index].Content)
+				if current != expected || value == "" {
+					return fmt.Errorf("expected text did not match (text ID %d, expected %q, current %q)", operation.ID, expected, current)
 				}
 				(*values)[index].Content = value
 				return nil
@@ -1021,8 +1128,9 @@ func patchResumeSkill(values *[]models.ResumeSkill, operation resumePatchOperati
 	case "replace":
 		for index := range *values {
 			if (*values)[index].ID == operation.ID {
-				if strings.TrimSpace((*values)[index].Name) != expected || value == "" {
-					return errors.New("expected skill did not match")
+				current := strings.TrimSpace((*values)[index].Name)
+				if current != expected || value == "" {
+					return fmt.Errorf("expected skill did not match (skill ID %d, expected %q, current %q)", operation.ID, expected, current)
 				}
 				(*values)[index].Name = value
 				return nil
@@ -1036,8 +1144,9 @@ func patchResumeSkill(values *[]models.ResumeSkill, operation resumePatchOperati
 	case "remove":
 		for index := range *values {
 			if (*values)[index].ID == operation.ID {
-				if strings.TrimSpace((*values)[index].Name) != expected {
-					return errors.New("expected skill did not match")
+				current := strings.TrimSpace((*values)[index].Name)
+				if current != expected {
+					return fmt.Errorf("expected skill did not match (skill ID %d, expected %q, current %q)", operation.ID, expected, current)
 				}
 				*values = append((*values)[:index], (*values)[index+1:]...)
 				return nil
