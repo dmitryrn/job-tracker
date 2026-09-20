@@ -1,8 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
+import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
+import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
 type JobDetailViewProps = {
   job: BrowseJob;
@@ -111,6 +112,33 @@ function JobMatchAssessmentPanel({ assessment }: { assessment: JobMatchAssessmen
       {assessment.applicationAngle && <section><h3>Application angle</h3><p>{assessment.applicationAngle}</p></section>}
     </>
   );
+}
+
+export function eligibilityDecision(answer: JobEligibilityAnswer) {
+  if (Math.max(answer.noul, 1 - answer.noul) < 0.7) {
+    return { label: "Indecisive", className: "eligibility-answer indecisive" };
+  }
+  return answer.answer === "yes"
+    ? { label: "Yes", className: "eligibility-answer yes" }
+    : { label: "No", className: "eligibility-answer no" };
+}
+
+function eligibilityDistribution(answer: JobEligibilityAnswer) {
+  return `Yes ${Math.round(answer.noul * 100)}% / No ${Math.round((1 - answer.noul) * 100)}%`;
+}
+
+function JobEligibilityPanel({ check, running, onRun }: { check: JobEligibilityCheck | null; running: boolean; onRun: () => void }) {
+  const questions = check ? [
+    ["Does this job require European Union job rights?", check.europeanUnionJobRights],
+    ["Does this job require to reside in a specific country?", check.specificCountryResidence],
+  ] as const : [];
+  return <section className="eligibility-panel">
+    <div className="eligibility-panel-header">
+      <button type="button" className="secondary-action" disabled={running} onClick={onRun}>Run</button>
+    </div>
+    {questions.length > 0 && <div className="eligibility-results">{questions.map(([question, answer]) => { const decision = eligibilityDecision(answer); return <div className="eligibility-result" key={question}><strong>{question}</strong><span className={decision.className}>{decision.label}</span><span className="eligibility-distribution">{eligibilityDistribution(answer)}</span></div>; })}</div>}
+    {check && <p className="eligibility-timestamp">Checked {formatTimestamp(check.checkedAt)}</p>}
+  </section>;
 }
 
 function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | null | undefined }) {
@@ -355,6 +383,7 @@ function resumeDiff(previous: Resume, next: Resume) {
 export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted }: JobDetailViewProps) {
   const [match, setMatch] = useState<JobMatch | null>();
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
+  const [eligibility, setEligibility] = useState<JobEligibilityCheck | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [rejecting, setRejecting] = useState(false);
@@ -363,6 +392,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [rejectionReason, setRejectionReason] = useState("");
   const [queueing, setQueueing] = useState(false);
   const [queued, setQueued] = useState(false);
+  const [eligibilityRunning, setEligibilityRunning] = useState(false);
   const actionsMenuRef = useRef<HTMLDetailsElement>(null);
   const rejectionDialogRef = useRef<HTMLDialogElement>(null);
   const postedAt = formatTimestamp(job.postedAt);
@@ -376,8 +406,8 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       try {
         const result = await fetchJobMatch(job.id, controller.signal);
         if (!controller.signal.aborted) {
-          setMatch(result.match);
-		  setAnalysis(result.analysis);
+           setMatch(result.match);
+           setAnalysis(result.analysis);
           setError("");
           setQueued(false);
         }
@@ -452,6 +482,20 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     }
   }
 
+  async function runEligibilityCheck() {
+    if (eligibilityRunning) return;
+    setEligibilityRunning(true);
+    try {
+      const result = await runJobEligibilityCheck(job.id);
+      setEligibility(result.eligibility);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not run job eligibility check");
+    } finally {
+      setEligibilityRunning(false);
+    }
+  }
+
   return (
     <section className={tab === "chat" ? "job-page chat-job-page" : "job-page"}>
       <button type="button" className="back-link" onClick={onBack}>Back to jobs</button>
@@ -476,17 +520,19 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       <dl className="job-page-meta">
         <div><dt>Location</dt><dd>{job.location || "Location flexible"}</dd></div>
         <div><dt>Employment type</dt><dd>{job.employmentType || "Not listed"}</dd></div>
-        <div><dt>Compensation</dt><dd>{formatSalary(job)}</dd></div>
+       <div><dt>Compensation</dt><dd>{formatSalary(job)}</dd></div>
+       <div><dt>Profile fit</dt><dd><span className={profileScoreClassName(job.profileMatchScore)} style={profileScoreStyle(job.profileMatchScore)}>{profileScoreLabel(job.profileMatchScore)}</span></dd></div>
       </dl>
+      <JobEligibilityPanel check={eligibility} running={eligibilityRunning} onRun={() => void runEligibilityCheck()} />
       <nav className="detail-tabs" aria-label="Job details">
         <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("post")}>Job post</button>
         <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>
         <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
       </nav>
-      {error && <p className="query-error">{error}</p>}
-      {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
+       {error && <p className="query-error">{error}</p>}
+       {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
         <>
-          <section className="match-panel">
+           <section className="match-panel">
             <p className="eyebrow">Current match</p>
             {matchedAt && <p className="detail-timestamp">Matched {matchedAt}</p>}
             {match === undefined ? <p>Loading match...</p> : match === null ? <p>{queued ? "Match request queued." : "No match yet."}</p> : match.assessment ? <JobMatchAssessmentPanel assessment={match.assessment} /> : <p>{match.content}</p>}

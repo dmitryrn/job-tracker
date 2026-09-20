@@ -15,6 +15,7 @@ import (
 	"nice/internal/clients/linkedin"
 	"nice/internal/clients/openai"
 	"nice/internal/clients/remotive"
+	"nice/internal/clients/typesafe"
 	"nice/internal/config"
 	"nice/internal/migrations"
 	"nice/internal/models"
@@ -35,6 +36,7 @@ func main() {
 			linkedin.NewClient,
 			fx.Annotate(newOpenCodeClient, fx.ResultTags(`name:"opencode"`)),
 			fx.Annotate(newOpenAIClient, fx.ResultTags(`name:"openai"`)),
+			newTypeSafeClient,
 			remotive.NewClient,
 			fx.Annotate(newCompletionClients, fx.ParamTags(`name:"opencode"`, `name:"openai"`)),
 			repositories.NewSQLite,
@@ -62,6 +64,7 @@ func main() {
 			services.NewResumeService,
 			services.NewResumePDFService,
 			newJobAnalyzer,
+			newJobProfileScorer,
 			newJobAnalysisService,
 			newProfileJobMatcher,
 			newJobMatchWorker,
@@ -80,6 +83,10 @@ func newOpenCodeClient(cfg config.Config) *openai.Client {
 
 func newOpenAIClient(cfg config.Config) *openai.Client {
 	return openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.BaseURL)
+}
+
+func newTypeSafeClient(cfg config.Config) (*typesafe.Client, error) {
+	return typesafe.NewClient(cfg.TypeSafe.APIKey, cfg.TypeSafe.BaseURL, cfg.TypeSafe.Model)
 }
 
 type completionClients struct {
@@ -110,6 +117,10 @@ func newJobAnalyzer(clients completionClients, cfg config.Config) (*services.Job
 	return services.NewJobAnalyzer(client, cfg.JobAnalysis.Model, cfg.JobAnalysis.ReasoningEffort), nil
 }
 
+func newJobProfileScorer(client *typesafe.Client) services.JobProfileScoreService {
+	return services.NewJobProfileScorer(client)
+}
+
 func newCustomJobImporter(clients completionClients, cfg config.Config) (*services.CustomJobImporter, error) {
 	client, err := clients.forProvider(cfg.CustomJobImport.Provider)
 	if err != nil {
@@ -138,8 +149,8 @@ func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMa
 	return services.NewJobMatchChat(jobs, matches, items, profiles, resumes, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort, logger), nil
 }
 
-func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, matcher services.ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {
-	return services.NewJobMatchWorker(jobs, analyses, matches, queue, profiles, analyzer, matcher, events, logger, cfg.JobMatch.RunInterval)
+func newJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer services.JobAnalysisService, scorer services.JobProfileScoreService, matcher services.ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, cfg config.Config) *services.JobMatchWorker {
+	return services.NewJobMatchWorker(jobs, analyses, matches, queue, profiles, analyzer, matcher, events, logger, cfg.JobMatch.RunInterval, scorer)
 }
 
 func registerLifecycle(

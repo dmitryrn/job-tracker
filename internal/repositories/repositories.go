@@ -18,6 +18,7 @@ type JobRepository interface {
 	Providers(context.Context) ([]string, error)
 	Companies(context.Context, string) ([]models.BrowseCompany, error)
 	AnalysisJob(context.Context, int64) (*models.Job, error)
+	SaveJobProfileMatchScore(context.Context, int64, int) error
 }
 
 type ProviderRunRepository interface {

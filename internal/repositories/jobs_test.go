@@ -92,3 +92,27 @@ func TestMatchQueueDoesNotStoreDuplicateJobs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []int64{2, 1}, []int64{queue[0].ID, queue[1].ID})
 }
+
+func TestSaveJobProfileMatchScoreStoresAndListsScore(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "example", SourceID: "score", SourceURL: "https://example.com/score", Title: "Engineer", Workplace: "remote", MetadataJSON: "{}",
+	}}))
+	require.NoError(t, repository.SaveJobProfileMatchScore(context.Background(), 1, 8))
+
+	job, err := repository.Job(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotNil(t, job.ProfileMatchScore)
+	assert.Equal(t, 8, *job.ProfileMatchScore)
+
+	page, err := repository.List(context.Background(), models.JobSearch{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, page.Jobs, 1)
+	require.NotNil(t, page.Jobs[0].ProfileMatchScore)
+	assert.Equal(t, 8, *page.Jobs[0].ProfileMatchScore)
+}

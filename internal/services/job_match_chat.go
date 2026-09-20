@@ -559,31 +559,7 @@ type jobMatchChatInitialContext struct {
 type chatInitialContext struct {
 	Job     *models.BrowseJob      `json:"job"`
 	Match   *models.JobMatchRecord `json:"match"`
-	Profile *chatUserProfile       `json:"profile,omitempty"`
-}
-
-type chatUserProfile struct {
-	Headline          string                    `json:"headline"`
-	WorkAuthorization string                    `json:"workAuthorization"`
-	Summary           string                    `json:"summary"`
-	Skills            []models.UserProfileSkill `json:"skills"`
-	WorkHistory       []chatWorkHistory         `json:"workHistory"`
-	Education         []chatEducation           `json:"education"`
-}
-
-type chatWorkHistory struct {
-	Company   string `json:"company"`
-	Title     string `json:"title"`
-	StartDate string `json:"startDate"`
-	EndDate   string `json:"endDate"`
-	Body      string `json:"body"`
-}
-
-type chatEducation struct {
-	Degree    string `json:"degree"`
-	StartDate string `json:"startDate"`
-	EndDate   string `json:"endDate"`
-	Body      string `json:"body"`
+	Profile *llmUserProfile        `json:"profile,omitempty"`
 }
 
 type chatResumeRevisionPayload struct {
@@ -770,7 +746,7 @@ func redactedInitialContext(payload json.RawMessage) (string, error) {
 	}
 	chatContext := chatInitialContext{Job: context.Job, Match: context.Match}
 	if context.Profile != nil {
-		profile := chatProfile(*context.Profile)
+		profile := profileForLLM(*context.Profile)
 		chatContext.Profile = &profile
 	}
 	return marshalChatPayload(chatContext)
@@ -802,24 +778,6 @@ func marshalChatPayload(value any) (string, error) {
 		return "", err
 	}
 	return string(payload), nil
-}
-
-func chatProfile(profile models.UserProfile) chatUserProfile {
-	chat := chatUserProfile{
-		Headline:          profile.Headline,
-		WorkAuthorization: profile.WorkAuthorization,
-		Summary:           profile.Summary,
-		Skills:            profile.Skills,
-		WorkHistory:       make([]chatWorkHistory, 0, len(profile.WorkHistory)),
-		Education:         make([]chatEducation, 0, len(profile.Education)),
-	}
-	for _, experience := range profile.WorkHistory {
-		chat.WorkHistory = append(chat.WorkHistory, chatWorkHistory{Company: experience.Company, Title: experience.Title, StartDate: experience.StartDate, EndDate: experience.EndDate, Body: experience.Body})
-	}
-	for _, education := range profile.Education {
-		chat.Education = append(chat.Education, chatEducation{Degree: education.Degree, StartDate: education.StartDate, EndDate: education.EndDate, Body: education.Body})
-	}
-	return chat
 }
 
 func chatResumeForLLM(resume models.Resume, country string) chatResume {

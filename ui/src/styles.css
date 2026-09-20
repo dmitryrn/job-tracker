@@ -78,9 +78,11 @@ button { cursor: pointer; }
 .job-card-footer { border-top: 1px solid #edebe5; color: #68758a; font-size: 11px; padding: 11px 18px; }
 .job-card-footer a, .primary-action { color: #a26d20; font-weight: 700; text-decoration: none; }
 .job-card-footer a:hover, .primary-action:hover { text-decoration: underline; }
-.job-card-status { align-items: center; display: flex; gap: 8px; min-width: 0; }
+.job-card-status { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .match-status { background: #f1f3f2; border-radius: 999px; color: #65758a; font-size: 10px; font-weight: 700; padding: 4px 7px; white-space: nowrap; }
 .match-status.ready { background: #e5f0eb; color: #1e5948; }
+.profile-score-pill { background: hsl(calc(var(--profile-score) * 12) 76% 84%); border: 1px solid hsl(calc(var(--profile-score) * 12) 55% 68%); border-radius: 999px; color: hsl(calc(var(--profile-score) * 12) 55% 24%); font-size: 10px; font-weight: 700; padding: 4px 7px; white-space: nowrap; }
+.profile-score-pill.unscored { background: #f1f3f2; border-color: transparent; color: #65758a; }
 .company-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
 .company-card { align-items: center; background: #fff; border: 1px solid #dedcd5; border-radius: 7px; display: flex; gap: 13px; min-height: 112px; padding: 18px; }
 .company-mark { align-items: center; background: #e5ac4c; border-radius: 6px; color: #101a2b; display: flex; flex: 0 0 42px; font-family: Georgia, serif; font-size: 23px; height: 42px; justify-content: center; }
@@ -228,6 +230,18 @@ button { cursor: pointer; }
 .match-panel p:last-child { margin: 8px 0 0; }
 .match-panel h3 { font-size: 12px; letter-spacing: .06em; margin: 18px 0 6px; text-transform: uppercase; }
 .match-panel ul { margin: 6px 0; padding-left: 20px; }
+.eligibility-panel { background: #f8f8f5; border: 1px solid #dedcd5; margin: 22px 0; padding: 22px; }
+.eligibility-panel-header { align-items: start; display: flex; }
+.eligibility-results { display: grid; gap: 10px; margin-top: 20px; }
+.eligibility-result { align-items: center; background: #fff; border: 1px solid #e4e1d9; display: flex; gap: 16px; justify-content: space-between; padding: 14px; }
+.eligibility-result strong { color: #304860; font-size: 13px; font-weight: 600; }
+.eligibility-answer { border-radius: 999px; font-size: 11px; font-weight: 700; padding: 5px 9px; white-space: nowrap; }
+.eligibility-answer.yes { background: #f5dfda; color: #8c3526; }
+.eligibility-answer.no { background: #e5f0eb; color: #1e5948; }
+.eligibility-answer.indecisive { background: #e4e7e8; color: #53616b; }
+.eligibility-distribution { color: #65758a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; white-space: nowrap; }
+.eligibility-timestamp { color: #65758a; font-size: 13px; }
+.eligibility-timestamp { margin: 14px 0 0; }
 .match-score { align-items: baseline; display: flex; gap: 4px; margin: 8px 0 12px; }
 .match-score strong { color: #1e5948; font-family: Georgia, serif; font-size: 38px; font-weight: 400; line-height: 1; }
 .match-score span { color: #65758a; }
@@ -440,6 +454,7 @@ tr:hover td { background: #fffbed; }
   .browse-pagination, .events-pagination { align-items: start; flex-direction: column; gap: 12px; }
   .analysis-panel-header { flex-direction: column; }
   .analysis-panel-header > p { text-align: left; }
+  .eligibility-panel-header, .eligibility-result { align-items: start; flex-direction: column; }
   .match-chat-message, .match-chat-user-turn { max-width: 100%; }
   .match-chat-message.user { padding: 10px 12px; }
   .value-dialog-header { padding: 15px 16px; }

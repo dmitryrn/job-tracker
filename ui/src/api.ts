@@ -12,6 +12,7 @@ export type BrowseJob = {
   postedAt: string;
   bodyText: string;
   hasMatch: boolean;
+  profileMatchScore: number | null;
 };
 
 export type CustomJob = {
@@ -157,6 +158,19 @@ export type JobMatch = {
   content: string;
   assessment: JobMatchAssessment | null;
   createdAt: string;
+};
+
+export type JobEligibilityAnswer = {
+  answer: "yes" | "no";
+  noul: number;
+};
+
+export type JobEligibilityCheck = {
+  jobId: number;
+  model: string;
+  checkedAt: string;
+  europeanUnionJobRights: JobEligibilityAnswer;
+  specificCountryResidence: JobEligibilityAnswer;
 };
 
 export type JobMatchChatItem = {
@@ -393,6 +407,10 @@ export function uploadResumePhoto(photo: File) {
 
 export function fetchJobMatch(id: number, signal: AbortSignal) {
 	return request<{ match: JobMatch | null; analysis: JobAnalysis | null }>(`jobs/${id}/match`, { signal });
+}
+
+export function runJobEligibilityCheck(id: number) {
+  return request<{ eligibility: JobEligibilityCheck }>(`jobs/${id}/match/eligibility`, { method: "POST" });
 }
 
 export function fetchJobMatchChat(id: number, signal: AbortSignal) {

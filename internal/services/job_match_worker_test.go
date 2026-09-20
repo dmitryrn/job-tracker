@@ -77,6 +77,37 @@ func TestJobMatchWorkerCreatesOnlyOneMatchPerJob(t *testing.T) {
 	assert.Equal(t, []string{"job_match.started", "job_match.analysis.completed", "job_match.completed", "job_match.started", "job_match.analysis.reused", "job_match.skipped_existing"}, events.types())
 }
 
+func TestJobMatchWorkerSavesProfileScoreOnTheJob(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "example", SourceID: "score", SourceURL: "https://example.com/score", Title: "Engineer", BodyText: "Build services.", Workplace: "remote", MetadataJSON: "{}",
+	}}))
+	_, err = repository.SaveUserProfile(context.Background(), models.UserProfile{Headline: "Engineer"})
+	require.NoError(t, err)
+	_, err = repository.QueueJobMatch(context.Background(), 1, false)
+	require.NoError(t, err)
+
+	scorer := &recordingJobProfileScorer{score: 7}
+	events := &jobMatchEventRecorder{}
+	worker := NewJobMatchWorker(repository, repository, repository, repository, repository, &recordingJobAnalyzer{analysis: testJobAnalysis()}, &recordingProfileJobMatcher{assessment: models.JobMatchAssessment{Score: 80, Summary: "match"}}, events, zap.NewNop(), time.Minute, scorer)
+
+	worked, err := worker.process(context.Background())
+	require.NoError(t, err)
+	assert.True(t, worked)
+	assert.Equal(t, 1, scorer.calls)
+
+	job, err := repository.Job(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotNil(t, job.ProfileMatchScore)
+	assert.Equal(t, 7, *job.ProfileMatchScore)
+	assert.Contains(t, events.types(), "job_match.profile_score.completed")
+}
+
 func TestJobMatchWorkerWaitsForProfile(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -303,6 +334,16 @@ type recordingJobAnalyzer struct {
 	jobs     []models.Job
 	analysis JobAnalysis
 	err      error
+}
+
+type recordingJobProfileScorer struct {
+	score int
+	calls int
+}
+
+func (scorer *recordingJobProfileScorer) Score(context.Context, models.Job, models.UserProfile) (int, error) {
+	scorer.calls++
+	return scorer.score, nil
 }
 
 func (analyzer *recordingJobAnalyzer) Analyze(_ context.Context, job models.Job) (JobAnalysis, error) {

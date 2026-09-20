@@ -160,7 +160,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
 		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
 		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text",
-		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)",
+		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)", "jobs.profile_match_score",
 	).From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
 	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
@@ -203,7 +203,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 		var job models.BrowseJob
 		if err := rows.Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company,
 			&job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
-			&job.PostedAt, &job.BodyText, &job.HasMatch); err != nil {
+			&job.PostedAt, &job.BodyText, &job.HasMatch, &job.ProfileMatchScore); err != nil {
 			return models.JobPage{}, fmt.Errorf("scan job: %w", err)
 		}
 		page.Jobs = append(page.Jobs, job)
@@ -231,11 +231,11 @@ func (repository *SQLite) AnalysisJob(ctx context.Context, jobID int64) (*models
 		SELECT jobs.source, jobs.source_job_id, jobs.source_url, jobs.title, jobs.body_text,
 			COALESCE(companies.name, ''), COALESCE(jobs.location, ''), jobs.workplace,
 			COALESCE(jobs.employment_type, ''), jobs.salary_min, jobs.salary_max,
-			COALESCE(jobs.posted_at, ''), jobs.metadata_json
+			COALESCE(jobs.posted_at, ''), jobs.metadata_json, jobs.profile_match_score
 		FROM jobs LEFT JOIN companies ON companies.id = jobs.company_id WHERE jobs.id = ?`, jobID,
 	).Scan(&job.Source, &job.SourceID, &job.SourceURL, &job.Title, &job.BodyText,
 		&job.Company, &job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin,
-		&job.SalaryMax, &job.PostedAt, &job.MetadataJSON)
+		&job.SalaryMax, &job.PostedAt, &job.MetadataJSON, &job.ProfileMatchScore)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -243,6 +243,31 @@ func (repository *SQLite) AnalysisJob(ctx context.Context, jobID int64) (*models
 		return nil, fmt.Errorf("get job for analysis: %w", err)
 	}
 	return &job, nil
+}
+
+func (repository *SQLite) SaveJobProfileMatchScore(ctx context.Context, jobID int64, score int) error {
+	if score < 0 || score > 10 {
+		return fmt.Errorf("profile match score must be between 0 and 10")
+	}
+	statement, args, err := sqlBuilder.Update("jobs").
+		Set("profile_match_score", score).
+		Where(squirrel.Eq{"id": jobID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build profile match score update: %w", err)
+	}
+	result, err := repository.db.ExecContext(ctx, statement, args...)
+	if err != nil {
+		return fmt.Errorf("save profile match score: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count profile match score update: %w", err)
+	}
+	if updated == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (repository *SQLite) Delete(ctx context.Context, id int64) (bool, error) {
@@ -786,10 +811,11 @@ func (repository *SQLite) job(ctx context.Context, query queryRower, jobID int64
 	err := query.QueryRowContext(ctx, `
 		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
 			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
-			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text
+			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text,
+			jobs.profile_match_score
 		FROM jobs LEFT JOIN companies ON companies.id = jobs.company_id WHERE jobs.id = ?`, jobID,
 	).Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company, &job.Location,
-		&job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax, &job.PostedAt, &job.BodyText)
+		&job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax, &job.PostedAt, &job.BodyText, &job.ProfileMatchScore)
 	if err != nil {
 		return nil, fmt.Errorf("get queued job: %w", err)
 	}

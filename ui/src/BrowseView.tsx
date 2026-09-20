@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { createCustomJob, fetchCompanies, fetchJobs, fetchMatchQueue, fetchProviders, queueUnmatchedJobMatches, type BrowseCompany, type BrowseJob } from "./api";
+import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
 export type BrowseMode = "jobs" | "companies";
 
@@ -68,16 +69,16 @@ function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
     <article className="job-card">
       <button className="job-card-button" onClick={onOpen}>
         <div className="job-card-topline">
-          <span className="job-card-status"><span className="source-label">{job.source}</span><span className={job.hasMatch ? "match-status ready" : "match-status"}>{job.hasMatch ? "Match ready" : "No match yet"}</span></span>
+           <span className="job-card-status"><span className="source-label">{job.source}</span><span className={job.hasMatch ? "match-status ready" : "match-status"}>{job.hasMatch ? "Match ready" : "No match yet"}</span><span className={profileScoreClassName(job.profileMatchScore)} style={profileScoreStyle(job.profileMatchScore)}>Profile fit {profileScoreLabel(job.profileMatchScore)}</span></span>
           <span className="posted-label">{formatDate(job.postedAt)}</span>
         </div>
         <h2>{job.title || "Untitled job"}</h2>
         <p className="company-name">{job.company || "Company not listed"}</p>
         <p className="job-excerpt">{plainText(job.bodyText).replace(/\s+/g, " ").trim()}</p>
-        <div className="job-meta">
-          <span>{job.location || "Location flexible"}</span>
-          <span>{job.employmentType || "Role type not listed"}</span>
-        </div>
+         <div className="job-meta">
+           <span>{job.location || "Location flexible"}</span>
+           <span>{job.employmentType || "Role type not listed"}</span>
+         </div>
       </button>
       <div className="job-card-footer">
         <span>{formatSalary(job)}</span>

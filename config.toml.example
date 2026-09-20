@@ -11,6 +11,10 @@ base_url = "https://opencode.ai/zen/go/v1/chat/completions"
 [openai]
 base_url = "http://127.0.0.1:8080/v1/chat/completions"
 
+[typesafe]
+base_url = "https://api.typesafe.ai/v1/systemone"
+model = "jev-latest"
+
 [job_analysis]
 provider = "opencode"
 model = "glm-5.2"

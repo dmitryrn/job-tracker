@@ -23,6 +23,7 @@ type Config struct {
 	Providers         ProviderConfig
 	OpenCode          OpenCodeConfig
 	OpenAI            OpenAIConfig
+	TypeSafe          TypeSafeConfig
 	JobAnalysis       TaskConfig
 	CustomJobImport   TaskConfig
 	ProfileMatcher    TaskConfig
@@ -46,6 +47,12 @@ type OpenCodeConfig struct {
 
 type OpenAIConfig struct {
 	BaseURL string
+	APIKey  string
+}
+
+type TypeSafeConfig struct {
+	BaseURL string
+	Model   string
 	APIKey  string
 }
 
@@ -99,6 +106,7 @@ type fileConfig struct {
 	} `toml:"database"`
 	OpenCode        fileOpenCodeConfig `toml:"opencode"`
 	OpenAI          fileOpenAIConfig   `toml:"openai"`
+	TypeSafe        fileTypeSafeConfig `toml:"typesafe"`
 	JobAnalysis     fileTaskConfig     `toml:"job_analysis"`
 	CustomJobImport fileTaskConfig     `toml:"custom_job_import"`
 	ProfileMatcher  fileTaskConfig     `toml:"profile_matcher"`
@@ -119,6 +127,11 @@ type fileOpenCodeConfig struct {
 
 type fileOpenAIConfig struct {
 	BaseURL string `toml:"base_url" validate:"notblank,url"`
+}
+
+type fileTypeSafeConfig struct {
+	BaseURL string `toml:"base_url" validate:"notblank,url"`
+	Model   string `toml:"model" validate:"notblank"`
 }
 
 type fileTaskConfig struct {
@@ -196,6 +209,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	typeSafeAPIKey, err := requiredString(tokens["TYPESAFEAI_API_KEY"], "TYPESAFEAI_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
 	adzunaInterval, err := time.ParseDuration(source.Providers.Adzuna.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.adzuna.sync_interval: %w", err)
@@ -265,6 +282,7 @@ func Load() (Config, error) {
 			BaseURL: source.OpenAI.BaseURL,
 			APIKey:  codexProxyAPIKey,
 		},
+		TypeSafe:        TypeSafeConfig{BaseURL: source.TypeSafe.BaseURL, Model: source.TypeSafe.Model, APIKey: typeSafeAPIKey},
 		JobAnalysis:     TaskConfig{Provider: source.JobAnalysis.Provider, Model: source.JobAnalysis.Model, ReasoningEffort: source.JobAnalysis.ReasoningEffort},
 		CustomJobImport: TaskConfig{Provider: source.CustomJobImport.Provider, Model: source.CustomJobImport.Model, ReasoningEffort: source.CustomJobImport.ReasoningEffort},
 		ProfileMatcher:  TaskConfig{Provider: source.ProfileMatcher.Provider, Model: source.ProfileMatcher.Model, ReasoningEffort: source.ProfileMatcher.ReasoningEffort},

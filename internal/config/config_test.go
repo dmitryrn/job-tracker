@@ -36,6 +36,9 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "medium", cfg.ProfileMatcher.ReasoningEffort)
 	assert.Equal(t, "http://127.0.0.1:8080/v1/chat/completions", cfg.OpenAI.BaseURL)
 	assert.Equal(t, "test-codex-proxy-key", cfg.OpenAI.APIKey)
+	assert.Equal(t, "https://typesafe.example.com/v1/systemone", cfg.TypeSafe.BaseURL)
+	assert.Equal(t, "jev-latest", cfg.TypeSafe.Model)
+	assert.Equal(t, "test-typesafe-key", cfg.TypeSafe.APIKey)
 	assert.Equal(t, "openai", cfg.JobChat.Provider)
 	assert.Equal(t, "job-chat-model", cfg.JobChat.Model)
 	assert.Equal(t, "high", cfg.JobChat.ReasoningEffort)
@@ -112,6 +115,10 @@ base_url = "https://opencode.example.com/v1/chat/completions"
 [openai]
 base_url = "http://127.0.0.1:8080/v1/chat/completions"
 
+[typesafe]
+base_url = "https://typesafe.example.com/v1/systemone"
+model = "jev-latest"
+
 [job_analysis]
 provider = "opencode"
 model = "job-analysis-model"
@@ -159,5 +166,5 @@ preview_request_interval = "5s"
 func writeTestConfigContent(t *testing.T, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(configFile, []byte(content), 0o600))
-	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\nOPENROUTER_API_KEY=test\nOPENCODE_GO_KEY_4=test-go-key\nCODEX_PROXY_KEY=test-codex-proxy-key\n"), 0o600))
+	require.NoError(t, os.WriteFile(tokensEnvFile, []byte("ADZUNA_APP_ID=test\nADZUNA_API_KEY=test\nOPENROUTER_API_KEY=test\nOPENCODE_GO_KEY_4=test-go-key\nCODEX_PROXY_KEY=test-codex-proxy-key\nTYPESAFEAI_API_KEY=test-typesafe-key\n"), 0o600))
 }

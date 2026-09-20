@@ -31,6 +31,10 @@ type JobAnalysisService interface {
 	Analyze(context.Context, models.Job) (JobAnalysis, error)
 }
 
+type JobProfileScoreService interface {
+	Score(context.Context, models.Job, models.UserProfile) (int, error)
+}
+
 // JobMatchWorker schedules queued matching work; repositories only persist its state.
 type JobMatchWorker struct {
 	jobs        repositories.JobRepository
@@ -39,6 +43,7 @@ type JobMatchWorker struct {
 	queue       repositories.MatchQueueRepository
 	profiles    repositories.UserProfileRepository
 	analyzer    JobAnalysisService
+	scorer      JobProfileScoreService
 	matcher     ProfileJobMatcher
 	events      repositories.EventRecorder
 	logger      *zap.Logger
@@ -49,8 +54,12 @@ type JobMatchWorker struct {
 	mutex       sync.Mutex
 }
 
-func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, runInterval time.Duration) *JobMatchWorker {
-	return &JobMatchWorker{jobs: jobs, analyses: analyses, matches: matches, queue: queue, profiles: profiles, analyzer: analyzer, matcher: matcher, events: events, logger: logger, runInterval: runInterval, wake: make(chan struct{}, 1)}
+func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, runInterval time.Duration, scorers ...JobProfileScoreService) *JobMatchWorker {
+	var scorer JobProfileScoreService
+	if len(scorers) > 0 {
+		scorer = scorers[0]
+	}
+	return &JobMatchWorker{jobs: jobs, analyses: analyses, matches: matches, queue: queue, profiles: profiles, analyzer: analyzer, scorer: scorer, matcher: matcher, events: events, logger: logger, runInterval: runInterval, wake: make(chan struct{}, 1)}
 }
 
 func (worker *JobMatchWorker) Register(lifecycle fx.Lifecycle) {
@@ -167,7 +176,7 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 			worker.recordEvent(ctx, runID, "job_match.completed", "info", "Job match completed", map[string]any{"jobId": job.ID})
 		}
 	}()
-	if err := worker.ensureJobAnalysis(ctx, runID, job.ID); err != nil {
+	if err := worker.ensureJobAnalysis(ctx, runID, job.ID, profile); err != nil {
 		return err
 	}
 
@@ -209,7 +218,7 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 	return nil
 }
 
-func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID string, jobID int64) (err error) {
+func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID string, jobID int64, profile models.UserProfile) (err error) {
 	stage := "load_job"
 	worker.logger.Info("job analysis worker executing", zap.Int64("job_id", jobID))
 	defer func() {
@@ -237,32 +246,44 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 	if jobAnalysisCurrent(existing, *job) {
 		worker.logger.Info("job analysis worker reused current analysis", zap.Int64("job_id", jobID))
 		worker.recordEvent(ctx, runID, "job_match.analysis.reused", "info", "Job match analysis reused", map[string]any{"jobId": jobID})
-		return nil
+	} else {
+		stage = "analyze"
+		analysis, err := worker.analyzer.Analyze(ctx, *job)
+		if err != nil {
+			if retries, ok := llmRetryMetadataFromError(err); ok {
+				worker.recordRetryEvents(ctx, runID, jobID, "analysis", retries, "", false)
+			}
+			return err
+		}
+		worker.recordRetryEvents(ctx, runID, jobID, "analysis", analysis.RetryMetadata, analysis.Model, true)
+		stage = "save_analysis"
+		if err := worker.analyses.SaveJobAnalysis(ctx, models.JobAnalysisRecord{
+			JobID:                 jobID,
+			AnalyzerVersion:       analysis.AnalyzerVersion,
+			PromptVersion:         analysis.PromptVersion,
+			InputSHA256:           analysis.InputSHA256,
+			Model:                 analysis.Model,
+			AnalyzedAt:            analysis.AnalyzedAt,
+			NormalizedDescription: analysis.NormalizedDescription,
+			Analysis:              analysis.Analysis,
+		}); err != nil {
+			return err
+		}
+		worker.recordEvent(ctx, runID, "job_match.analysis.completed", "info", "Job match analysis completed", map[string]any{"jobId": jobID})
 	}
 
-	stage = "analyze"
-	analysis, err := worker.analyzer.Analyze(ctx, *job)
-	if err != nil {
-		if retries, ok := llmRetryMetadataFromError(err); ok {
-			worker.recordRetryEvents(ctx, runID, jobID, "analysis", retries, "", false)
+	if worker.scorer != nil {
+		stage = "profile_score"
+		score, err := worker.scorer.Score(ctx, *job, profile)
+		if err != nil {
+			return err
 		}
-		return err
+		if err := worker.jobs.SaveJobProfileMatchScore(ctx, jobID, score); err != nil {
+			return err
+		}
+		worker.logger.Info("job profile score saved", zap.Int64("job_id", jobID), zap.Int("score", score))
+		worker.recordEvent(ctx, runID, "job_match.profile_score.completed", "info", "Job profile score completed", map[string]any{"jobId": jobID, "score": score})
 	}
-	worker.recordRetryEvents(ctx, runID, jobID, "analysis", analysis.RetryMetadata, analysis.Model, true)
-	stage = "save_analysis"
-	if err := worker.analyses.SaveJobAnalysis(ctx, models.JobAnalysisRecord{
-		JobID:                 jobID,
-		AnalyzerVersion:       analysis.AnalyzerVersion,
-		PromptVersion:         analysis.PromptVersion,
-		InputSHA256:           analysis.InputSHA256,
-		Model:                 analysis.Model,
-		AnalyzedAt:            analysis.AnalyzedAt,
-		NormalizedDescription: analysis.NormalizedDescription,
-		Analysis:              analysis.Analysis,
-	}); err != nil {
-		return err
-	}
-	worker.recordEvent(ctx, runID, "job_match.analysis.completed", "info", "Job match analysis completed", map[string]any{"jobId": jobID})
 	return nil
 }
 
