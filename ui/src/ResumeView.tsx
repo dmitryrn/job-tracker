@@ -115,8 +115,8 @@ export default function ResumeView() {
             </div>
           </section>
 
-          <SummarySection resume={resume} setResume={setResume} />
           <LinksSection resume={resume} setResume={setResume} />
+          <SummarySection resume={resume} setResume={setResume} />
           <ExperienceSection resume={resume} setResume={setResume} />
           <EducationSection resume={resume} setResume={setResume} />
           <SkillsSection resume={resume} setResume={setResume} />

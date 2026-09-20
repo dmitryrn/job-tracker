@@ -106,10 +106,10 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
   .intro { break-inside: avoid; }
   .photo { display: block; height: 43mm; margin: 0 0 6mm; object-fit: cover; width: 43mm; }
   .headline { font-size: 18pt; font-weight: 400; letter-spacing: .01em; margin-bottom: 5mm; text-transform: uppercase; }
-  .contact { font-size: 12pt; font-weight: 800; margin-bottom: 9mm; }
+  .contact { font-size: 12pt; font-weight: 800; margin-bottom: 2mm; }
   .contact span + span::before { content: " | "; padding: 0 .15em; }
   .summary { font-size: 12pt; line-height: 1.42; margin-bottom: 7mm; white-space: pre-line; }
-  .links { color: #555; font-size: 9.5pt; margin-bottom: 7mm; }
+  .links { color: #555; font-size: 10.5pt; margin-bottom: 9mm; }
   .links a { color: inherit; text-decoration: none; }
   .links span + span::before { content: " | "; padding: 0 .15em; }
   .skills { display: flex; flex-wrap: wrap; gap: 4mm; }
@@ -135,8 +135,8 @@ var resumePDFTemplate = template.Must(template.New("resume").Parse(`<!doctype ht
     {{if .Photo}}<img class="photo" src="{{.Photo}}" alt="">{{end}}
     {{if .Resume.Headline}}<p class="headline">{{.Resume.Headline}}</p>{{end}}
     <p class="contact">{{if .Resume.Town}}<span>{{.Resume.Town}}</span>{{end}}{{if .Resume.Country}}<span>{{.Resume.Country}}</span>{{end}}{{if .Resume.Phone}}<span>{{.Resume.Phone}}</span>{{end}}{{if .Resume.Email}}<span>{{.Resume.Email}}</span>{{end}}</p>
-    {{range .Resume.SummaryParagraphs}}<p class="summary">{{.Content}}</p>{{end}}
     {{if .Resume.Links}}<p class="links">{{range $index, $link := .Resume.Links}}{{if $index}}<span></span>{{end}}<span><a href="{{$link.URL}}">{{$link.Label}}</a></span>{{end}}</p>{{end}}
+    {{range .Resume.SummaryParagraphs}}<p class="summary">{{.Content}}</p>{{end}}
   </section>
 
    {{if .Resume.Experience}}<section><h2>Professional Experience</h2>{{range .Resume.Experience}}<article class="role"><div class="role-heading"><h3>{{.Company}}{{if .Title}} | {{.Title}}{{end}}</h3><span class="dates">{{.StartDate}}{{if .IsCurrent}} - present{{else if .EndDate}} - {{.EndDate}}{{end}}</span></div>{{if .Location}}<p class="location">{{.Location}}</p>{{end}}{{if .Bullets}}<ul>{{range .Bullets}}<li>{{.Content}}</li>{{end}}</ul>{{end}}{{if .Stack}}<p class="stack">Stack: {{.Stack}}</p>{{end}}</article>{{end}}</section>{{end}}

@@ -30,3 +30,19 @@ func TestRenderResumePDFRendersSkillsAsTagsAtTheEnd(t *testing.T) {
 		t.Fatalf("skills must follow education: %q", html)
 	}
 }
+
+func TestRenderResumePDFRendersLinksBeforeSummary(t *testing.T) {
+	t.Parallel()
+
+	html, err := renderResumePDF(resumePDFData{Resume: models.Resume{
+		Links:             []models.ResumeLink{{Label: "LinkedIn", URL: "https://linkedin.example/ada"}},
+		SummaryParagraphs: []models.ResumeText{{Content: "Builds reliable services."}},
+	}})
+	if err != nil {
+		t.Fatalf("renderResumePDF() error = %v", err)
+	}
+
+	if strings.Index(html, "https://linkedin.example/ada") > strings.Index(html, "Builds reliable services.") {
+		t.Fatalf("links must precede the summary: %q", html)
+	}
+}
