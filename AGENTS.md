@@ -26,7 +26,6 @@ changing a unit definition. Read recent service logs with
 
 # Rules
 - don't hallucinate lib versions when adding
-- add spacing between code blocks as per clean code, for readability
 - handlers should log all errors, including service errors
 - worker execution paths should log all outcomes, including early returns, successes, and errors, with relevant IDs and context
 - clients should be dumb and application-agnostic where possible; retries and application policy belong to callers, though clients may use application models when needed
