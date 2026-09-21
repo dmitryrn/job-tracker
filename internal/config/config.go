@@ -96,6 +96,26 @@ type LinkedInConfig struct {
 	PreviewRequestInterval time.Duration
 }
 
+type configCredentials struct {
+	adzunaAppID      string
+	adzunaAPIKey     string
+	openRouterAPIKey string
+	openCodeAPIKey   string
+	codexProxyAPIKey string
+	typeSafeAPIKey   string
+}
+
+type configDurations struct {
+	adzunaInterval                 time.Duration
+	remotiveInterval               time.Duration
+	jobicyInterval                 time.Duration
+	linkedInInterval               time.Duration
+	linkedInRequestInterval        time.Duration
+	linkedInPreviewRequestInterval time.Duration
+	jobMatchRunInterval            time.Duration
+	eventFlushInterval             time.Duration
+}
+
 type fileConfig struct {
 	Server struct {
 		HTTPAddress       string `toml:"http_address" validate:"notblank"`
@@ -191,82 +211,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	appID, err := requiredString(tokens["ADZUNA_APP_ID"], "ADZUNA_APP_ID")
+	credentials, err := readConfigCredentials(tokens)
 	if err != nil {
 		return Config{}, err
 	}
 
-	apiKey, err := requiredString(tokens["ADZUNA_API_KEY"], "ADZUNA_API_KEY")
+	durations, err := parseConfigDurations(source)
 	if err != nil {
 		return Config{}, err
-	}
-
-	openRouterAPIKey, err := requiredString(tokens["OPENROUTER_API_KEY"], "OPENROUTER_API_KEY")
-	if err != nil {
-		return Config{}, err
-	}
-
-	llmAPIKey, err := requiredString(tokens["OPENCODE_GO_KEY_4"], "OPENCODE_GO_KEY_4")
-	if err != nil {
-		return Config{}, err
-	}
-
-	codexProxyAPIKey, err := requiredString(tokens["CODEX_PROXY_KEY"], "CODEX_PROXY_KEY")
-	if err != nil {
-		return Config{}, err
-	}
-
-	typeSafeAPIKey, err := requiredString(tokens["TYPESAFEAI_API_KEY"], "TYPESAFEAI_API_KEY")
-	if err != nil {
-		return Config{}, err
-	}
-
-	adzunaInterval, err := time.ParseDuration(source.Providers.Adzuna.SyncInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse providers.adzuna.sync_interval: %w", err)
-	}
-
-	remotiveInterval, err := time.ParseDuration(source.Providers.Remotive.SyncInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse providers.remotive.sync_interval: %w", err)
-	}
-
-	jobicyInterval, err := time.ParseDuration(source.Providers.Jobicy.SyncInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse providers.jobicy.sync_interval: %w", err)
-	}
-
-	linkedInInterval, err := time.ParseDuration(source.Providers.LinkedIn.SyncInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse providers.linkedin.sync_interval: %w", err)
-	}
-
-	linkedInRequestInterval, err := time.ParseDuration(source.Providers.LinkedIn.RequestInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse providers.linkedin.request_interval: %w", err)
-	}
-
-	linkedInPreviewRequestInterval, err := time.ParseDuration(source.Providers.LinkedIn.PreviewRequestInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse providers.linkedin.preview_request_interval: %w", err)
-	}
-
-	jobMatchRunInterval, err := time.ParseDuration(source.JobMatch.RunInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse job_match.run_interval: %w", err)
-	}
-
-	eventFlushInterval, err := time.ParseDuration(source.Events.FlushInterval)
-	if err != nil {
-		return Config{}, fmt.Errorf("parse events.flush_interval: %w", err)
-	}
-
-	if jobicyInterval < time.Hour {
-		return Config{}, fmt.Errorf("providers.jobicy.sync_interval must be at least 1h")
-	}
-
-	if linkedInInterval < time.Hour {
-		return Config{}, fmt.Errorf("providers.linkedin.sync_interval must be at least 1h")
 	}
 
 	return Config{
@@ -275,39 +227,150 @@ func Load() (Config, error) {
 		DatabasePath:      source.Database.Path,
 		Providers: ProviderConfig{
 			Adzuna: AdzunaConfig{
-				AppID:        appID,
-				APIKey:       apiKey,
-				SyncInterval: adzunaInterval,
+				AppID:        credentials.adzunaAppID,
+				APIKey:       credentials.adzunaAPIKey,
+				SyncInterval: durations.adzunaInterval,
 			},
 			Remotive: RemotiveConfig{
-				SyncInterval: remotiveInterval,
+				SyncInterval: durations.remotiveInterval,
 			},
 			Jobicy: JobicyConfig{
-				SyncInterval: jobicyInterval,
+				SyncInterval: durations.jobicyInterval,
 			},
 			LinkedIn: LinkedInConfig{
-				SyncInterval:           linkedInInterval,
-				RequestInterval:        linkedInRequestInterval,
-				PreviewRequestInterval: linkedInPreviewRequestInterval,
+				SyncInterval:           durations.linkedInInterval,
+				RequestInterval:        durations.linkedInRequestInterval,
+				PreviewRequestInterval: durations.linkedInPreviewRequestInterval,
 			},
 		},
 		OpenCode: OpenCodeConfig{
 			BaseURL: source.OpenCode.BaseURL,
-			APIKey:  llmAPIKey,
+			APIKey:  credentials.openCodeAPIKey,
 		},
 		OpenAI: OpenAIConfig{
 			BaseURL: source.OpenAI.BaseURL,
-			APIKey:  codexProxyAPIKey,
+			APIKey:  credentials.codexProxyAPIKey,
 		},
-		TypeSafe:        TypeSafeConfig{BaseURL: source.TypeSafe.BaseURL, Model: source.TypeSafe.Model, APIKey: typeSafeAPIKey},
+		TypeSafe:        TypeSafeConfig{BaseURL: source.TypeSafe.BaseURL, Model: source.TypeSafe.Model, APIKey: credentials.typeSafeAPIKey},
 		JobAnalysis:     TaskConfig{Provider: source.JobAnalysis.Provider, Model: source.JobAnalysis.Model, ReasoningEffort: source.JobAnalysis.ReasoningEffort},
 		CustomJobImport: TaskConfig{Provider: source.CustomJobImport.Provider, Model: source.CustomJobImport.Model, ReasoningEffort: source.CustomJobImport.ReasoningEffort},
 		ProfileMatcher:  TaskConfig{Provider: source.ProfileMatcher.Provider, Model: source.ProfileMatcher.Model, ReasoningEffort: source.ProfileMatcher.ReasoningEffort},
 		JobChat:         TaskConfig{Provider: source.JobChat.Provider, Model: source.JobChat.Model, ReasoningEffort: source.JobChat.ReasoningEffort},
-		JobMatch:        JobMatchConfig{RunInterval: jobMatchRunInterval},
-		Events:          EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: eventFlushInterval},
-		OpenRouter:      OpenRouterConfig{APIKey: openRouterAPIKey},
+		JobMatch:        JobMatchConfig{RunInterval: durations.jobMatchRunInterval},
+		Events:          EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: durations.eventFlushInterval},
+		OpenRouter:      OpenRouterConfig{APIKey: credentials.openRouterAPIKey},
 	}, nil
+}
+
+func readConfigCredentials(tokens map[string]string) (configCredentials, error) {
+	appID, err := requiredString(tokens["ADZUNA_APP_ID"], "ADZUNA_APP_ID")
+	if err != nil {
+		return configCredentials{}, err
+	}
+
+	apiKey, err := requiredString(tokens["ADZUNA_API_KEY"], "ADZUNA_API_KEY")
+	if err != nil {
+		return configCredentials{}, err
+	}
+
+	openRouterAPIKey, err := requiredString(tokens["OPENROUTER_API_KEY"], "OPENROUTER_API_KEY")
+	if err != nil {
+		return configCredentials{}, err
+	}
+
+	openCodeAPIKey, err := requiredString(tokens["OPENCODE_GO_KEY_4"], "OPENCODE_GO_KEY_4")
+	if err != nil {
+		return configCredentials{}, err
+	}
+
+	codexProxyAPIKey, err := requiredString(tokens["CODEX_PROXY_KEY"], "CODEX_PROXY_KEY")
+	if err != nil {
+		return configCredentials{}, err
+	}
+
+	typeSafeAPIKey, err := requiredString(tokens["TYPESAFEAI_API_KEY"], "TYPESAFEAI_API_KEY")
+	if err != nil {
+		return configCredentials{}, err
+	}
+
+	return configCredentials{
+		adzunaAppID:      appID,
+		adzunaAPIKey:     apiKey,
+		openRouterAPIKey: openRouterAPIKey,
+		openCodeAPIKey:   openCodeAPIKey,
+		codexProxyAPIKey: codexProxyAPIKey,
+		typeSafeAPIKey:   typeSafeAPIKey,
+	}, nil
+}
+
+func parseConfigDurations(source fileConfig) (configDurations, error) {
+	adzunaInterval, err := parseDuration(source.Providers.Adzuna.SyncInterval, "providers.adzuna.sync_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	remotiveInterval, err := parseDuration(source.Providers.Remotive.SyncInterval, "providers.remotive.sync_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	jobicyInterval, err := parseDuration(source.Providers.Jobicy.SyncInterval, "providers.jobicy.sync_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	if jobicyInterval < time.Hour {
+		return configDurations{}, fmt.Errorf("providers.jobicy.sync_interval must be at least 1h")
+	}
+
+	linkedInInterval, err := parseDuration(source.Providers.LinkedIn.SyncInterval, "providers.linkedin.sync_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	if linkedInInterval < time.Hour {
+		return configDurations{}, fmt.Errorf("providers.linkedin.sync_interval must be at least 1h")
+	}
+
+	linkedInRequestInterval, err := parseDuration(source.Providers.LinkedIn.RequestInterval, "providers.linkedin.request_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	linkedInPreviewRequestInterval, err := parseDuration(source.Providers.LinkedIn.PreviewRequestInterval, "providers.linkedin.preview_request_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	jobMatchRunInterval, err := parseDuration(source.JobMatch.RunInterval, "job_match.run_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	eventFlushInterval, err := parseDuration(source.Events.FlushInterval, "events.flush_interval")
+	if err != nil {
+		return configDurations{}, err
+	}
+
+	return configDurations{
+		adzunaInterval:                 adzunaInterval,
+		remotiveInterval:               remotiveInterval,
+		jobicyInterval:                 jobicyInterval,
+		linkedInInterval:               linkedInInterval,
+		linkedInRequestInterval:        linkedInRequestInterval,
+		linkedInPreviewRequestInterval: linkedInPreviewRequestInterval,
+		jobMatchRunInterval:            jobMatchRunInterval,
+		eventFlushInterval:             eventFlushInterval,
+	}, nil
+}
+
+func parseDuration(value, field string) (time.Duration, error) {
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", field, err)
+	}
+
+	return duration, nil
 }
 
 func validateFileConfig(source fileConfig) error {

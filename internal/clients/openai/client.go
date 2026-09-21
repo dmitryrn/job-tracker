@@ -155,21 +155,29 @@ func (client *Client) Complete(ctx context.Context, model, sessionID string, inp
 	defer response.Body.Close()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		body, err := io.ReadAll(io.LimitReader(response.Body, maxErrorResponseBytes))
-		if err != nil {
-			return ChatResponse{}, fmt.Errorf("read unsuccessful LLM response: %w", err)
-		}
-
-		if body := strings.TrimSpace(string(body)); body != "" {
-			return ChatResponse{}, fmt.Errorf("LLM returned %s: %s", response.Status, body)
-		}
-
-		return ChatResponse{}, fmt.Errorf("LLM returned %s", response.Status)
+		return ChatResponse{}, unsuccessfulResponseError(response)
 	}
 
+	return decodeChatCompletionResponse(response.Body)
+}
+
+func unsuccessfulResponseError(response *http.Response) error {
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxErrorResponseBytes))
+	if err != nil {
+		return fmt.Errorf("read unsuccessful LLM response: %w", err)
+	}
+
+	if body := strings.TrimSpace(string(body)); body != "" {
+		return fmt.Errorf("LLM returned %s: %s", response.Status, body)
+	}
+
+	return fmt.Errorf("LLM returned %s", response.Status)
+}
+
+func decodeChatCompletionResponse(reader io.Reader) (ChatResponse, error) {
 	var body chatCompletionResponse
 
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 2<<20))
+	decoder := json.NewDecoder(io.LimitReader(reader, 2<<20))
 	if err := decoder.Decode(&body); err != nil {
 		return ChatResponse{}, fmt.Errorf("decode LLM response: %w", err)
 	}
