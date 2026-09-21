@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchJobMatches, type BrowseJob, type JobMatchSummary } from "./api";
 import { formatDate, formatRelativeTime } from "./BrowseView";
+import JobRejectionAction from "./JobRejectionAction";
 import { matchLabelScore, matchScoreStyle, matchStatusLegend } from "./matchScore";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
@@ -162,6 +163,12 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
     return () => controller.abort();
   }, [applied, minimumScore, offset, pageSize, sort, viewed]);
 
+  function removeRejectedMatch(jobID: number) {
+    setMatches((current) => current.filter((match) => match.job.id !== jobID));
+    setTotalMatches((current) => Math.max(0, current - 1));
+    setError("");
+  }
+
   return (
     <section className="matches-page">
       <header className="matches-header">
@@ -207,11 +214,8 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
             const lastViewed = formatRelativeTime(match.job.lastViewedAt);
             return (
               <li key={match.job.id}>
-                <button
-                  type="button"
-                  className="match-job"
-                  onClick={() => onOpenMatch(match.job)}
-                >
+                <div className="match-job">
+                  <button type="button" className="match-job-link" onClick={() => onOpenMatch(match.job)}>
                   <span className="match-topline">
                     <span className="match-created">{formatMatchDate(match.createdAt)}</span>
                     <span className="match-topline-labels">
@@ -242,7 +246,18 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
                       <span className="match-viewed not-seen">Not seen</span>
                     )}
                   </span>
-                </button>
+                  </button>
+                  <JobRejectionAction
+                    jobID={match.job.id}
+                    className="match-reject-action"
+                    ariaLabel={`Won't apply to ${match.job.title}`}
+                    title="Won't apply"
+                    onRejected={() => removeRejectedMatch(match.job.id)}
+                    onError={setError}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </JobRejectionAction>
+                </div>
               </li>
             );
           })}

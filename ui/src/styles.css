@@ -238,6 +238,9 @@ button { cursor: pointer; }
 .detail-tabs { border-bottom: 1px solid #d6d5d0; display: flex; gap: 5px; margin-top: 26px; }
 .detail-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: #68758a; font-size: 13px; padding: 10px 12px; }
 .detail-tab:hover, .detail-tab.active { border-bottom-color: #e5ac4c; color: #1a2638; }
+.resume-tailoring-prompt { background: #e5f0eb; border: 1px solid #9bc970; border-radius: 999px; color: #1e5948; font-size: 12px; font-weight: 700; margin-top: 12px; padding: 7px 11px; }
+.resume-tailoring-prompt:hover { background: #d9f2c2; }
+.resume-tailoring-prompt:disabled { cursor: not-allowed; opacity: .55; }
 .job-post, .match-panel { background: #fff; border: 1px solid #dedcd5; color: #304860; font-size: 14px; line-height: 1.65; margin: 22px 0; padding: 22px; white-space: pre-wrap; }
 .match-panel { white-space: normal; }
 .application-toggle { background: #263d56; border: 0; border-radius: 4px; color: #fff; font-weight: 700; padding: 10px 13px; }
@@ -404,8 +407,13 @@ button { cursor: pointer; }
 .matches-controls { display: flex; flex-wrap: wrap; gap: 12px; }
 .match-legend { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 0; }
 .matches-list { display: grid; gap: 10px; list-style: none; margin: 24px 0 0; padding: 0; }
-.match-job { background: #fff; border: 1px solid #dedcd5; color: #1a2638; display: grid; gap: 5px; padding: 16px; text-align: left; width: 100%; }
-.match-job:hover { background: #fffbed; border-color: #d8b778; }
+.match-job { background: #fff; border: 1px solid #dedcd5; color: #1a2638; position: relative; }
+.match-job-link { background: transparent; border: 0; color: inherit; display: grid; gap: 5px; padding: 16px 58px 16px 16px; text-align: left; width: 100%; }
+.match-job-link:hover { background: #fffbed; }
+.match-reject-action { align-items: center; background: transparent; border: 1px solid #bfc7ce; border-radius: 50%; color: #65758a; display: flex; height: 30px; justify-content: center; padding: 0; position: absolute; right: 14px; top: 14px; width: 30px; }
+.match-reject-action:hover { background: #fff0ed; border-color: #bd4d38; color: #a43d2d; }
+.match-reject-action:disabled { cursor: wait; opacity: .65; }
+.match-reject-action svg { fill: none; height: 17px; stroke: currentColor; stroke-linecap: round; stroke-width: 2; width: 17px; }
 .match-job strong { font-size: 16px; }
 .match-job span { color: #65758a; font-size: 13px; }
 .match-job .match-job-meta { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }

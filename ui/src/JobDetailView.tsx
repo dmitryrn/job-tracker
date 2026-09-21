@@ -1,10 +1,11 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
+import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
 import { formatRelativeTime, WorkplaceClassificationInfo, workplaceLabel } from "./BrowseView";
 import { copyText } from "./clipboard";
+import JobRejectionAction from "./JobRejectionAction";
 import { matchLabelScore, matchScoreStyle } from "./matchScore";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
@@ -172,12 +173,16 @@ function JobEligibilityPanel({ check, running, onRun }: { check: JobEligibilityC
   </section>;
 }
 
-function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | null | undefined }) {
+type ChatPromptRequest = { id: number; content: string };
+
+function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { jobID: number; match: JobMatch | null | undefined; promptRequest?: ChatPromptRequest; onPromptHandled: (id: number) => void }) {
   const [items, setItems] = useState<JobMatchChatItem[]>();
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [reverting, setReverting] = useState(false);
   const [error, setError] = useState("");
+  const [queuedPrompt, setQueuedPrompt] = useState<ChatPromptRequest>();
+  const lastPromptID = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -229,23 +234,44 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
   const unanswered = messages.at(-1)?.item.type === "user_message";
   const blocked = sending || reverting || unanswered;
 
-  async function send(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const content = draft.trim();
-    if (!content || blocked) {
-      return;
+  useEffect(() => {
+    if (promptRequest && promptRequest.id !== lastPromptID.current) {
+      lastPromptID.current = promptRequest.id;
+      setQueuedPrompt(promptRequest);
     }
+  }, [promptRequest]);
+
+  async function sendMessage(content: string, clearDraft: boolean) {
     setSending(true);
     try {
       const result = await sendJobMatchChatMessage(jobID, content, chatRequestID());
       setItems((current) => mergeChatItems(current, [result.item]));
-      setDraft("");
+      if (clearDraft) setDraft("");
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not send chat message");
     } finally {
       setSending(false);
     }
+  }
+
+  useEffect(() => {
+    if (!queuedPrompt || items === undefined || !match || blocked) {
+      return;
+    }
+    void sendMessage(queuedPrompt.content, false).finally(() => {
+      onPromptHandled(queuedPrompt.id);
+      setQueuedPrompt(undefined);
+    });
+  }, [blocked, items, match, queuedPrompt]);
+
+  async function send(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = draft.trim();
+    if (!content || blocked) {
+      return;
+    }
+    await sendMessage(content, true);
   }
 
   async function stop() {
@@ -288,7 +314,14 @@ function JobMatchChatPanel({ jobID, match }: { jobID: number; match: JobMatch | 
     {error && <p className="query-error">{error}</p>}
     {items === undefined ? <p className="analysis-loading">Loading chat...</p> : <ChatTimeline items={items} onRevert={revert} reverting={reverting} />}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
-      <textarea aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} onFocus={keepComposerClear} disabled={blocked} rows={3} />
+      <textarea aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} onFocus={keepComposerClear} onKeyDown={(event) => {
+        if (event.ctrlKey && event.key === "Enter") {
+          event.preventDefault();
+          if (draft.trim() && !blocked) {
+            event.currentTarget.form?.requestSubmit();
+          }
+        }
+      }} disabled={blocked} rows={3} />
       <div className="match-chat-actions"><button className={activeRequestID ? "secondary-action" : "primary-action"} type={activeRequestID ? "button" : "submit"} disabled={!activeRequestID && (blocked || !draft.trim())} onClick={activeRequestID ? () => void stop() : undefined} aria-label={activeRequestID ? "Stop response" : "Send message"} title={activeRequestID ? "Stop response" : "Send message"}>
         {activeRequestID ? <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1" /></svg> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3.5 21 12 3 20.5V14l12-2-12-2z" /></svg>}
       </button></div>
@@ -418,18 +451,16 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [eligibility, setEligibility] = useState<JobEligibilityCheck | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [rejectionOpen, setRejectionOpen] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState("");
   const [queueing, setQueueing] = useState(false);
   const [queued, setQueued] = useState(false);
   const [applicationUpdating, setApplicationUpdating] = useState(false);
   const [eligibilityRunning, setEligibilityRunning] = useState(false);
+  const [chatPromptRequest, setChatPromptRequest] = useState<ChatPromptRequest>();
   const [profileLinks, setProfileLinks] = useState<Record<ProfileURLField, string>>({ githubURL: "", linkedinURL: "" });
   const [copiedProfileLink, setCopiedProfileLink] = useState<ProfileURLField | "">("");
   const actionsMenuRef = useRef<HTMLDetailsElement>(null);
-  const rejectionDialogRef = useRef<HTMLDialogElement>(null);
+  const nextChatPromptID = useRef(0);
   const postedAt = formatTimestamp(job.postedAt);
   const matchedAt = match ? formatTimestamp(match.createdAt) : "";
   const lastViewed = formatRelativeTime(job.lastViewedAt);
@@ -489,13 +520,6 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     return () => document.removeEventListener("pointerdown", closeActions);
   }, [actionsOpen]);
 
-  useEffect(() => {
-    const dialog = rejectionDialogRef.current;
-    if (rejectionOpen && dialog && !dialog.open) {
-      dialog.showModal();
-    }
-  }, [rejectionOpen]);
-
   async function removeJob() {
     if (!window.confirm(`Delete ${job.title} from the database?`)) {
       return;
@@ -507,23 +531,6 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not delete job");
       setDeleting(false);
-    }
-  }
-
-  async function rejectJobApplication(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const reason = rejectionReason.trim();
-    if (!reason || rejecting) {
-      return;
-    }
-    setRejecting(true);
-    try {
-      await rejectJob(job.id, reason);
-      rejectionDialogRef.current?.close();
-      onDeleted();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not mark job as won't apply");
-      setRejecting(false);
     }
   }
 
@@ -587,10 +594,10 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     }
   }
 
-  function openRejection() {
-    setActionsOpen(false);
-    setRejectionReason("");
-    setRejectionOpen(true);
+  function tailorResume() {
+    nextChatPromptID.current += 1;
+    setChatPromptRequest({ id: nextChatPromptID.current, content: "Tailor my resume for this application" });
+    onTabChange("chat");
   }
 
   return (
@@ -607,14 +614,14 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
               <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
               {application !== undefined && <button type="button" className={application ? "application-toggle applied" : "application-toggle"} disabled={applicationUpdating} onClick={() => void toggleApplication()}>{applicationUpdating ? "Saving..." : application ? "Mark unapplied" : "Mark applied"}</button>}
             </div>
-            <button type="button" className="reject-action desktop-reject-action" onClick={openRejection}>Won't apply</button>
+              <JobRejectionAction jobID={job.id} className="reject-action desktop-reject-action" onOpen={() => setActionsOpen(false)} onRejected={onDeleted} onError={setError}>Won't apply</JobRejectionAction>
             <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
              <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
               <div className="job-overflow-menu">
                 <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")}>{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</button>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")}>{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</button>
-                <button type="button" className="reject-action" onClick={openRejection}>Won't apply</button>
+                  <JobRejectionAction jobID={job.id} className="reject-action" onOpen={() => setActionsOpen(false)} onRejected={onDeleted} onError={setError}>Won't apply</JobRejectionAction>
                <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
              </div>
           </details>
@@ -629,13 +636,14 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
          {lastViewed && <div><dt>Last seen</dt><dd><time dateTime={job.lastViewedAt} title={job.lastViewedAt}>{lastViewed}</time></dd></div>}
        </dl>
       <JobEligibilityPanel check={eligibility} running={eligibilityRunning} onRun={() => void runEligibilityCheck()} />
-      <nav className="detail-tabs" aria-label="Job details">
-        <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("post")}>Job post</button>
-        <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>
-        <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
-      </nav>
+       <nav className="detail-tabs" aria-label="Job details">
+         <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("post")}>Job post</button>
+         <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>
+         <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
+       </nav>
+       <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={tailorResume}>Tailor my resume for this application</button>
        {error && <p className="query-error">{error}</p>}
-       {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
+       {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} promptRequest={chatPromptRequest} onPromptHandled={(id) => setChatPromptRequest((current) => current?.id === id ? undefined : current)} /> : (
         <>
             <section className="match-panel">
              <p className="eyebrow">Current match</p>
@@ -647,38 +655,6 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
           {analysis === undefined ? <p className="analysis-loading">Loading job analysis...</p> : analysis && <JobAnalysisPanel record={analysis} />}
         </>
       )}
-      <dialog className="job-rejection-dialog" ref={rejectionDialogRef} onClose={() => setRejectionOpen(false)}>
-        <form onSubmit={(event) => void rejectJobApplication(event)}>
-          <header>
-            <p className="eyebrow">Won't apply</p>
-            <h2>Why are you passing on this role?</h2>
-            <p>This removes the role and its match from the Jobs and Matches pages.</p>
-          </header>
-          <label htmlFor="job-rejection-reason">Reason
-             <textarea
-               id="job-rejection-reason"
-               autoFocus
-               value={rejectionReason}
-               onChange={(event) => setRejectionReason(event.target.value)}
-               onKeyDown={(event) => {
-                 if (event.ctrlKey && event.key === "Enter") {
-                   event.preventDefault();
-                   if (rejectionReason.trim() && !rejecting) {
-                     event.currentTarget.form?.requestSubmit();
-                   }
-                 }
-               }}
-               placeholder="e.g. Only onsite in Berlin"
-               required
-               rows={3}
-             />
-          </label>
-          <div className="job-rejection-actions">
-            <button type="button" className="secondary-action" disabled={rejecting} onClick={() => rejectionDialogRef.current?.close()}>Cancel</button>
-            <button type="submit" className="reject-action" disabled={rejecting || !rejectionReason.trim()}>{rejecting ? "Saving..." : "Mark as won't apply"}</button>
-          </div>
-        </form>
-      </dialog>
     </section>
   );
 }
