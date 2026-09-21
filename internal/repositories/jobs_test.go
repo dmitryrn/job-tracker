@@ -178,6 +178,69 @@ func TestSaveJobProfileMatchScoreStoresAndListsScore(t *testing.T) {
 	assert.Equal(t, 8, *page.Jobs[0].ProfileMatchScore)
 }
 
+func TestJobMatchesFiltersSortsAndPaginates(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	ctx := context.Background()
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(ctx, []models.Job{
+		{Source: "example", SourceID: "first", SourceURL: "https://example.com/first", Title: "First", Company: "Alpha", Location: "Remote", Workplace: "remote", BodyText: "First body", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "second", SourceURL: "https://example.com/second", Title: "Second", Company: "Beta", Location: "New York", Workplace: "hybrid", BodyText: "Second body", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "third", SourceURL: "https://example.com/third", Title: "Third", Company: "Gamma", Location: "London", Workplace: "onsite", BodyText: "Third body", MetadataJSON: "{}"},
+		{Source: "example", SourceID: "rejected", SourceURL: "https://example.com/rejected", Title: "Rejected", Company: "Delta", Workplace: "remote", BodyText: "Rejected body", MetadataJSON: "{}"},
+	}))
+
+	require.NoError(t, repository.CreateJobMatch(ctx, 1, `{"matcherVersion":"v1","score":90,"label":"strong"}`))
+	require.NoError(t, repository.CreateJobMatch(ctx, 2, `{"matcherVersion":"v1","score":70,"label":"good"}`))
+	require.NoError(t, repository.CreateJobMatch(ctx, 3, `{"matcherVersion":"v1","score":40,"label":"weak"}`))
+	require.NoError(t, repository.CreateJobMatch(ctx, 4, `{"matcherVersion":"v1","score":99,"label":"strong"}`))
+	require.NoError(t, repository.MarkJobViewed(ctx, 2))
+	_, err = repository.CreateApplication(ctx, 2)
+	require.NoError(t, err)
+	rejected, err := repository.Reject(ctx, 4, "not relevant")
+	require.NoError(t, err)
+	require.True(t, rejected)
+
+	page, err := repository.JobMatches(ctx, models.JobMatchSearch{Sort: "score-desc", Limit: 2})
+	require.NoError(t, err)
+	assert.Equal(t, 3, page.Total)
+	require.Len(t, page.Matches, 2)
+	assert.Equal(t, []int64{1, 2}, []int64{page.Matches[0].Job.ID, page.Matches[1].Job.ID})
+	assert.Equal(t, []int{90, 70}, []int{page.Matches[0].Score, page.Matches[1].Score})
+	assert.Equal(t, []string{"strong", "good"}, []string{page.Matches[0].Label, page.Matches[1].Label})
+	assert.Equal(t, "Alpha", page.Matches[0].Job.Company)
+	assert.Equal(t, "First body", page.Matches[0].Job.BodyText)
+	assert.False(t, page.Matches[0].Applied)
+	assert.True(t, page.Matches[1].Applied)
+
+	page, err = repository.JobMatches(ctx, models.JobMatchSearch{Sort: "score-desc", Limit: 1, Offset: 1})
+	require.NoError(t, err)
+	assert.Equal(t, 3, page.Total)
+	require.Len(t, page.Matches, 1)
+	assert.Equal(t, int64(2), page.Matches[0].Job.ID)
+
+	minimumScore := 80
+	page, err = repository.JobMatches(ctx, models.JobMatchSearch{
+		MinimumScore: &minimumScore,
+		Viewed:       "unseen",
+		Applied:      "not-applied",
+		Limit:        10,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, page.Total)
+	require.Len(t, page.Matches, 1)
+	assert.Equal(t, int64(1), page.Matches[0].Job.ID)
+
+	page, err = repository.JobMatches(ctx, models.JobMatchSearch{Viewed: "seen", Applied: "applied", Limit: 10})
+	require.NoError(t, err)
+	assert.Equal(t, 1, page.Total)
+	require.Len(t, page.Matches, 1)
+	assert.Equal(t, int64(2), page.Matches[0].Job.ID)
+}
+
 func TestMarkJobViewedStoresLastViewedAt(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)

@@ -889,49 +889,8 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		"EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)",
 	).From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
-	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
-	query = query.Where(rejected)
-	countQuery = countQuery.Where(rejected)
-	switch search.Viewed {
-	case "seen":
-		query = query.Where(squirrel.Expr("jobs.last_viewed_at IS NOT NULL"))
-		countQuery = countQuery.Where(squirrel.Expr("jobs.last_viewed_at IS NOT NULL"))
-	case "unseen":
-		query = query.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
-		countQuery = countQuery.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
-	}
-
-	applied := squirrel.Expr("EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)")
-	switch search.Applied {
-	case "applied":
-		query = query.Where(applied)
-		countQuery = countQuery.Where(applied)
-	case "not-applied":
-		notApplied := squirrel.Expr("NOT EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)")
-		query = query.Where(notApplied)
-		countQuery = countQuery.Where(notApplied)
-	}
-
-	if search.MinimumScore != nil {
-		minimumScore := squirrel.Expr(assessmentScore+" >= ?", *search.MinimumScore)
-		query = query.Where(minimumScore)
-		countQuery = countQuery.Where(minimumScore)
-	}
-
-	switch search.Sort {
-	case "created-asc":
-		query = query.OrderBy("job_matches.created_at ASC", "job_matches.job_id ASC")
-	case "score-desc":
-		query = query.OrderBy(score+" DESC", "job_matches.created_at DESC", "job_matches.job_id DESC")
-	case "score-asc":
-		query = query.OrderBy(score+" ASC", "job_matches.created_at DESC", "job_matches.job_id DESC")
-	case "profile-score-desc":
-		query = query.OrderBy("jobs.profile_match_score IS NULL ASC", "jobs.profile_match_score DESC", "job_matches.created_at DESC", "job_matches.job_id DESC")
-	case "profile-score-asc":
-		query = query.OrderBy("jobs.profile_match_score IS NULL ASC", "jobs.profile_match_score ASC", "job_matches.created_at DESC", "job_matches.job_id DESC")
-	default:
-		query = query.OrderBy("job_matches.created_at DESC", "job_matches.job_id DESC")
-	}
+	query, countQuery = applyJobMatchFilters(query, countQuery, search, assessmentScore)
+	query = orderJobMatchQuery(query, search.Sort, score)
 
 	statement, arguments, err := query.Limit(paginationValue(search.Limit)).Offset(paginationValue(search.Offset)).ToSql()
 	if err != nil {
@@ -944,7 +903,80 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 	}
 	defer rows.Close()
 
-	page := models.JobMatchPage{Matches: make([]models.JobMatchSummary, 0)}
+	matches, err := scanJobMatchRows(rows)
+	if err != nil {
+		return models.JobMatchPage{}, err
+	}
+
+	page := models.JobMatchPage{Matches: matches}
+
+	countStatement, countArguments, err := countQuery.ToSql()
+	if err != nil {
+		return models.JobMatchPage{}, fmt.Errorf("build job matches count query: %w", err)
+	}
+
+	if err := repository.db.QueryRowContext(ctx, countStatement, countArguments...).Scan(&page.Total); err != nil {
+		return models.JobMatchPage{}, fmt.Errorf("count job matches: %w", err)
+	}
+
+	return page, nil
+}
+
+func applyJobMatchFilters(query, countQuery squirrel.SelectBuilder, search models.JobMatchSearch, assessmentScore string) (squirrel.SelectBuilder, squirrel.SelectBuilder) {
+	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
+	query = query.Where(rejected)
+	countQuery = countQuery.Where(rejected)
+
+	viewed := map[string]string{
+		"seen":   "jobs.last_viewed_at IS NOT NULL",
+		"unseen": "jobs.last_viewed_at IS NULL",
+	}[search.Viewed]
+	if viewed != "" {
+		query = query.Where(squirrel.Expr(viewed))
+		countQuery = countQuery.Where(squirrel.Expr(viewed))
+	}
+
+	var applied string
+	switch search.Applied {
+	case "applied":
+		applied = "EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)"
+	case "not-applied":
+		applied = "NOT EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)"
+	}
+
+	if applied != "" {
+		query = query.Where(squirrel.Expr(applied))
+		countQuery = countQuery.Where(squirrel.Expr(applied))
+	}
+
+	if search.MinimumScore != nil {
+		minimumScore := squirrel.Expr(assessmentScore+" >= ?", *search.MinimumScore)
+		query = query.Where(minimumScore)
+		countQuery = countQuery.Where(minimumScore)
+	}
+
+	return query, countQuery
+}
+
+func orderJobMatchQuery(query squirrel.SelectBuilder, sort, score string) squirrel.SelectBuilder {
+	switch sort {
+	case "created-asc":
+		return query.OrderBy("job_matches.created_at ASC", "job_matches.job_id ASC")
+	case "score-desc":
+		return query.OrderBy(score+" DESC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	case "score-asc":
+		return query.OrderBy(score+" ASC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	case "profile-score-desc":
+		return query.OrderBy("jobs.profile_match_score IS NULL ASC", "jobs.profile_match_score DESC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	case "profile-score-asc":
+		return query.OrderBy("jobs.profile_match_score IS NULL ASC", "jobs.profile_match_score ASC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	default:
+		return query.OrderBy("job_matches.created_at DESC", "job_matches.job_id DESC")
+	}
+}
+
+func scanJobMatchRows(rows *sql.Rows) ([]models.JobMatchSummary, error) {
+	matches := make([]models.JobMatchSummary, 0)
 	for rows.Next() {
 		var match models.JobMatchSummary
 		var content string
@@ -968,7 +1000,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 			&content,
 			&match.Applied,
 		); err != nil {
-			return models.JobMatchPage{}, fmt.Errorf("scan job match: %w", err)
+			return nil, fmt.Errorf("scan job match: %w", err)
 		}
 
 		var assessment models.JobMatchAssessment
@@ -977,23 +1009,14 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 			match.Label = assessment.Label
 		}
 
-		page.Matches = append(page.Matches, match)
+		matches = append(matches, match)
 	}
 
 	if err := rows.Err(); err != nil {
-		return models.JobMatchPage{}, fmt.Errorf("iterate job matches: %w", err)
+		return nil, fmt.Errorf("iterate job matches: %w", err)
 	}
 
-	countStatement, countArguments, err := countQuery.ToSql()
-	if err != nil {
-		return models.JobMatchPage{}, fmt.Errorf("build job matches count query: %w", err)
-	}
-
-	if err := repository.db.QueryRowContext(ctx, countStatement, countArguments...).Scan(&page.Total); err != nil {
-		return models.JobMatchPage{}, fmt.Errorf("count job matches: %w", err)
-	}
-
-	return page, nil
+	return matches, nil
 }
 
 func (repository *SQLite) MatchQueue(ctx context.Context) ([]models.BrowseJob, error) {
