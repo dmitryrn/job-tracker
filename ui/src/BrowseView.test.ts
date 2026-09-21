@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, jobsReadyToQueue, workplaceClassificationTitle, workplaceLabel } from "./BrowseView";
+import { formatDate, jobsReadyToQueue, workplaceClassificationTitle, WorkplaceClassificationInfo, workplaceLabel } from "./BrowseView";
 
 describe("formatDate", () => {
   const now = new Date("2026-08-27T12:00:00Z");
@@ -51,5 +51,12 @@ describe("workplaceClassificationTitle", () => {
   it("ignores missing or invalid classification data", () => {
     expect(workplaceClassificationTitle(null)).toBe("");
     expect(workplaceClassificationTitle("not json")).toBe("");
+  });
+});
+
+describe("WorkplaceClassificationInfo", () => {
+  it("renders only when classification data is available", () => {
+    expect(WorkplaceClassificationInfo({ value: null })).toBeNull();
+    expect(WorkplaceClassificationInfo({ value: '{"confidence":0.9,"probabilities":{"hybrid":1}}' })).not.toBeNull();
   });
 });

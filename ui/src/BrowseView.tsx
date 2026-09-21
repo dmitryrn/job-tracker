@@ -124,6 +124,14 @@ export function workplaceClassificationTitle(value: string | null) {
   }
 }
 
+export function WorkplaceClassificationInfo({ value }: { value: string | null }) {
+  const title = workplaceClassificationTitle(value);
+  if (!title) {
+    return null;
+  }
+  return <span className="workplace-info" title={title} aria-label="Show Jev workplace probabilities">i</span>;
+}
+
 function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
   const lastViewed = formatRelativeTime(job.lastViewedAt);
   return (
@@ -138,7 +146,7 @@ function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
         <p className="job-excerpt">{plainText(job.bodyText).replace(/\s+/g, " ").trim()}</p>
            <div className="job-meta">
             <span>{job.location || "Location flexible"}</span>
-            <span title={workplaceClassificationTitle(job.workplaceClassificationJSON)}>{workplaceLabel(job.workplace) || "Work arrangement not listed"}</span>
+            <span>{workplaceLabel(job.workplace) || "Work arrangement not listed"}<WorkplaceClassificationInfo value={job.workplaceClassificationJSON} /></span>
             <span>{job.employmentType || "Role type not listed"}</span>
          </div>
       </button>

@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
-import { formatRelativeTime, workplaceClassificationTitle, workplaceLabel } from "./BrowseView";
+import { formatRelativeTime, WorkplaceClassificationInfo, workplaceLabel } from "./BrowseView";
 import { copyText } from "./clipboard";
 import { matchLabelScore, matchScoreStyle } from "./matchScore";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
@@ -622,7 +622,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       </header>
       <dl className="job-page-meta">
         <div><dt>Location</dt><dd>{job.location || "Location flexible"}</dd></div>
-         <div><dt>Work arrangement</dt><dd title={workplaceClassificationTitle(job.workplaceClassificationJSON)}>{workplaceLabel(job.workplace) || "Not listed"}</dd></div>
+         <div><dt>Work arrangement</dt><dd>{workplaceLabel(job.workplace) || "Not listed"}<WorkplaceClassificationInfo value={job.workplaceClassificationJSON} /></dd></div>
         <div><dt>Employment type</dt><dd>{job.employmentType || "Not listed"}</dd></div>
          <div><dt>Compensation</dt><dd>{formatSalary(job)}</dd></div>
          <div><dt>Profile fit</dt><dd><span className={profileScoreClassName(job.profileMatchScore)} style={profileScoreStyle(job.profileMatchScore)}>{profileScoreLabel(job.profileMatchScore)}</span></dd></div>
