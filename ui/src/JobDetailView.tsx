@@ -587,6 +587,12 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     }
   }
 
+  function openRejection() {
+    setActionsOpen(false);
+    setRejectionReason("");
+    setRejectionOpen(true);
+  }
+
   return (
     <section className={tab === "chat" ? "job-page chat-job-page" : "job-page"}>
       <button type="button" className="back-link" onClick={onBack}>Back to jobs</button>
@@ -597,19 +603,20 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
           <p>{job.company || "Company not listed"}</p>
          </div>
          <div className="job-page-header-actions">
-           <div className="job-primary-actions">
-             <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
-             {application !== undefined && <button type="button" className={application ? "application-toggle applied" : "application-toggle"} disabled={applicationUpdating} onClick={() => void toggleApplication()}>{applicationUpdating ? "Saving..." : application ? "Mark unapplied" : "Mark applied"}</button>}
-           </div>
-           <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
-            <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
-             <div className="job-overflow-menu">
-               <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
-               <button type="button" className="copy-profile-link" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")}>{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</button>
-               <button type="button" className="copy-profile-link" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")}>{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</button>
-               <button type="button" className="reject-action" onClick={() => { setActionsOpen(false); setRejectionReason(""); setRejectionOpen(true); }}>Won't apply</button>
-              <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
+            <div className="job-primary-actions">
+              <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
+              {application !== undefined && <button type="button" className={application ? "application-toggle applied" : "application-toggle"} disabled={applicationUpdating} onClick={() => void toggleApplication()}>{applicationUpdating ? "Saving..." : application ? "Mark unapplied" : "Mark applied"}</button>}
             </div>
+            <button type="button" className="reject-action desktop-reject-action" onClick={openRejection}>Won't apply</button>
+            <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
+             <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
+              <div className="job-overflow-menu">
+                <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
+                <button type="button" className="copy-profile-link" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")}>{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</button>
+                <button type="button" className="copy-profile-link" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")}>{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</button>
+                <button type="button" className="reject-action" onClick={openRejection}>Won't apply</button>
+               <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
+             </div>
           </details>
         </div>
       </header>

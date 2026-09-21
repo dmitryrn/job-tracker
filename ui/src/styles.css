@@ -193,6 +193,7 @@ button { cursor: pointer; }
 .job-page-header > div:first-child { grid-row: 1; }
 .job-page-header-actions { align-items: center; display: flex; gap: 10px; grid-row: 2; justify-content: space-between; margin-left: 0; width: 100%; }
 .job-primary-actions { align-items: start; display: grid; gap: 12px; justify-items: start; }
+.desktop-reject-action { display: none; }
 .job-overflow { position: relative; }
 .job-overflow summary { align-items: center; background: transparent; border: 1px solid #bfc7ce; border-radius: 4px; color: #4b6075; cursor: pointer; display: flex; height: 30px; justify-content: center; list-style: none; width: 30px; }
 .job-overflow summary::-webkit-details-marker { display: none; }
@@ -500,6 +501,14 @@ tr:hover td { background: #fffbed; }
 }
 
 @media (min-width: 701px) {
+  .job-page-header-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto auto; justify-content: initial; }
+  .job-primary-actions { display: contents; }
+  .job-primary-actions .primary-action { grid-column: 1 / -1; grid-row: 1; justify-self: start; }
+  .job-primary-actions .application-toggle { grid-column: 1; grid-row: 2; height: 40px; justify-self: start; }
+  .desktop-reject-action { display: block; grid-column: 2; grid-row: 2; height: 40px; margin-left: 0; }
+  .job-overflow { grid-column: 3; grid-row: 2; }
+  .job-overflow summary { height: 40px; width: 40px; }
+  .job-overflow-menu .reject-action { display: none; }
   .chat-job-page .match-chat { margin-left: auto; margin-right: auto; max-width: 960px; }
   .chat-job-page .match-chat-compose { left: 50%; right: auto; transform: translateX(-50%); width: min(960px, calc(100vw - var(--workspace-inline-padding) - var(--workspace-inline-padding))); }
 }
