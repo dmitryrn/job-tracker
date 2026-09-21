@@ -117,9 +117,8 @@ button { cursor: pointer; }
 .profile-fields { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; }
 .profile-form label { color: #4b6075; display: grid; font-size: 12px; font-weight: 700; gap: 6px; }
 .profile-form input, .profile-form textarea, .profile-form select { background: #fff; border: 1px solid #bfc7ce; border-radius: 4px; color: #1a2638; min-width: 0; padding: 10px; width: 100%; }
-.profile-copy-field { position: relative; }
-.profile-copy-field input { padding-right: 50px; }
-.copy-field { align-items: center; background: #f1f3f2; border: 1px solid #bfc7ce; border-radius: 4px; color: #263d56; display: flex; height: 32px; justify-content: center; padding: 0; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; }
+.profile-copy-field { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) 40px; }
+.copy-field { align-items: center; background: #f1f3f2; border: 1px solid #bfc7ce; border-radius: 4px; color: #263d56; display: flex; height: 40px; justify-content: center; padding: 0; width: 40px; }
 .copy-field:hover { background: #e3e8e7; }
 .copy-field:disabled { cursor: not-allowed; opacity: .45; }
 .copy-field svg { fill: none; height: 17px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 17px; }
