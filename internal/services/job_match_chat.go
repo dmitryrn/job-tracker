@@ -1296,66 +1296,90 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 	}
 
 	for _, operation := range patch.Operations {
-		value := strings.TrimSpace(operation.Value)
-		expected := strings.TrimSpace(operation.Expected)
-		switch operation.Section {
-		case "headline":
-			if operation.Op != "replace" || operation.ID != 0 || strings.TrimSpace(resume.Headline) != expected || value == "" {
-				return fmt.Errorf("headline replacement did not match current value (expected %q, current %q)", expected, strings.TrimSpace(resume.Headline))
-			}
-
-			resume.Headline = value
-		case "summary":
-			if err := patchResumeText(&resume.SummaryParagraphs, operation, value, expected); err != nil {
-				return fmt.Errorf("summary patch: %w", err)
-			}
-		case "skill":
-			if err := patchResumeSkill(&resume.Skills, operation, value, expected); err != nil {
-				return fmt.Errorf("skill patch: %w", err)
-			}
-		case "experienceBullet":
-			experience := findExperience(resume.Experience, operation.ParentID)
-			if experience == nil {
-				return fmt.Errorf("experience %d does not exist", operation.ParentID)
-			}
-
-			if err := patchResumeText(&experience.Bullets, operation, value, expected); err != nil {
-				return fmt.Errorf("experience bullet patch: %w", err)
-			}
-		case "educationDetails":
-			education := findEducation(resume.Education, operation.ID)
-			if education == nil {
-				return fmt.Errorf("education ID %d does not exist", operation.ID)
-			}
-
-			if operation.ParentID != 0 {
-				return fmt.Errorf("education details must not have a parent ID (education ID %d, parent ID %d)", operation.ID, operation.ParentID)
-			}
-
-			current := strings.TrimSpace(education.Details)
-			if value == "" {
-				return fmt.Errorf("education details value must not be empty (education ID %d)", operation.ID)
-			}
-
-			switch operation.Op {
-			case "add":
-				if current != "" || expected != "" {
-					return fmt.Errorf("education details already has content; use replace (education ID %d, expected %q, current %q)", operation.ID, expected, current)
-				}
-			case "replace":
-				if current != expected {
-					return fmt.Errorf("education details did not match current value (education ID %d, expected %q, current %q)", operation.ID, expected, current)
-				}
-			default:
-				return fmt.Errorf("education details supports add for empty details or replace (education ID %d, op %q)", operation.ID, operation.Op)
-			}
-
-			education.Details = value
-		default:
-			return fmt.Errorf("unsupported patch section %q", operation.Section)
+		if err := applyResumePatchOperation(resume, operation); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+func applyResumePatchOperation(resume *models.Resume, operation resumePatchOperation) error {
+	value := strings.TrimSpace(operation.Value)
+	expected := strings.TrimSpace(operation.Expected)
+	switch operation.Section {
+	case "headline":
+		return patchResumeHeadline(&resume.Headline, operation, value, expected)
+	case "summary":
+		if err := patchResumeText(&resume.SummaryParagraphs, operation, value, expected); err != nil {
+			return fmt.Errorf("summary patch: %w", err)
+		}
+	case "skill":
+		if err := patchResumeSkill(&resume.Skills, operation, value, expected); err != nil {
+			return fmt.Errorf("skill patch: %w", err)
+		}
+	case "experienceBullet":
+		return patchResumeExperienceBullet(resume, operation, value, expected)
+	case "educationDetails":
+		return patchResumeEducationDetails(resume, operation, value, expected)
+	default:
+		return fmt.Errorf("unsupported patch section %q", operation.Section)
+	}
+
+	return nil
+}
+
+func patchResumeHeadline(headline *string, operation resumePatchOperation, value, expected string) error {
+	if operation.Op != "replace" || operation.ID != 0 || strings.TrimSpace(*headline) != expected || value == "" {
+		return fmt.Errorf("headline replacement did not match current value (expected %q, current %q)", expected, strings.TrimSpace(*headline))
+	}
+
+	*headline = value
+	return nil
+}
+
+func patchResumeExperienceBullet(resume *models.Resume, operation resumePatchOperation, value, expected string) error {
+	experience := findExperience(resume.Experience, operation.ParentID)
+	if experience == nil {
+		return fmt.Errorf("experience %d does not exist", operation.ParentID)
+	}
+
+	if err := patchResumeText(&experience.Bullets, operation, value, expected); err != nil {
+		return fmt.Errorf("experience bullet patch: %w", err)
+	}
+
+	return nil
+}
+
+func patchResumeEducationDetails(resume *models.Resume, operation resumePatchOperation, value, expected string) error {
+	education := findEducation(resume.Education, operation.ID)
+	if education == nil {
+		return fmt.Errorf("education ID %d does not exist", operation.ID)
+	}
+
+	if operation.ParentID != 0 {
+		return fmt.Errorf("education details must not have a parent ID (education ID %d, parent ID %d)", operation.ID, operation.ParentID)
+	}
+
+	current := strings.TrimSpace(education.Details)
+	if value == "" {
+		return fmt.Errorf("education details value must not be empty (education ID %d)", operation.ID)
+	}
+
+	switch operation.Op {
+	case "add":
+		if current != "" || expected != "" {
+			return fmt.Errorf("education details already has content; use replace (education ID %d, expected %q, current %q)", operation.ID, expected, current)
+		}
+	case "replace":
+		if current != expected {
+			return fmt.Errorf("education details did not match current value (education ID %d, expected %q, current %q)", operation.ID, expected, current)
+		}
+	default:
+		return fmt.Errorf("education details supports add for empty details or replace (education ID %d, op %q)", operation.ID, operation.Op)
+	}
+
+	education.Details = value
 	return nil
 }
 

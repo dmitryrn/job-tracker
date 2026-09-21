@@ -244,6 +244,35 @@ func TestApplyResumePatchRejectsEducationDetailsWithWrongExpectedValue(t *testin
 	require.ErrorContains(t, err, `education ID 7, expected "Honors", current "Dean's list"`)
 }
 
+func TestApplyResumePatchAppliesAllResumeSections(t *testing.T) {
+	resume := models.Resume{
+		Headline:          "Software engineer",
+		SummaryParagraphs: []models.ResumeText{{ID: 1, Content: "Builds systems."}},
+		Skills:            []models.ResumeSkill{{ID: 2, Name: "Go"}},
+		Experience: []models.ResumeExperience{{
+			ID:      3,
+			Bullets: []models.ResumeText{{ID: 4, Content: "Built APIs."}},
+		}},
+		Education: []models.ResumeEducation{{ID: 5}},
+	}
+
+	err := applyResumePatch(&resume, resumePatch{Operations: []resumePatchOperation{
+		{Op: "replace", Section: "headline", Expected: "Software engineer", Value: "Backend engineer"},
+		{Op: "add", Section: "summary", Value: "Delivers reliable software."},
+		{Op: "replace", Section: "skill", ID: 2, Expected: "Go", Value: "Go and PostgreSQL"},
+		{Op: "replace", Section: "experienceBullet", ParentID: 3, ID: 4, Expected: "Built APIs.", Value: "Built resilient APIs."},
+		{Op: "add", Section: "educationDetails", ID: 5, Value: "Distributed systems."},
+	}})
+
+	require.NoError(t, err)
+	assert.Equal(t, "Backend engineer", resume.Headline)
+	assert.Len(t, resume.SummaryParagraphs, 2)
+	assert.Equal(t, "Delivers reliable software.", resume.SummaryParagraphs[1].Content)
+	assert.Equal(t, "Go and PostgreSQL", resume.Skills[0].Name)
+	assert.Equal(t, "Built resilient APIs.", resume.Experience[0].Bullets[0].Content)
+	assert.Equal(t, "Distributed systems.", resume.Education[0].Details)
+}
+
 func TestCloneResumeDoesNotSharePatchableFields(t *testing.T) {
 	resume := models.Resume{
 		SummaryParagraphs: []models.ResumeText{{ID: 1, Content: "Original summary"}},

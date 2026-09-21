@@ -76,6 +76,29 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	assert.Equal(t, "Full-time", jobs[0].EmploymentType)
 }
 
+func TestLinkedInJobsFetchDoesNotFetchDuplicateSearchResultsTwice(t *testing.T) {
+	client := &linkedInClientStub{
+		results: map[int][]linkedin.SearchResult{
+			0: {
+				{ID: "duplicate", URL: "https://www.linkedin.com/jobs/view/duplicate", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "duplicate", URL: "https://www.linkedin.com/jobs/view/duplicate", Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+				{ID: "unique", URL: "https://www.linkedin.com/jobs/view/unique", Title: "Staff Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"},
+			},
+		},
+		details: map[string]linkedin.Job{
+			"duplicate": {Description: "Build systems", EmploymentType: "Full-time"},
+			"unique":    {Description: "Lead systems", EmploymentType: "Full-time"},
+		},
+	}
+
+	service := LinkedInJobs{client: client, jobs: &linkedInJobRepositoryStub{}}
+	fetch, err := service.Preview(context.Background(), models.LinkedInSearchSettings{Query: "engineer", Limit: 2}, 0)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"duplicate", "unique"}, client.jobIDs)
+	assert.Len(t, fetch.Jobs, 2)
+}
+
 func TestLinkedInWorkplaceUsesStructuredValueWhenPresent(t *testing.T) {
 	result := linkedin.SearchResult{ID: "1", PostedAt: "2026-09-02"}
 

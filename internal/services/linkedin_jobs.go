@@ -130,43 +130,14 @@ func (service *LinkedInJobs) previewResult(fetch LinkedInFetchResult, err error)
 }
 
 func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedInSearchSettings, options linkedInFetchOptions) (LinkedInFetchResult, error) {
-	runID := options.runID
-	requestInterval := options.requestInterval
-	save := options.save
-	onJob := options.onJob
 	fetch := LinkedInFetchResult{Jobs: make([]models.Job, 0, settings.Limit)}
 	seen := make(map[string]struct{}, settings.Limit)
-	requested := false
 	for start := 0; len(fetch.Jobs) < settings.Limit; {
-		if requested {
-			if err := service.wait(ctx, requestInterval); err != nil {
-				return fetch, err
-			}
-		}
-
-		requested = true
-		service.recordEvent(ctx, runID, "linkedin.search.started", "info", "LinkedIn search started", map[string]any{
-			"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "start": start, "requestedLimit": settings.Limit,
-		})
-		results, err := service.client.Search(ctx, linkedin.SearchFilter{
-			Keywords:        settings.Query,
-			Location:        settings.Location,
-			PostedWithin:    settings.PostedWithin,
-			Workplace:       settings.Workplace,
-			ExperienceLevel: settings.ExperienceLevel,
-			Start:           start,
-		})
+		results, err := service.searchLinkedInPage(ctx, settings, options.runID, options.requestInterval, start, &fetch)
 		if err != nil {
-			service.recordEvent(ctx, runID, "linkedin.search.failed", "error", "LinkedIn search failed", map[string]any{
-				"start": start, "error": err.Error(),
-			})
-			return fetch, &linkedInClientError{cause: err}
+			return fetch, err
 		}
 
-		fetch.SearchResults += len(results)
-		service.recordEvent(ctx, runID, "linkedin.search.succeeded", "info", "LinkedIn search succeeded", map[string]any{
-			"start": start, "resultCount": len(results), "searchResultsFetched": fetch.SearchResults, "requestedLimit": settings.Limit,
-		})
 		if len(results) == 0 {
 			break
 		}
@@ -176,125 +147,8 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				break
 			}
 
-			if !validLinkedInSearchResult(candidate) {
-				fetch.InvalidJobs++
-				continue
-			}
-
-			if _, exists := seen[candidate.ID]; exists {
-				continue
-			}
-
-			seen[candidate.ID] = struct{}{}
-			exists, err := service.jobs.JobExists(ctx, "linkedin", candidate.ID)
-			if err != nil {
-				service.recordEvent(ctx, runID, "linkedin.job_lookup.failed", "error", "LinkedIn job lookup failed", map[string]any{
-					"jobID": candidate.ID, "error": err.Error(),
-				})
-				if service.logger != nil {
-					service.logger.Error("check LinkedIn job existence failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
-				}
-
+			if err := service.processLinkedInCandidate(ctx, options, candidate, seen, &fetch); err != nil {
 				return fetch, err
-			}
-
-			if exists {
-				if service.typeSafe != nil {
-					service.classifyExistingJob(ctx, runID, candidate)
-				}
-
-				fetch.SkippedJobs++
-				service.recordEvent(ctx, runID, "linkedin.job_fetch.skipped", "info", "LinkedIn job already exists", map[string]any{
-					"jobID": candidate.ID, "reason": "already_exists",
-				})
-				continue
-			}
-
-			if err := service.wait(ctx, requestInterval); err != nil {
-				return fetch, err
-			}
-
-			fetch.DetailRequests++
-			service.recordEvent(ctx, runID, "linkedin.job_fetch.started", "info", "LinkedIn job fetch started", map[string]any{
-				"jobID": candidate.ID, "title": candidate.Title, "detailRequests": fetch.DetailRequests,
-			})
-			details, err := service.client.Job(ctx, candidate.ID)
-			if err != nil {
-				service.recordEvent(ctx, runID, "linkedin.job_fetch.failed", "error", "LinkedIn job fetch failed", map[string]any{
-					"jobID": candidate.ID, "error": err.Error(),
-				})
-				return fetch, &linkedInClientError{cause: err}
-			}
-
-			if !validLinkedInJob(details) {
-				fetch.InvalidJobs++
-				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
-					"jobID": candidate.ID, "accepted": false, "reason": "missing_description",
-				})
-				continue
-			}
-
-			job, err := toLinkedInJob(candidate, details)
-			if err != nil {
-				return fetch, fmt.Errorf("encode LinkedIn job metadata: %w", err)
-			}
-
-			if !validLinkedInResult(job) {
-				fetch.InvalidJobs++
-				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
-					"jobID": candidate.ID, "accepted": false, "reason": "missing_posted_at_or_employment_type",
-				})
-				continue
-			}
-
-			if service.typeSafe != nil {
-				workplace, classificationJSON, err := service.classifyWorkplace(ctx, candidate.Title, details.Description)
-				if err != nil {
-					service.recordEvent(ctx, runID, "linkedin.workplace_classification.failed", "error", "LinkedIn workplace classification failed", map[string]any{
-						"jobID": candidate.ID, "error": err.Error(),
-					})
-					if service.logger != nil {
-						service.logger.Error("classify LinkedIn workplace failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
-					}
-				} else {
-					job.Workplace = workplace
-					job.WorkplaceClassificationJSON = classificationJSON
-					service.recordEvent(ctx, runID, "linkedin.workplace_classification.succeeded", "info", "LinkedIn workplace classified", map[string]any{
-						"jobID": candidate.ID, "workplace": workplace,
-					})
-					if service.logger != nil {
-						service.logger.Info("LinkedIn workplace classified", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.String("workplace", workplace))
-					}
-				}
-			}
-
-			fetch.FetchedJobs++
-			service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded", map[string]any{
-				"jobID": candidate.ID, "accepted": true, "fetchedJobCount": fetch.FetchedJobs,
-			})
-			if save {
-				if err := service.jobs.Upsert(ctx, []models.Job{job}); err != nil {
-					service.recordEvent(ctx, runID, "linkedin.job_save.failed", "error", "LinkedIn job save failed", map[string]any{
-						"jobID": candidate.ID, "error": err.Error(),
-					})
-					if service.logger != nil {
-						service.logger.Error("save LinkedIn job failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
-					}
-
-					return fetch, err
-				}
-
-				fetch.SavedJobs++
-				service.recordEvent(ctx, runID, "linkedin.job_save.succeeded", "info", "LinkedIn job saved", map[string]any{
-					"jobID": candidate.ID, "savedJobCount": fetch.SavedJobs,
-				})
-			}
-
-			fetch.Jobs = append(fetch.Jobs, job)
-			if onJob != nil {
-				if err := onJob(job); err != nil {
-					return fetch, err
-				}
 			}
 		}
 
@@ -302,6 +156,195 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 	}
 
 	return fetch, nil
+}
+
+func (service *LinkedInJobs) searchLinkedInPage(ctx context.Context, settings models.LinkedInSearchSettings, runID string, requestInterval time.Duration, start int, fetch *LinkedInFetchResult) ([]linkedin.SearchResult, error) {
+	if start > 0 {
+		if err := service.wait(ctx, requestInterval); err != nil {
+			return nil, err
+		}
+	}
+
+	service.recordEvent(ctx, runID, "linkedin.search.started", "info", "LinkedIn search started", map[string]any{
+		"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "start": start, "requestedLimit": settings.Limit,
+	})
+	results, err := service.client.Search(ctx, linkedin.SearchFilter{
+		Keywords:        settings.Query,
+		Location:        settings.Location,
+		PostedWithin:    settings.PostedWithin,
+		Workplace:       settings.Workplace,
+		ExperienceLevel: settings.ExperienceLevel,
+		Start:           start,
+	})
+	if err != nil {
+		service.recordEvent(ctx, runID, "linkedin.search.failed", "error", "LinkedIn search failed", map[string]any{
+			"start": start, "error": err.Error(),
+		})
+		return nil, &linkedInClientError{cause: err}
+	}
+
+	fetch.SearchResults += len(results)
+	service.recordEvent(ctx, runID, "linkedin.search.succeeded", "info", "LinkedIn search succeeded", map[string]any{
+		"start": start, "resultCount": len(results), "searchResultsFetched": fetch.SearchResults, "requestedLimit": settings.Limit,
+	})
+	return results, nil
+}
+
+func (service *LinkedInJobs) processLinkedInCandidate(ctx context.Context, options linkedInFetchOptions, candidate linkedin.SearchResult, seen map[string]struct{}, fetch *LinkedInFetchResult) error {
+	shouldFetch, err := service.prepareLinkedInCandidate(ctx, options.runID, candidate, seen, fetch)
+	if err != nil || !shouldFetch {
+		return err
+	}
+
+	job, valid, err := service.fetchLinkedInCandidate(ctx, options.runID, options.requestInterval, candidate, fetch)
+	if err != nil || !valid {
+		return err
+	}
+
+	service.classifyFetchedLinkedInJob(ctx, options.runID, candidate, &job)
+	fetch.FetchedJobs++
+	service.recordEvent(ctx, options.runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded", map[string]any{
+		"jobID": candidate.ID, "accepted": true, "fetchedJobCount": fetch.FetchedJobs,
+	})
+	if err := service.saveLinkedInCandidate(ctx, options, candidate, job, fetch); err != nil {
+		return err
+	}
+
+	fetch.Jobs = append(fetch.Jobs, job)
+	if options.onJob != nil {
+		return options.onJob(job)
+	}
+
+	return nil
+}
+
+func (service *LinkedInJobs) prepareLinkedInCandidate(ctx context.Context, runID string, candidate linkedin.SearchResult, seen map[string]struct{}, fetch *LinkedInFetchResult) (bool, error) {
+	if !validLinkedInSearchResult(candidate) {
+		fetch.InvalidJobs++
+		return false, nil
+	}
+
+	if _, exists := seen[candidate.ID]; exists {
+		return false, nil
+	}
+
+	seen[candidate.ID] = struct{}{}
+	exists, err := service.jobs.JobExists(ctx, "linkedin", candidate.ID)
+	if err != nil {
+		service.recordEvent(ctx, runID, "linkedin.job_lookup.failed", "error", "LinkedIn job lookup failed", map[string]any{
+			"jobID": candidate.ID, "error": err.Error(),
+		})
+		if service.logger != nil {
+			service.logger.Error("check LinkedIn job existence failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
+		}
+
+		return false, err
+	}
+
+	if !exists {
+		return true, nil
+	}
+
+	if service.typeSafe != nil {
+		service.classifyExistingJob(ctx, runID, candidate)
+	}
+
+	fetch.SkippedJobs++
+	service.recordEvent(ctx, runID, "linkedin.job_fetch.skipped", "info", "LinkedIn job already exists", map[string]any{
+		"jobID": candidate.ID, "reason": "already_exists",
+	})
+	return false, nil
+}
+
+func (service *LinkedInJobs) fetchLinkedInCandidate(ctx context.Context, runID string, requestInterval time.Duration, candidate linkedin.SearchResult, fetch *LinkedInFetchResult) (models.Job, bool, error) {
+	if err := service.wait(ctx, requestInterval); err != nil {
+		return models.Job{}, false, err
+	}
+
+	fetch.DetailRequests++
+	service.recordEvent(ctx, runID, "linkedin.job_fetch.started", "info", "LinkedIn job fetch started", map[string]any{
+		"jobID": candidate.ID, "title": candidate.Title, "detailRequests": fetch.DetailRequests,
+	})
+	details, err := service.client.Job(ctx, candidate.ID)
+	if err != nil {
+		service.recordEvent(ctx, runID, "linkedin.job_fetch.failed", "error", "LinkedIn job fetch failed", map[string]any{
+			"jobID": candidate.ID, "error": err.Error(),
+		})
+		return models.Job{}, false, &linkedInClientError{cause: err}
+	}
+
+	if !validLinkedInJob(details) {
+		fetch.InvalidJobs++
+		service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
+			"jobID": candidate.ID, "accepted": false, "reason": "missing_description",
+		})
+		return models.Job{}, false, nil
+	}
+
+	job, err := toLinkedInJob(candidate, details)
+	if err != nil {
+		return models.Job{}, false, fmt.Errorf("encode LinkedIn job metadata: %w", err)
+	}
+
+	if !validLinkedInResult(job) {
+		fetch.InvalidJobs++
+		service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
+			"jobID": candidate.ID, "accepted": false, "reason": "missing_posted_at_or_employment_type",
+		})
+		return models.Job{}, false, nil
+	}
+
+	return job, true, nil
+}
+
+func (service *LinkedInJobs) classifyFetchedLinkedInJob(ctx context.Context, runID string, candidate linkedin.SearchResult, job *models.Job) {
+	if service.typeSafe == nil {
+		return
+	}
+
+	workplace, classificationJSON, err := service.classifyWorkplace(ctx, candidate.Title, job.BodyText)
+	if err != nil {
+		service.recordEvent(ctx, runID, "linkedin.workplace_classification.failed", "error", "LinkedIn workplace classification failed", map[string]any{
+			"jobID": candidate.ID, "error": err.Error(),
+		})
+		if service.logger != nil {
+			service.logger.Error("classify LinkedIn workplace failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
+		}
+
+		return
+	}
+
+	job.Workplace = workplace
+	job.WorkplaceClassificationJSON = classificationJSON
+	service.recordEvent(ctx, runID, "linkedin.workplace_classification.succeeded", "info", "LinkedIn workplace classified", map[string]any{
+		"jobID": candidate.ID, "workplace": workplace,
+	})
+	if service.logger != nil {
+		service.logger.Info("LinkedIn workplace classified", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.String("workplace", workplace))
+	}
+}
+
+func (service *LinkedInJobs) saveLinkedInCandidate(ctx context.Context, options linkedInFetchOptions, candidate linkedin.SearchResult, job models.Job, fetch *LinkedInFetchResult) error {
+	if !options.save {
+		return nil
+	}
+
+	if err := service.jobs.Upsert(ctx, []models.Job{job}); err != nil {
+		service.recordEvent(ctx, options.runID, "linkedin.job_save.failed", "error", "LinkedIn job save failed", map[string]any{
+			"jobID": candidate.ID, "error": err.Error(),
+		})
+		if service.logger != nil {
+			service.logger.Error("save LinkedIn job failed", zap.String("run_id", options.runID), zap.String("job_id", candidate.ID), zap.Error(err))
+		}
+
+		return err
+	}
+
+	fetch.SavedJobs++
+	service.recordEvent(ctx, options.runID, "linkedin.job_save.succeeded", "info", "LinkedIn job saved", map[string]any{
+		"jobID": candidate.ID, "savedJobCount": fetch.SavedJobs,
+	})
+	return nil
 }
 
 func (service *LinkedInJobs) classifyExistingJob(ctx context.Context, runID string, candidate linkedin.SearchResult) {

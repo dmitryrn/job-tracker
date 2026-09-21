@@ -64,49 +64,65 @@ func (service *ProviderPreviewService) Preview(ctx context.Context, provider str
 func (service *ProviderPreviewService) StreamPreview(ctx context.Context, provider string, settings models.DiscoverySettings, onJob func(models.Job) error) error {
 	switch provider {
 	case "adzuna":
-		settings.Adzuna.Query = strings.TrimSpace(settings.Adzuna.Query)
-		settings.Adzuna.Country = strings.TrimSpace(settings.Adzuna.Country)
-		settings.Adzuna.Workplace = strings.TrimSpace(settings.Adzuna.Workplace)
-		if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) {
-			return fmt.Errorf("%w: check Adzuna required fields and numeric limits", ErrInvalidDiscoverySettings)
-		}
-
-		jobs, err := service.adzuna.Fetch(ctx, settings.Adzuna)
-		return emitPreviewJobs(jobs, err, onJob)
+		return service.previewAdzuna(ctx, settings.Adzuna, onJob)
 	case "remotive":
-		settings.Remotive.Query = strings.TrimSpace(settings.Remotive.Query)
-		settings.Remotive.Category = strings.TrimSpace(settings.Remotive.Category)
-		if settings.Remotive.Query == "" || settings.Remotive.Category == "" {
-			return fmt.Errorf("%w: check Remotive required fields", ErrInvalidDiscoverySettings)
-		}
-
-		jobs, err := service.remotive.Fetch(ctx, settings.Remotive)
-		return emitPreviewJobs(jobs, err, onJob)
+		return service.previewRemotive(ctx, settings.Remotive, onJob)
 	case "jobicy":
-		settings.Jobicy.Geo = strings.TrimSpace(settings.Jobicy.Geo)
-		settings.Jobicy.Industry = strings.TrimSpace(settings.Jobicy.Industry)
-		settings.Jobicy.Tag = strings.TrimSpace(settings.Jobicy.Tag)
-		if settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 {
-			return fmt.Errorf("%w: Jobicy results must be between 1 and 200", ErrInvalidDiscoverySettings)
-		}
-
-		jobs, err := service.jobicy.Fetch(ctx, settings.Jobicy)
-		return emitPreviewJobs(jobs, err, onJob)
+		return service.previewJobicy(ctx, settings.Jobicy, onJob)
 	case "linkedin":
-		settings.LinkedIn.Query = strings.TrimSpace(settings.LinkedIn.Query)
-		settings.LinkedIn.Location = strings.TrimSpace(settings.LinkedIn.Location)
-		settings.LinkedIn.PostedWithin = strings.TrimSpace(settings.LinkedIn.PostedWithin)
-		settings.LinkedIn.Workplace = strings.TrimSpace(settings.LinkedIn.Workplace)
-		settings.LinkedIn.ExperienceLevel = strings.TrimSpace(settings.LinkedIn.ExperienceLevel)
-		if settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
-			return fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and %d", ErrInvalidDiscoverySettings, maxLinkedInResults)
-		}
-
-		_, err := service.linkedin.PreviewStream(ctx, settings.LinkedIn, service.linkedInPreviewRequestInterval, onJob)
-		return err
+		return service.previewLinkedIn(ctx, settings.LinkedIn, onJob)
 	default:
 		return ErrUnknownDiscoveryProvider
 	}
+}
+
+func (service *ProviderPreviewService) previewAdzuna(ctx context.Context, settings models.AdzunaSearchSettings, onJob func(models.Job) error) error {
+	settings.Query = strings.TrimSpace(settings.Query)
+	settings.Country = strings.TrimSpace(settings.Country)
+	settings.Workplace = strings.TrimSpace(settings.Workplace)
+	if settings.Query == "" || settings.Country == "" || settings.MaxDaysOld < 1 || settings.MaxPages < 1 || settings.ResultsPerPage < 1 || !validWorkplace(settings.Workplace) {
+		return fmt.Errorf("%w: check Adzuna required fields and numeric limits", ErrInvalidDiscoverySettings)
+	}
+
+	jobs, err := service.adzuna.Fetch(ctx, settings)
+	return emitPreviewJobs(jobs, err, onJob)
+}
+
+func (service *ProviderPreviewService) previewRemotive(ctx context.Context, settings models.RemotiveSearchSettings, onJob func(models.Job) error) error {
+	settings.Query = strings.TrimSpace(settings.Query)
+	settings.Category = strings.TrimSpace(settings.Category)
+	if settings.Query == "" || settings.Category == "" {
+		return fmt.Errorf("%w: check Remotive required fields", ErrInvalidDiscoverySettings)
+	}
+
+	jobs, err := service.remotive.Fetch(ctx, settings)
+	return emitPreviewJobs(jobs, err, onJob)
+}
+
+func (service *ProviderPreviewService) previewJobicy(ctx context.Context, settings models.JobicySearchSettings, onJob func(models.Job) error) error {
+	settings.Geo = strings.TrimSpace(settings.Geo)
+	settings.Industry = strings.TrimSpace(settings.Industry)
+	settings.Tag = strings.TrimSpace(settings.Tag)
+	if settings.Count < 1 || settings.Count > 200 {
+		return fmt.Errorf("%w: Jobicy results must be between 1 and 200", ErrInvalidDiscoverySettings)
+	}
+
+	jobs, err := service.jobicy.Fetch(ctx, settings)
+	return emitPreviewJobs(jobs, err, onJob)
+}
+
+func (service *ProviderPreviewService) previewLinkedIn(ctx context.Context, settings models.LinkedInSearchSettings, onJob func(models.Job) error) error {
+	settings.Query = strings.TrimSpace(settings.Query)
+	settings.Location = strings.TrimSpace(settings.Location)
+	settings.PostedWithin = strings.TrimSpace(settings.PostedWithin)
+	settings.Workplace = strings.TrimSpace(settings.Workplace)
+	settings.ExperienceLevel = strings.TrimSpace(settings.ExperienceLevel)
+	if settings.Query == "" || settings.Location == "" || settings.Limit < 1 || settings.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.PostedWithin) || !validLinkedInWorkplace(settings.Workplace) || !validLinkedInExperienceLevel(settings.ExperienceLevel) {
+		return fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and %d", ErrInvalidDiscoverySettings, maxLinkedInResults)
+	}
+
+	_, err := service.linkedin.PreviewStream(ctx, settings, service.linkedInPreviewRequestInterval, onJob)
+	return err
 }
 
 func emitPreviewJobs(jobs []models.Job, fetchErr error, onJob func(models.Job) error) error {

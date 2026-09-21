@@ -300,13 +300,52 @@ func salaryValue(value *int64) string {
 }
 
 func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string) error {
-	draft.Role.Family = canonicalJobConcept(draft.Role.Family)
-	draft.Role.Seniority = canonicalJobConcept(draft.Role.Seniority)
-	if !validConcept(draft.Role.Family) || !validConcept(draft.Role.Seniority) || !validConfidence(draft.Role.SeniorityConfidence) {
+	if err := validateJobAnalysisRole(&draft.Role); err != nil {
+		return err
+	}
+
+	if err := validateJobAnalysisConstraints(draft.Constraints, quoteSource); err != nil {
+		return err
+	}
+
+	seenRequirements := make(map[string]bool, len(draft.Requirements))
+	if err := validateJobAnalysisRequirements(draft.Requirements, quoteSource, seenRequirements); err != nil {
+		return err
+	}
+
+	if err := validateJobAnalysisEvidence(draft.Responsibilities, quoteSource, "responsibility"); err != nil {
+		return err
+	}
+
+	preferences, err := validateJobAnalysisPreferences(draft.Preferences, &draft.Requirements, quoteSource, seenRequirements)
+	if err != nil {
+		return err
+	}
+
+	draft.Preferences = preferences
+	if len(draft.Constraints) == 0 && len(draft.Requirements) == 0 && len(draft.Responsibilities) == 0 && len(draft.Preferences) == 0 && len(draft.Unknowns) == 0 {
+		return fmt.Errorf("job analysis contains no extracted claims")
+	}
+
+	if !allNonBlank(draft.Unknowns) {
+		return fmt.Errorf("job analysis contains a blank unknown")
+	}
+
+	return nil
+}
+
+func validateJobAnalysisRole(role *models.JobRole) error {
+	role.Family = canonicalJobConcept(role.Family)
+	role.Seniority = canonicalJobConcept(role.Seniority)
+	if !validConcept(role.Family) || !validConcept(role.Seniority) || !validConfidence(role.SeniorityConfidence) {
 		return fmt.Errorf("job analysis contains an invalid role")
 	}
 
-	for _, constraint := range draft.Constraints {
+	return nil
+}
+
+func validateJobAnalysisConstraints(constraints []models.JobConstraint, quoteSource string) error {
+	for _, constraint := range constraints {
 		if !validConstraintKind(constraint.Kind) || strings.TrimSpace(constraint.Value) == "" || !validConfidence(constraint.Confidence) {
 			return fmt.Errorf("job analysis contains an invalid constraint %q", constraint.Kind)
 		}
@@ -316,11 +355,14 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 		}
 	}
 
-	seenRequirements := make(map[string]bool, len(draft.Requirements))
-	for index := range draft.Requirements {
-		requirement := &draft.Requirements[index]
+	return nil
+}
+
+func validateJobAnalysisRequirements(requirements []models.JobRequirement, quoteSource string, seen map[string]bool) error {
+	for index := range requirements {
+		requirement := &requirements[index]
 		requirement.ID = canonicalJobRequirementID(requirement.ID)
-		if !jobRequirementIDPattern.MatchString(requirement.ID) || seenRequirements[requirement.ID] {
+		if !jobRequirementIDPattern.MatchString(requirement.ID) || seen[requirement.ID] {
 			return fmt.Errorf("job analysis contains an invalid requirement ID")
 		}
 
@@ -336,38 +378,46 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 			requirement.Kind = "strong_preference"
 		}
 
-		seenRequirements[requirement.ID] = true
+		seen[requirement.ID] = true
 		requirement.Concept = canonicalJobConcept(requirement.Concept)
 	}
 
-	for index := range draft.Responsibilities {
-		item := &draft.Responsibilities[index]
+	return nil
+}
+
+func validateJobAnalysisEvidence(items []models.JobEvidence, quoteSource, kind string) error {
+	for index := range items {
+		item := &items[index]
 		if !validConcept(item.Concept) {
-			return fmt.Errorf("job analysis contains an invalid responsibility")
+			return fmt.Errorf("job analysis contains an invalid %s", kind)
 		}
 
 		if !validQuote(item.Quote, quoteSource) {
-			return fmt.Errorf("job analysis responsibility quote %q is not in source", item.Quote)
+			return fmt.Errorf("job analysis %s quote %q is not in source", kind, item.Quote)
 		}
 
 		item.Concept = canonicalJobConcept(item.Concept)
 	}
 
-	preferences := make([]models.JobEvidence, 0, len(draft.Preferences))
-	for index := range draft.Preferences {
-		item := &draft.Preferences[index]
+	return nil
+}
+
+func validateJobAnalysisPreferences(preferences []models.JobEvidence, requirements *[]models.JobRequirement, quoteSource string, seen map[string]bool) ([]models.JobEvidence, error) {
+	validated := make([]models.JobEvidence, 0, len(preferences))
+	for index := range preferences {
+		item := &preferences[index]
 		if !validConcept(item.Concept) {
-			return fmt.Errorf("job analysis contains an invalid preference")
+			return nil, fmt.Errorf("job analysis contains an invalid preference")
 		}
 
 		if !validQuote(item.Quote, quoteSource) {
-			return fmt.Errorf("job analysis preference quote %q is not in source", item.Quote)
+			return nil, fmt.Errorf("job analysis preference quote %q is not in source", item.Quote)
 		}
 
 		item.Concept = canonicalJobConcept(item.Concept)
 		if !jobOptionalPattern.MatchString(item.Quote) {
-			id := nextJobRequirementID(item.Concept, seenRequirements)
-			draft.Requirements = append(draft.Requirements, models.JobRequirement{
+			id := nextJobRequirementID(item.Concept, seen)
+			*requirements = append(*requirements, models.JobRequirement{
 				ID:            id,
 				Kind:          "strong_preference",
 				Concept:       item.Concept,
@@ -375,23 +425,14 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 				Quote:         item.Quote,
 				Confidence:    "high",
 			})
-			seenRequirements[id] = true
+			seen[id] = true
 			continue
 		}
 
-		preferences = append(preferences, *item)
+		validated = append(validated, *item)
 	}
 
-	draft.Preferences = preferences
-	if len(draft.Constraints) == 0 && len(draft.Requirements) == 0 && len(draft.Responsibilities) == 0 && len(draft.Preferences) == 0 && len(draft.Unknowns) == 0 {
-		return fmt.Errorf("job analysis contains no extracted claims")
-	}
-
-	if !allNonBlank(draft.Unknowns) {
-		return fmt.Errorf("job analysis contains a blank unknown")
-	}
-
-	return nil
+	return validated, nil
 }
 
 func validConstraintKind(kind string) bool {

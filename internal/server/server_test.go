@@ -741,6 +741,49 @@ func TestJobMatchChatAPI(t *testing.T) {
 	require.Empty(t, history.Items)
 }
 
+func TestJobMatchChatEventsHandlerStreamsInitialItems(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	_, err = repository.CreateJobMatchChatItem(context.Background(), models.JobMatchChatItem{
+		JobID:   1,
+		Type:    "assistant_message",
+		Payload: json.RawMessage(`{"content":"hello"}`),
+	})
+	require.NoError(t, err)
+	chat := services.NewJobMatchChat(repository, repository, repository, repository, repository, noOpJobCompletionClient{}, "test-model", "low", zap.NewNop())
+
+	requestContext, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := httptest.NewRequestWithContext(requestContext, http.MethodGet, "/api/jobs/1/match/chat/events", nil)
+	request.SetPathValue("id", "1")
+	response := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		jobMatchChatEventsHandler(chat, zap.NewNop()).ServeHTTP(response, request)
+		close(done)
+	}()
+
+	assert.Eventually(t, func() bool {
+		return strings.Contains(response.Body.String(), "event: item\ndata:")
+	}, time.Second, 10*time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("SSE handler did not stop after request cancellation")
+	}
+
+	assert.Equal(t, "no-cache", response.Header().Get("Cache-Control"))
+	assert.Equal(t, "keep-alive", response.Header().Get("Connection"))
+	assert.Equal(t, "text/event-stream", response.Header().Get("Content-Type"))
+	assert.Contains(t, response.Body.String(), `"content":"hello"`)
+}
+
 func TestJobMatchChatAPIDoesNotDuplicateUserMessageAfterFailedReply(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)

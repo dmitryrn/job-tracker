@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -80,6 +81,22 @@ func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 	assert.Equal(t, "4", linkedIn.settings.ExperienceLevel)
 	assert.Equal(t, 1000, linkedIn.settings.Limit)
 	assert.Equal(t, 5*time.Second, linkedIn.requestInterval)
+}
+
+func TestProviderPreviewStopsWhenJobCallbackFails(t *testing.T) {
+	callbackErr := errors.New("stop preview")
+	service := ProviderPreviewService{adzuna: &adzunaPreviewStub{jobs: []models.Job{{Title: "First"}, {Title: "Second"}}}}
+	seen := 0
+
+	err := service.StreamPreview(context.Background(), "adzuna", models.DiscoverySettings{Adzuna: models.AdzunaSearchSettings{
+		Query: "engineer", Country: "de", MaxDaysOld: 1, MaxPages: 1, ResultsPerPage: 1, Workplace: "any",
+	}}, func(models.Job) error {
+		seen++
+		return callbackErr
+	})
+
+	require.ErrorIs(t, err, callbackErr)
+	assert.Equal(t, 1, seen)
 }
 
 func (stub *adzunaPreviewStub) Fetch(_ context.Context, settings models.AdzunaSearchSettings) ([]models.Job, error) {

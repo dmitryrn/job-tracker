@@ -192,6 +192,62 @@ func TestJobAnalyzerReclassifiesANonOptionalPreference(t *testing.T) {
 	assert.Empty(t, analysis.Analysis.Preferences)
 }
 
+func TestValidateJobAnalysisDraftCanonicalizesAndPreservesClaims(t *testing.T) {
+	draft := models.JobAnalysisDraft{
+		Role:         models.JobRole{Family: "Backend Engineering", Seniority: "Senior", SeniorityConfidence: "high"},
+		Constraints:  []models.JobConstraint{{Kind: "workplace", Value: "remote", Quote: "This is remote.", Confidence: "high"}},
+		Requirements: []models.JobRequirement{{ID: "Go Experience", Kind: "must_have", Concept: "Go", ScreeningRisk: "high", Quote: "Solid Go experience.", Confidence: "high"}},
+		Preferences:  []models.JobEvidence{{Concept: "Kubernetes", Quote: "Experience with Kubernetes is a plus."}},
+		Unknowns:     []string{"The posting does not state a salary."},
+	}
+
+	require.NoError(t, validateJobAnalysisDraft(&draft, "This is remote. Solid Go experience. Experience with Kubernetes is a plus."))
+	assert.Equal(t, "backend_engineering", draft.Role.Family)
+	assert.Equal(t, "senior", draft.Role.Seniority)
+	assert.Equal(t, "go", draft.Requirements[0].Concept)
+	assert.Equal(t, "go-experience", draft.Requirements[0].ID)
+	assert.Equal(t, "strong_preference", draft.Requirements[0].Kind)
+	assert.Equal(t, "kubernetes", draft.Preferences[0].Concept)
+}
+
+func TestValidateJobAnalysisDraftRejectsInvalidClaims(t *testing.T) {
+	tests := []struct {
+		name  string
+		draft models.JobAnalysisDraft
+		error string
+	}{
+		{
+			name:  "invalid role",
+			draft: models.JobAnalysisDraft{Role: models.JobRole{Family: "", Seniority: "senior", SeniorityConfidence: "high"}, Unknowns: []string{"unknown"}},
+			error: "invalid role",
+		},
+		{
+			name: "duplicate requirement",
+			draft: models.JobAnalysisDraft{
+				Role: models.JobRole{Family: "backend", Seniority: "senior", SeniorityConfidence: "high"},
+				Requirements: []models.JobRequirement{
+					{ID: "go", Kind: "must_have", Concept: "go", ScreeningRisk: "high", Quote: "Go", Confidence: "high"},
+					{ID: "go", Kind: "must_have", Concept: "go", ScreeningRisk: "high", Quote: "Go", Confidence: "high"},
+				},
+			},
+			error: "invalid requirement ID",
+		},
+		{
+			name:  "blank unknown",
+			draft: models.JobAnalysisDraft{Role: models.JobRole{Family: "backend", Seniority: "senior", SeniorityConfidence: "high"}, Unknowns: []string{""}},
+			error: "blank unknown",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateJobAnalysisDraft(&test.draft, "Go")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.error)
+		})
+	}
+}
+
 func TestJobAnalyzerRejectsAnEmptyExtraction(t *testing.T) {
 	analyzer := NewJobAnalyzer(&fakeJobCompletionClient{response: openai.ChatResponse{
 		Content: `{

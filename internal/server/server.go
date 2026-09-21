@@ -1021,29 +1021,7 @@ func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 		writer.Header().Set("Content-Type", "text/event-stream")
 		updates, unsubscribe := chat.Subscribe(id)
 		defer unsubscribe()
-		writeChatItems := func(ctx context.Context) error {
-			items, err := chat.Items(ctx, id, after)
-			if err != nil {
-				return fmt.Errorf("load match chat SSE items: %w", err)
-			}
-
-			for _, item := range items {
-				data, err := json.Marshal(item)
-				if err != nil {
-					return fmt.Errorf("encode match chat SSE item: %w", err)
-				}
-
-				if _, err := writer.Write([]byte("event: item\ndata: " + string(data) + "\n\n")); err != nil {
-					return fmt.Errorf("write match chat SSE item: %w", err)
-				}
-
-				after = item.Sequence
-			}
-
-			flusher.Flush()
-			return nil
-		}
-		if err := writeChatItems(request.Context()); err != nil {
+		if err := writeChatItemsSSE(request.Context(), chat, writer, flusher, id, &after); err != nil {
 			logger.Error("write match chat SSE items failed", zap.Int64("id", id), zap.Error(err))
 			return
 		}
@@ -1053,23 +1031,49 @@ func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 			case <-request.Context().Done():
 				return
 			case update := <-updates:
-				if update.Reset {
-					if _, err := writer.Write([]byte("event: reset\ndata: {}\n\n")); err != nil {
-						logger.Error("write match chat SSE reset failed", zap.Int64("id", id), zap.Error(err))
-						return
-					}
-
-					flusher.Flush()
-					continue
-				}
-
-				if err := writeChatItems(request.Context()); err != nil {
-					logger.Error("write match chat SSE items failed", zap.Int64("id", id), zap.Error(err))
+				if err := writeChatUpdateSSE(request.Context(), chat, writer, flusher, id, &after, update); err != nil {
+					logger.Error("write match chat SSE update failed", zap.Int64("id", id), zap.Error(err))
 					return
 				}
 			}
 		}
 	}
+}
+
+func writeChatItemsSSE(ctx context.Context, chat *services.JobMatchChat, writer http.ResponseWriter, flusher http.Flusher, id int64, after *int64) error {
+	items, err := chat.Items(ctx, id, *after)
+	if err != nil {
+		return fmt.Errorf("load match chat SSE items: %w", err)
+	}
+
+	for _, item := range items {
+		data, err := json.Marshal(item)
+		if err != nil {
+			return fmt.Errorf("encode match chat SSE item: %w", err)
+		}
+
+		if _, err := writer.Write([]byte("event: item\ndata: " + string(data) + "\n\n")); err != nil {
+			return fmt.Errorf("write match chat SSE item: %w", err)
+		}
+
+		*after = item.Sequence
+	}
+
+	flusher.Flush()
+	return nil
+}
+
+func writeChatUpdateSSE(ctx context.Context, chat *services.JobMatchChat, writer http.ResponseWriter, flusher http.Flusher, id int64, after *int64, update services.JobMatchChatUpdate) error {
+	if update.Reset {
+		if _, err := writer.Write([]byte("event: reset\ndata: {}\n\n")); err != nil {
+			return fmt.Errorf("write match chat SSE reset: %w", err)
+		}
+
+		flusher.Flush()
+		return nil
+	}
+
+	return writeChatItemsSSE(ctx, chat, writer, flusher, id, after)
 }
 
 func jobMatchChatSendHandler(chat *services.JobMatchChat, logger *zap.Logger) http.HandlerFunc {
