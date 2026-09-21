@@ -64,6 +64,7 @@ func (repository *SQLite) SaveDiscoverySettings(ctx context.Context, settings mo
 	if err != nil {
 		return settings, err
 	}
+
 	_, err = repository.db.ExecContext(ctx, statement, args...)
 	return settings, err
 }

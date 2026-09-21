@@ -55,10 +55,12 @@ func (service *ResumeService) SavePhoto(ctx context.Context, data []byte) (*mode
 	if len(data) == 0 || len(data) > MaxResumePhotoBytes {
 		return nil, ErrInvalidResumePhoto
 	}
+
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || config.Width < 1 || config.Height < 1 || config.Width > 6000 || config.Height > 6000 {
 		return nil, ErrInvalidResumePhoto
 	}
+
 	contentType := ""
 	switch format {
 	case "jpeg":
@@ -68,9 +70,11 @@ func (service *ResumeService) SavePhoto(ctx context.Context, data []byte) (*mode
 	default:
 		return nil, ErrInvalidResumePhoto
 	}
+
 	if err := service.repository.SaveResumePhoto(ctx, models.ResumePhoto{ContentType: contentType, Data: data}); err != nil {
 		return nil, err
 	}
+
 	return service.Resume(ctx)
 }
 
@@ -83,6 +87,7 @@ func cleanResumeLinks(links []models.ResumeLink) []models.ResumeLink {
 			cleaned = append(cleaned, link)
 		}
 	}
+
 	return cleaned
 }
 
@@ -94,6 +99,7 @@ func cleanResumeParagraphs(paragraphs []models.ResumeText) []models.ResumeText {
 			cleaned = append(cleaned, paragraph)
 		}
 	}
+
 	return cleaned
 }
 
@@ -105,6 +111,7 @@ func cleanResumeSkills(skills []models.ResumeSkill) []models.ResumeSkill {
 			cleaned = append(cleaned, skill)
 		}
 	}
+
 	return cleaned
 }
 
@@ -122,6 +129,7 @@ func cleanResumeExperience(experience []models.ResumeExperience) []models.Resume
 			cleaned = append(cleaned, entry)
 		}
 	}
+
 	return cleaned
 }
 
@@ -139,6 +147,7 @@ func cleanResumeEducation(education []models.ResumeEducation) []models.ResumeEdu
 			cleaned = append(cleaned, entry)
 		}
 	}
+
 	return cleaned
 }
 
@@ -150,5 +159,6 @@ func cleanResumeBullets(bullets []models.ResumeText) []models.ResumeText {
 			cleaned = append(cleaned, bullet)
 		}
 	}
+
 	return cleaned
 }

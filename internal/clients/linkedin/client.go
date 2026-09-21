@@ -61,18 +61,22 @@ func (c *Client) Search(ctx context.Context, filter SearchFilter) ([]SearchResul
 	if err != nil {
 		return nil, err
 	}
+
 	params := requestURL.Query()
 	params.Set("keywords", filter.Keywords)
 	params.Set("location", filter.Location)
 	if filter.PostedWithin != "" {
 		params.Set("f_TPR", filter.PostedWithin)
 	}
+
 	if filter.Workplace != "" {
 		params.Set("f_WT", filter.Workplace)
 	}
+
 	if filter.ExperienceLevel != "" {
 		params.Set("f_E", filter.ExperienceLevel)
 	}
+
 	// LinkedIn's DD ordering keeps the newest roles at the top of each page.
 	params.Set("sortBy", "DD")
 	params.Set("start", fmt.Sprint(filter.Start))
@@ -82,6 +86,7 @@ func (c *Client) Search(ctx context.Context, filter SearchFilter) ([]SearchResul
 	if err != nil {
 		return nil, err
 	}
+
 	return parseListings(body)
 }
 
@@ -90,6 +95,7 @@ func (c *Client) Job(ctx context.Context, id string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
+
 	return parseJob(body), nil
 }
 
@@ -98,6 +104,7 @@ func (c *Client) get(ctx context.Context, requestURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	request.Header.Set("Accept", "text/html,application/xhtml+xml")
 	request.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36")
 	httpResponse, err := c.http.Do(request)
@@ -110,8 +117,10 @@ func (c *Client) get(ctx context.Context, requestURL string) ([]byte, error) {
 		if readErr != nil {
 			return nil, fmt.Errorf("LinkedIn returned %s", httpResponse.Status)
 		}
+
 		return nil, fmt.Errorf("LinkedIn returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
 	}
+
 	return io.ReadAll(httpResponse.Body)
 }
 
@@ -120,39 +129,47 @@ func parseListings(body []byte) ([]SearchResult, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	listings := make([]SearchResult, 0)
 	seen := make(map[string]struct{})
 	visit(document, func(node *html.Node) {
 		if node.Type != html.ElementNode || node.Data != "li" {
 			return
 		}
+
 		link := first(node, func(candidate *html.Node) bool {
 			return candidate.Type == html.ElementNode && candidate.Data == "a" && jobID(candidateAttr(candidate, "href")) != ""
 		})
 		if link == nil {
 			return
 		}
+
 		jobURL := candidateAttr(link, "href")
 		id := jobID(jobURL)
 		if _, exists := seen[id]; exists {
 			return
 		}
+
 		seen[id] = struct{}{}
 		listing := SearchResult{ID: id, URL: jobURL}
 		if title := first(node, hasClass("h3", "base-search-card__title")); title != nil {
 			listing.Title = text(title)
 		}
+
 		if company := first(node, hasClass("h4", "base-search-card__subtitle")); company != nil {
 			listing.Company = text(company)
 		}
+
 		if location := first(node, hasClass("span", "job-search-card__location")); location != nil {
 			listing.Location = text(location)
 		}
+
 		if posted := first(node, func(candidate *html.Node) bool {
 			return candidate.Type == html.ElementNode && candidate.Data == "time"
 		}); posted != nil {
 			listing.PostedAt = candidateAttr(posted, "datetime")
 		}
+
 		listings = append(listings, listing)
 	})
 	return listings, nil
@@ -163,6 +180,7 @@ func parseJob(body []byte) Job {
 	if err != nil {
 		return Job{}
 	}
+
 	job := Job{
 		EmploymentType: jobCriteria(document, "Employment type"),
 		WorkplaceType:  jobCriteria(document, "Workplace type"),
@@ -171,9 +189,11 @@ func parseJob(body []byte) Job {
 		job.Description = text(node)
 		return job
 	}
+
 	if node := first(document, hasClass("div", "description__text")); node != nil {
 		job.Description = text(node)
 	}
+
 	return job
 }
 
@@ -183,10 +203,12 @@ func jobCriteria(document *html.Node, label string) string {
 		if value != "" || !hasClass("li", "description__job-criteria-item")(node) {
 			return
 		}
+
 		header := first(node, hasClass("h3", "description__job-criteria-subheader"))
 		if header == nil || !strings.EqualFold(text(header), label) {
 			return
 		}
+
 		if criteria := first(node, hasClass("span", "description__job-criteria-text--criteria")); criteria != nil {
 			value = text(criteria)
 		}
@@ -199,6 +221,7 @@ func jobID(jobURL string) string {
 	if len(matches) != 2 {
 		return ""
 	}
+
 	return matches[1]
 }
 
@@ -214,6 +237,7 @@ func candidateAttr(node *html.Node, name string) string {
 			return attribute.Val
 		}
 	}
+
 	return ""
 }
 
@@ -221,11 +245,13 @@ func first(node *html.Node, match func(*html.Node) bool) *html.Node {
 	if match(node) {
 		return node
 	}
+
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
 		if found := first(child, match); found != nil {
 			return found
 		}
 	}
+
 	return nil
 }
 

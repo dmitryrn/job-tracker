@@ -27,9 +27,11 @@ func (service *ResumePDFService) Generate(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load base resume: %w", err)
 	}
+
 	if resume == nil {
 		return nil, ErrResumeNotFound
 	}
+
 	return service.GenerateResume(ctx, *resume)
 }
 
@@ -40,8 +42,10 @@ func (service *ResumePDFService) GenerateResume(ctx context.Context, resume mode
 		if err != nil {
 			return nil, fmt.Errorf("load resume photo: %w", err)
 		}
+
 		data.Photo = template.URL("data:" + photo.ContentType + ";base64," + base64.StdEncoding.EncodeToString(photo.Data))
 	}
+
 	html, err := renderResumePDF(data)
 	if err != nil {
 		return nil, fmt.Errorf("render resume HTML: %w", err)
@@ -62,6 +66,7 @@ func (service *ResumePDFService) GenerateResume(ctx context.Context, resume mode
 			if err != nil {
 				return err
 			}
+
 			return page.SetDocumentContent(frame.Frame.ID, html).Do(ctx)
 		}),
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -73,6 +78,7 @@ func (service *ResumePDFService) GenerateResume(ctx context.Context, resume mode
 	if err != nil {
 		return nil, fmt.Errorf("print resume PDF: %w", err)
 	}
+
 	return output, nil
 }
 
@@ -86,6 +92,7 @@ func renderResumePDF(data resumePDFData) (string, error) {
 	if err := resumePDFTemplate.Execute(&output, data); err != nil {
 		return "", err
 	}
+
 	return output.String(), nil
 }
 

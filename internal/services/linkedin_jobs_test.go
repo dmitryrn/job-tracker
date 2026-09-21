@@ -25,6 +25,7 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 		results[index] = linkedin.SearchResult{ID: id, URL: "https://www.linkedin.com/jobs/view/" + id, Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}
 		details[id] = linkedin.Job{Description: "Remote work", EmploymentType: "Full-time"}
 	}
+
 	details["last"] = linkedin.Job{Description: "Hybrid work", EmploymentType: "Full-time", WorkplaceType: "Hybrid"}
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
@@ -335,6 +336,7 @@ func (stub *linkedInJobRepositoryStub) JobExists(_ context.Context, source, sour
 	if source != "linkedin" {
 		return false, errors.New("unexpected source")
 	}
+
 	stub.checked = append(stub.checked, sourceID)
 	return stub.existing[sourceID], nil
 }
@@ -362,5 +364,6 @@ func (recorder *linkedInEventRecorder) types() []string {
 	for _, event := range recorder.events {
 		types = append(types, event.Type)
 	}
+
 	return types
 }

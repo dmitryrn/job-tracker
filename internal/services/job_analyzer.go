@@ -142,6 +142,7 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 	if strings.TrimSpace(job.Title) == "" && normalizedDescription == "" {
 		return JobAnalysis{}, fmt.Errorf("job title or description is required")
 	}
+
 	input := canonicalJobInput(job, normalizedDescription)
 
 	temperature := 0.0
@@ -169,6 +170,7 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 		if err == nil {
 			err = validateJobAnalysisDraft(&draft, jobQuoteSource(job, normalizedDescription))
 		}
+
 		if err == nil {
 			return JobAnalysis{
 				AnalyzerVersion:       JobAnalyzerVersion,
@@ -181,13 +183,16 @@ func (analyzer *JobAnalyzer) Analyze(ctx context.Context, job models.Job) (JobAn
 				RetryMetadata:         retries,
 			}, nil
 		}
+
 		retries.Rejections = append(retries.Rejections, llmResponseRejection(attempt, response.Model, err))
 		if attempt == validatedLLMResponseAttempts {
 			if !decoded {
 				return JobAnalysis{}, fmt.Errorf("decode job analysis from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
 			}
+
 			return JobAnalysis{}, fmt.Errorf("validate job analysis from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
 		}
+
 		request.Messages = correctedLLMMessages(request.Messages, response.Content, err)
 	}
 
@@ -235,14 +240,17 @@ func decodeJobAnalysis(content string) (models.JobAnalysisDraft, error) {
 	if start == -1 {
 		return models.JobAnalysisDraft{}, fmt.Errorf("response does not contain a JSON object")
 	}
+
 	content = strings.TrimSpace(content[start:])
 	if strings.HasPrefix(content, "{{") {
 		content = content[1:]
 	}
+
 	decoder := json.NewDecoder(strings.NewReader(content))
 	if err := decoder.Decode(&draft); err != nil {
 		return models.JobAnalysisDraft{}, err
 	}
+
 	return draft, nil
 }
 
@@ -261,6 +269,7 @@ func normalizeJobDescription(body string) string {
 			normalized = append(normalized, line)
 		}
 	}
+
 	return strings.Join(normalized, "\n")
 }
 
@@ -287,6 +296,7 @@ func salaryValue(value *int64) string {
 	if value == nil {
 		return ""
 	}
+
 	return fmt.Sprintf("%d", *value)
 }
 
@@ -296,14 +306,17 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 	if !validConcept(draft.Role.Family) || !validConcept(draft.Role.Seniority) || !validConfidence(draft.Role.SeniorityConfidence) {
 		return fmt.Errorf("job analysis contains an invalid role")
 	}
+
 	for _, constraint := range draft.Constraints {
 		if !validConstraintKind(constraint.Kind) || strings.TrimSpace(constraint.Value) == "" || !validConfidence(constraint.Confidence) {
 			return fmt.Errorf("job analysis contains an invalid constraint %q", constraint.Kind)
 		}
+
 		if !validQuote(constraint.Quote, quoteSource) {
 			return fmt.Errorf("job analysis constraint %q quote %q is not in source", constraint.Kind, constraint.Quote)
 		}
 	}
+
 	seenRequirements := make(map[string]bool, len(draft.Requirements))
 	for index := range draft.Requirements {
 		requirement := &draft.Requirements[index]
@@ -311,37 +324,47 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 		if !jobRequirementIDPattern.MatchString(requirement.ID) || seenRequirements[requirement.ID] {
 			return fmt.Errorf("job analysis contains an invalid requirement ID")
 		}
+
 		if !validRequirementKind(requirement.Kind) || !validConcept(requirement.Concept) || (requirement.MinimumYears != nil && *requirement.MinimumYears < 0) || !validScreeningRisk(requirement.ScreeningRisk) || !validConfidence(requirement.Confidence) {
 			return fmt.Errorf("job analysis contains an invalid requirement %q", requirement.ID)
 		}
+
 		if !validQuote(requirement.Quote, quoteSource) {
 			return fmt.Errorf("job analysis requirement %q quote %q is not in source", requirement.ID, requirement.Quote)
 		}
+
 		if requirement.Kind == "must_have" && !jobMustHavePattern.MatchString(requirement.Quote) {
 			requirement.Kind = "strong_preference"
 		}
+
 		seenRequirements[requirement.ID] = true
 		requirement.Concept = canonicalJobConcept(requirement.Concept)
 	}
+
 	for index := range draft.Responsibilities {
 		item := &draft.Responsibilities[index]
 		if !validConcept(item.Concept) {
 			return fmt.Errorf("job analysis contains an invalid responsibility")
 		}
+
 		if !validQuote(item.Quote, quoteSource) {
 			return fmt.Errorf("job analysis responsibility quote %q is not in source", item.Quote)
 		}
+
 		item.Concept = canonicalJobConcept(item.Concept)
 	}
+
 	preferences := make([]models.JobEvidence, 0, len(draft.Preferences))
 	for index := range draft.Preferences {
 		item := &draft.Preferences[index]
 		if !validConcept(item.Concept) {
 			return fmt.Errorf("job analysis contains an invalid preference")
 		}
+
 		if !validQuote(item.Quote, quoteSource) {
 			return fmt.Errorf("job analysis preference quote %q is not in source", item.Quote)
 		}
+
 		item.Concept = canonicalJobConcept(item.Concept)
 		if !jobOptionalPattern.MatchString(item.Quote) {
 			id := nextJobRequirementID(item.Concept, seenRequirements)
@@ -356,15 +379,19 @@ func validateJobAnalysisDraft(draft *models.JobAnalysisDraft, quoteSource string
 			seenRequirements[id] = true
 			continue
 		}
+
 		preferences = append(preferences, *item)
 	}
+
 	draft.Preferences = preferences
 	if len(draft.Constraints) == 0 && len(draft.Requirements) == 0 && len(draft.Responsibilities) == 0 && len(draft.Preferences) == 0 && len(draft.Unknowns) == 0 {
 		return fmt.Errorf("job analysis contains no extracted claims")
 	}
+
 	if !allNonBlank(draft.Unknowns) {
 		return fmt.Errorf("job analysis contains a blank unknown")
 	}
+
 	return nil
 }
 
@@ -383,6 +410,7 @@ func allNonBlank(values []string) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -437,5 +465,6 @@ func nextJobRequirementID(concept string, seen map[string]bool) string {
 	for suffix := 2; seen[id]; suffix++ {
 		id = fmt.Sprintf("%s-%d", strings.ReplaceAll(concept, "_", "-"), suffix)
 	}
+
 	return id
 }

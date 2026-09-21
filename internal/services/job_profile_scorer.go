@@ -56,6 +56,7 @@ func (scorer *JobProfileScorer) Score(ctx context.Context, job models.Job, profi
 	if err != nil {
 		return 0, fmt.Errorf("encode profile score input: %w", err)
 	}
+
 	state = []byte(redactSensitiveText(string(state), normalizedRedactionValues(appendUserProfileRedactionValues(nil, profile))))
 
 	response, err := scorer.client.SystemOne(ctx, json.RawMessage(state), map[string]typesafe.Question{
@@ -84,8 +85,10 @@ func (scorer *JobProfileScorer) Score(ctx context.Context, job models.Job, profi
 	if !found || answer.Type != "score" {
 		return 0, fmt.Errorf("TypeSafe response did not contain an overall_fit score")
 	}
+
 	if math.IsNaN(answer.Score) || math.IsInf(answer.Score, 0) || answer.Score < 0 || answer.Score > typeSafeScoreLevels-1 {
 		return 0, fmt.Errorf("TypeSafe overall_fit score %.2f is outside the supported 0 to %d level range", answer.Score, typeSafeScoreLevels-1)
 	}
+
 	return int(math.Round(answer.Score * 10 / (typeSafeScoreLevels - 1))), nil
 }

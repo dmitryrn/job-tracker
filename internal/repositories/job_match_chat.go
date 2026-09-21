@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -37,12 +38,15 @@ func (repository *SQLite) JobMatchChatItems(ctx context.Context, jobID, afterSeq
 		if err := rows.Scan(&item.JobID, &item.Sequence, &item.Type, &itemPayload, &item.RequestID, &item.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan job match chat item: %w", err)
 		}
+
 		item.Payload = json.RawMessage(itemPayload)
 		items = append(items, item)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate job match chat items: %w", err)
 	}
+
 	return items, nil
 }
 
@@ -63,9 +67,11 @@ func (repository *SQLite) JobMatchChatItemByRequestID(ctx context.Context, jobID
 		item.Payload = json.RawMessage(itemPayload)
 		return &item, nil
 	}
-	if err == sql.ErrNoRows {
+
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
+
 	return nil, fmt.Errorf("get job match chat item by request ID: %w", err)
 }
 
@@ -84,6 +90,7 @@ func (repository *SQLite) CreateJobMatchChatItem(ctx context.Context, item model
 	if err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("build next job match chat item sequence query: %w", err)
 	}
+
 	if err := transaction.QueryRowContext(ctx, sequenceQuery, sequenceArguments...).Scan(&item.Sequence); err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("get next job match chat item sequence: %w", err)
 	}
@@ -97,12 +104,15 @@ func (repository *SQLite) CreateJobMatchChatItem(ctx context.Context, item model
 	if err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("build create job match chat item query: %w", err)
 	}
+
 	if _, err := transaction.ExecContext(ctx, query, arguments...); err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("create job match chat item: %w", err)
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("commit create job match chat item: %w", err)
 	}
+
 	return item, nil
 }
 
@@ -115,14 +125,17 @@ func (repository *SQLite) DeleteJobMatchChatItemsFrom(ctx context.Context, jobID
 	if err != nil {
 		return false, fmt.Errorf("build delete job match chat items query: %w", err)
 	}
+
 	result, err := repository.db.ExecContext(ctx, query, arguments...)
 	if err != nil {
 		return false, fmt.Errorf("delete job match chat items: %w", err)
 	}
+
 	deleted, err := result.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("check job match chat item deletion: %w", err)
 	}
+
 	return deleted > 0, nil
 }
 
@@ -130,5 +143,6 @@ func nullableString(value string) any {
 	if value == "" {
 		return nil
 	}
+
 	return value
 }

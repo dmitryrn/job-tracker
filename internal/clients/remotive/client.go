@@ -53,6 +53,7 @@ func (c *Client) Fetch(ctx context.Context, settings models.RemotiveSearchSettin
 	if err != nil {
 		return nil, err
 	}
+
 	params := requestURL.Query()
 	params.Set("search", settings.Query)
 	params.Set("category", settings.Category)
@@ -62,6 +63,7 @@ func (c *Client) Fetch(ctx context.Context, settings models.RemotiveSearchSettin
 	if err != nil {
 		return nil, err
 	}
+
 	request.Header.Set("Accept", "application/json")
 	httpResponse, err := c.http.Do(request)
 	if err != nil {
@@ -71,22 +73,26 @@ func (c *Client) Fetch(ctx context.Context, settings models.RemotiveSearchSettin
 	if httpResponse.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(io.LimitReader(httpResponse.Body, 4<<10))
 		if readErr != nil {
-			return nil, fmt.Errorf("Remotive returned %s", httpResponse.Status)
+			return nil, fmt.Errorf("remotive returned %s", httpResponse.Status)
 		}
-		return nil, fmt.Errorf("Remotive returned %s: %s", httpResponse.Status, string(body))
+
+		return nil, fmt.Errorf("remotive returned %s: %s", httpResponse.Status, string(body))
 	}
 
 	var result response
 	if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
 		return nil, err
 	}
+
 	jobs := make([]models.Job, 0, len(result.Jobs))
 	for _, item := range result.Jobs {
 		if !matchesCategory(item.Category, settings.Category) {
 			continue
 		}
+
 		jobs = append(jobs, toModel(item))
 	}
+
 	return jobs, nil
 }
 
@@ -121,8 +127,10 @@ func parseTime(value string) string {
 	if err != nil {
 		parsed, err = time.Parse("2006-01-02T15:04:05", value)
 	}
+
 	if err != nil {
 		return ""
 	}
+
 	return parsed.UTC().Format(time.RFC3339)
 }

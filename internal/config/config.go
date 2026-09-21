@@ -181,6 +181,7 @@ func Load() (Config, error) {
 	if err := decoder.Decode(&source); err != nil {
 		return Config{}, fmt.Errorf("decode %s: %w", configFile, err)
 	}
+
 	if err := validateFileConfig(source); err != nil {
 		return Config{}, err
 	}
@@ -189,65 +190,81 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+
 	appID, err := requiredString(tokens["ADZUNA_APP_ID"], "ADZUNA_APP_ID")
 	if err != nil {
 		return Config{}, err
 	}
+
 	apiKey, err := requiredString(tokens["ADZUNA_API_KEY"], "ADZUNA_API_KEY")
 	if err != nil {
 		return Config{}, err
 	}
+
 	openRouterAPIKey, err := requiredString(tokens["OPENROUTER_API_KEY"], "OPENROUTER_API_KEY")
 	if err != nil {
 		return Config{}, err
 	}
+
 	llmAPIKey, err := requiredString(tokens["OPENCODE_GO_KEY_4"], "OPENCODE_GO_KEY_4")
 	if err != nil {
 		return Config{}, err
 	}
+
 	codexProxyAPIKey, err := requiredString(tokens["CODEX_PROXY_KEY"], "CODEX_PROXY_KEY")
 	if err != nil {
 		return Config{}, err
 	}
+
 	typeSafeAPIKey, err := requiredString(tokens["TYPESAFEAI_API_KEY"], "TYPESAFEAI_API_KEY")
 	if err != nil {
 		return Config{}, err
 	}
+
 	adzunaInterval, err := time.ParseDuration(source.Providers.Adzuna.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.adzuna.sync_interval: %w", err)
 	}
+
 	remotiveInterval, err := time.ParseDuration(source.Providers.Remotive.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.remotive.sync_interval: %w", err)
 	}
+
 	jobicyInterval, err := time.ParseDuration(source.Providers.Jobicy.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.jobicy.sync_interval: %w", err)
 	}
+
 	linkedInInterval, err := time.ParseDuration(source.Providers.LinkedIn.SyncInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.linkedin.sync_interval: %w", err)
 	}
+
 	linkedInRequestInterval, err := time.ParseDuration(source.Providers.LinkedIn.RequestInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.linkedin.request_interval: %w", err)
 	}
+
 	linkedInPreviewRequestInterval, err := time.ParseDuration(source.Providers.LinkedIn.PreviewRequestInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse providers.linkedin.preview_request_interval: %w", err)
 	}
+
 	jobMatchRunInterval, err := time.ParseDuration(source.JobMatch.RunInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse job_match.run_interval: %w", err)
 	}
+
 	eventFlushInterval, err := time.ParseDuration(source.Events.FlushInterval)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse events.flush_interval: %w", err)
 	}
+
 	if jobicyInterval < time.Hour {
 		return Config{}, fmt.Errorf("providers.jobicy.sync_interval must be at least 1h")
 	}
+
 	if linkedInInterval < time.Hour {
 		return Config{}, fmt.Errorf("providers.linkedin.sync_interval must be at least 1h")
 	}
@@ -298,12 +315,15 @@ func validateFileConfig(source fileConfig) error {
 	if err := validate.RegisterValidation("notblank", isNotBlank); err != nil {
 		return fmt.Errorf("register notblank validator: %w", err)
 	}
+
 	if err := validate.RegisterValidation("duration", isPositiveDuration); err != nil {
 		return fmt.Errorf("register duration validator: %w", err)
 	}
+
 	if err := validate.Struct(source); err != nil {
 		return fmt.Errorf("validate %s: %w", configFile, err)
 	}
+
 	return nil
 }
 
@@ -330,19 +350,24 @@ func readEnvFile(path string) (map[string]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
 		key, value, found := strings.Cut(line, "=")
 		key = strings.TrimSpace(key)
 		if !found || key == "" {
 			return nil, fmt.Errorf("invalid configuration line in %s", path)
 		}
+
 		if _, exists := values[key]; exists {
 			return nil, fmt.Errorf("duplicate configuration key %s in %s", key, path)
 		}
+
 		values[key] = strings.Trim(strings.TrimSpace(value), "\"'")
 	}
+
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+
 	return values, nil
 }
 
@@ -351,5 +376,6 @@ func requiredString(value, key string) (string, error) {
 	if value == "" {
 		return "", fmt.Errorf("%s is required", key)
 	}
+
 	return value, nil
 }

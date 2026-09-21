@@ -104,12 +104,14 @@ func jobEligibilityCheckHandler(jobs repositories.JobRepository, client typeSafe
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		job, err := jobs.AnalysisJob(request.Context(), id)
 		if err != nil {
 			logger.Error("load job for eligibility check failed", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not run job eligibility check")
 			return
 		}
+
 		if job == nil {
 			logger.Warn("run job eligibility check for missing job", zap.Int64("job_id", id))
 			writeError(writer, http.StatusNotFound, "job not found")
@@ -127,6 +129,7 @@ func jobEligibilityCheckHandler(jobs repositories.JobRepository, client typeSafe
 			writeError(writer, http.StatusInternalServerError, "could not run job eligibility check")
 			return
 		}
+
 		answers := make([]jobEligibilityAnswerResult, 0, len(jobEligibilityQuestions))
 		for _, question := range jobEligibilityQuestions {
 			answer, err := jobEligibilityAnswer(response, question)
@@ -135,8 +138,10 @@ func jobEligibilityCheckHandler(jobs repositories.JobRepository, client typeSafe
 				writeError(writer, http.StatusInternalServerError, "could not decode job eligibility check")
 				return
 			}
+
 			answers = append(answers, answer)
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"eligibility": jobEligibilityCheck{
 			JobID: id, Model: response.Model, CheckedAt: time.Now().UTC().Format(time.RFC3339), Answers: answers,
 		}})
@@ -148,14 +153,17 @@ func jobEligibilityAnswer(response typesafe.Response, question jobEligibilityQue
 	if !found || answer.Type != "noul" {
 		return jobEligibilityAnswerResult{}, fmt.Errorf("TypeSafe response did not contain a %s noul answer", question.ID)
 	}
+
 	if math.IsNaN(answer.Noul) || math.IsInf(answer.Noul, 0) || answer.Noul < 0 || answer.Noul > 1 {
 		return jobEligibilityAnswerResult{}, fmt.Errorf("TypeSafe %s noul %.2f is outside the supported 0 to 1 range", question.ID, answer.Noul)
 	}
+
 	value := answer.Noul >= 0.5
 	choice := "no"
 	if value {
 		choice = "yes"
 	}
+
 	return jobEligibilityAnswerResult{
 		ID: question.ID, Question: question.Text, Answer: choice, Noul: answer.Noul,
 		Positive: value == question.Positive, CollapseWhen: question.CollapseWhen,
@@ -167,5 +175,6 @@ func jobEligibilityRequestQuestions() map[string]typesafe.Question {
 	for _, question := range jobEligibilityQuestions {
 		questions[question.ID] = typesafe.Question{Type: "noul", Instructions: question.Text, Criteria: question.Criteria}
 	}
+
 	return questions
 }

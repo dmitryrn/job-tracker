@@ -94,6 +94,7 @@ func (syncer *JobSync) Register(lifecycle fx.Lifecycle) {
 			if cancel == nil {
 				return nil
 			}
+
 			cancel()
 			select {
 			case <-done:
@@ -119,14 +120,17 @@ func (syncer *JobSync) Trigger(provider string) bool {
 		syncer.logger.Warn("job sync request ignored", zap.String("provider", provider), zap.String("reason", "unknown provider"))
 		return false
 	}
+
 	if syncer.trigger == nil {
 		syncer.logger.Info("job sync request ignored", zap.String("provider", provider), zap.String("reason", "scheduler not running"))
 		return false
 	}
+
 	if syncer.running {
 		syncer.logger.Info("job sync request ignored", zap.String("provider", provider), zap.String("reason", "sync already running"))
 		return false
 	}
+
 	select {
 	case syncer.trigger <- provider:
 		syncer.logger.Info("job sync requested", zap.String("provider", provider))
@@ -171,11 +175,13 @@ func (syncer *JobSync) runSync(ctx context.Context, provider string) {
 		syncer.syncProviders(ctx, false)
 		return
 	}
+
 	settings, err := syncer.settings.DiscoverySettings(ctx)
 	if err != nil {
 		syncer.logger.Error("load discovery settings failed", zap.String("provider", provider), zap.Error(err))
 		return
 	}
+
 	syncer.syncProvider(ctx, settings, provider, true)
 }
 
@@ -185,6 +191,7 @@ func (syncer *JobSync) syncProviders(ctx context.Context, force bool) {
 		syncer.logger.Error("load discovery settings failed", zap.Error(err))
 		return
 	}
+
 	var group sync.WaitGroup
 	group.Add(4)
 	go func() {
@@ -233,19 +240,24 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "linkedin"), zap.String("reason", "disabled"))
 		return
 	}
+
 	if !syncer.startProviderRun(ctx, "linkedin", syncer.linkedinInterval, force) {
 		return
 	}
+
 	runID := fmt.Sprintf("linkedin-%d", time.Now().UTC().UnixNano())
 	if syncer.metrics != nil {
 		syncer.metrics.Start(time.Now())
 	}
+
 	if !syncer.allowLinkedInSync(ctx, runID) {
 		if syncer.metrics != nil {
 			syncer.metrics.Complete(time.Now(), LinkedInFetchResult{}, false)
 		}
+
 		return
 	}
+
 	syncer.recordLinkedInEvent(ctx, runID, "provider.run.started", "info", "LinkedIn job sync started", map[string]any{
 		"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "requestedLimit": settings.Limit,
 	})
@@ -254,16 +266,20 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 	if fetchErr != nil {
 		syncer.logger.Error("LinkedIn fetch incomplete", zap.String("run_id", runID), zap.Error(fetchErr), zap.Int("fetched_job_count", fetch.FetchedJobs))
 	}
+
 	if fetchErr != nil {
 		if syncer.metrics != nil {
 			syncer.metrics.Complete(time.Now(), fetch, false)
 		}
+
 		syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, fetchErr)
 		return
 	}
+
 	if syncer.metrics != nil {
 		syncer.metrics.Complete(time.Now(), fetch, true)
 	}
+
 	syncer.logger.Info("stored LinkedIn jobs", zap.String("run_id", runID), zap.Int("count", fetch.SavedJobs))
 	syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, nil)
 }
@@ -279,6 +295,7 @@ func (syncer *JobSync) allowLinkedInSync(ctx context.Context, runID string) bool
 		syncer.logger.Error("LinkedIn IP info lookup failed; sync blocked", zap.String("run_id", runID), zap.Error(err))
 		return false
 	}
+
 	country := strings.ToUpper(strings.TrimSpace(info.Country))
 	syncer.recordLinkedInEvent(ctx, runID, "linkedin.ip_info.resolved", "info", "LinkedIn IP info resolved", map[string]any{"country": country})
 	syncer.logger.Info("LinkedIn IP info resolved", zap.String("run_id", runID), zap.String("country", country))
@@ -287,6 +304,7 @@ func (syncer *JobSync) allowLinkedInSync(ctx context.Context, runID string) bool
 		syncer.logger.Error("LinkedIn job sync blocked: egress country is Serbia", zap.String("run_id", runID), zap.String("country", country))
 		return false
 	}
+
 	return true
 }
 
@@ -304,6 +322,7 @@ func (syncer *JobSync) finishLinkedInRun(ctx context.Context, runID string, limi
 		message = "LinkedIn job sync failed"
 		data["error"] = runError.Error()
 	}
+
 	syncer.recordLinkedInEvent(ctx, runID, "provider.run.finished", level, message, data)
 }
 
@@ -311,6 +330,7 @@ func (syncer *JobSync) recordLinkedInEvent(ctx context.Context, runID, eventType
 	if syncer.events == nil {
 		return
 	}
+
 	if err := syncer.events.RecordEvent(ctx, models.Event{Provider: "linkedin", RunID: runID, Type: eventType, Level: level, Message: message, Data: data}); err != nil {
 		syncer.logger.Error("record LinkedIn event failed", zap.String("run_id", runID), zap.String("event_type", eventType), zap.Error(err))
 	}
@@ -321,19 +341,23 @@ func (syncer *JobSync) syncAdzuna(ctx context.Context, settings models.AdzunaSea
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "adzuna"), zap.String("reason", "disabled"))
 		return
 	}
+
 	if !syncer.startProviderRun(ctx, "adzuna", syncer.adzunaInterval, force) {
 		return
 	}
+
 	syncer.logger.Info("syncing Adzuna jobs")
 	jobs, err := syncer.adzuna.Fetch(ctx, settings)
 	if err != nil {
 		syncer.logger.Error("Adzuna sync failed", zap.Error(err))
 		return
 	}
+
 	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
 		syncer.logger.Error("persist Adzuna jobs failed", zap.Error(err))
 		return
 	}
+
 	syncer.logger.Info("stored Adzuna jobs", zap.Int("count", len(jobs)))
 }
 
@@ -342,19 +366,23 @@ func (syncer *JobSync) syncRemotive(ctx context.Context, settings models.Remotiv
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "remotive"), zap.String("reason", "disabled"))
 		return
 	}
+
 	if !syncer.startProviderRun(ctx, "remotive", syncer.remotiveInterval, force) {
 		return
 	}
+
 	syncer.logger.Info("syncing Remotive jobs")
 	jobs, err := syncer.remotive.Fetch(ctx, settings)
 	if err != nil {
 		syncer.logger.Error("Remotive sync failed", zap.Error(err))
 		return
 	}
+
 	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
 		syncer.logger.Error("persist Remotive jobs failed", zap.Error(err))
 		return
 	}
+
 	syncer.logger.Info("stored Remotive jobs", zap.Int("count", len(jobs)))
 }
 
@@ -363,19 +391,23 @@ func (syncer *JobSync) syncJobicy(ctx context.Context, settings models.JobicySea
 		syncer.logger.Info("provider sync skipped", zap.String("provider", "jobicy"), zap.String("reason", "disabled"))
 		return
 	}
+
 	if !syncer.startProviderRun(ctx, "jobicy", syncer.jobicyInterval, force) {
 		return
 	}
+
 	syncer.logger.Info("syncing Jobicy jobs")
 	jobs, err := syncer.jobicy.Fetch(ctx, settings)
 	if err != nil {
 		syncer.logger.Error("Jobicy sync failed", zap.Error(err))
 		return
 	}
+
 	if err := syncer.jobs.Upsert(ctx, jobs); err != nil {
 		syncer.logger.Error("persist Jobicy jobs failed", zap.Error(err))
 		return
 	}
+
 	syncer.logger.Info("stored Jobicy jobs", zap.Int("count", len(jobs)))
 }
 
@@ -383,14 +415,17 @@ func (syncer *JobSync) startProviderRun(ctx context.Context, provider string, in
 	if force {
 		interval = 0
 	}
+
 	run, err := syncer.providerRuns.StartProviderRun(ctx, provider, interval, time.Now())
 	if err != nil {
 		syncer.logger.Error("start provider sync failed", zap.String("provider", provider), zap.Error(err))
 		return false
 	}
+
 	if !run {
 		syncer.logger.Debug("provider sync not due", zap.String("provider", provider))
 	}
+
 	return run
 }
 
@@ -398,5 +433,6 @@ func finalizationContext(ctx context.Context) (context.Context, context.CancelFu
 	if ctx.Err() == nil {
 		return ctx, func() {}
 	}
+
 	return context.WithTimeout(context.Background(), 5*time.Second)
 }

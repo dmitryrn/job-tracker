@@ -57,6 +57,7 @@ func llmResponseRejection(attempt int, model string, err error) LLMResponseRejec
 	case strings.Contains(message, "JSON"), strings.Contains(message, "invalid character"), strings.Contains(message, "unexpected end of JSON"):
 		reason = "invalid_json"
 	}
+
 	return LLMResponseRejection{Attempt: attempt, Model: model, Reason: reason}
 }
 
@@ -65,5 +66,6 @@ func llmRetryMetadataFromError(err error) (LLMRetryMetadata, bool) {
 	if !errors.As(err, &validationErr) {
 		return LLMRetryMetadata{}, false
 	}
+
 	return validationErr.metadata, true
 }

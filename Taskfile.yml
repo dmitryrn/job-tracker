@@ -6,6 +6,11 @@ tasks:
       - >-
         bash -o pipefail -c "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run ./... 2>&1 | sed '/^go: downloading /d'"
 
+  wsl-fix:
+    cmds:
+      - >-
+        bash -o pipefail -c "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run --fix --enable-only wsl_v5 ./... 2>&1 | sed '/^go: downloading /d'"
+
   vulncheck:
     cmds:
       - >-

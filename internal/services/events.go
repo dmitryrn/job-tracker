@@ -22,5 +22,6 @@ func (service *EventLog) Events(ctx context.Context, search models.EventSearch) 
 	if search.Limit < 1 || search.Limit > 100 || search.Offset < 0 {
 		return models.EventPage{}, ErrInvalidEventSearch
 	}
+
 	return service.repository.Events(ctx, search)
 }

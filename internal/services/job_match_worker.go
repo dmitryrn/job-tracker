@@ -59,6 +59,7 @@ func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.Jo
 	if len(scorers) > 0 {
 		scorer = scorers[0]
 	}
+
 	return &JobMatchWorker{jobs: jobs, analyses: analyses, matches: matches, queue: queue, profiles: profiles, analyzer: analyzer, scorer: scorer, matcher: matcher, events: events, logger: logger, runInterval: runInterval, wake: make(chan struct{}, 1)}
 }
 
@@ -82,6 +83,7 @@ func (worker *JobMatchWorker) Register(lifecycle fx.Lifecycle) {
 			if cancel == nil {
 				return nil
 			}
+
 			cancel()
 			select {
 			case <-done:
@@ -113,6 +115,7 @@ func (worker *JobMatchWorker) run(ctx context.Context) {
 			// Queue changes cannot skip the configured run cooldown.
 			wake = nil
 		}
+
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -128,6 +131,7 @@ func jobMatchRunInterval(worked bool, err error, runInterval time.Duration) (tim
 	if worked || err != nil {
 		return runInterval, true
 	}
+
 	return jobMatchRetryInterval, false
 }
 
@@ -144,19 +148,23 @@ func (worker *JobMatchWorker) process(ctx context.Context) (bool, error) {
 		worker.logger.Error("load job match queue failed", zap.Error(err))
 		return false, err
 	}
+
 	if len(queue) == 0 {
 		return false, nil
 	}
+
 	profile, err := worker.profiles.UserProfile(ctx)
 	if err != nil {
 		worker.logger.Error("load user profile for job matching failed", zap.Error(err))
 		return false, err
 	}
+
 	if profile == nil {
 		worker.logger.Warn("job match worker waiting for user profile")
 		worker.recordEvent(ctx, "", "job_match.waiting_for_profile", "warn", "Job match worker waiting for user profile", nil)
 		return false, nil
 	}
+
 	return true, worker.processJob(ctx, queue[0], *profile)
 }
 
@@ -171,6 +179,7 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 			worker.recordEvent(ctx, runID, "job_match.failed", "error", "Job match failed", map[string]any{"jobId": job.ID, "error": err.Error()})
 			return
 		}
+
 		worker.logger.Info("job match worker finished successfully", zap.Int64("job_id", job.ID))
 		if matchCompleted {
 			worker.recordEvent(ctx, runID, "job_match.completed", "info", "Job match completed", map[string]any{"jobId": job.ID})
@@ -184,10 +193,12 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 	if err != nil {
 		return err
 	}
+
 	if exists {
 		if err := worker.queue.RemoveMatchRequest(ctx, job.ID); err != nil {
 			return err
 		}
+
 		worker.recordEvent(ctx, runID, "job_match.skipped_existing", "info", "Job match skipped because an assessment already exists", map[string]any{"jobId": job.ID})
 		return nil
 	}
@@ -196,24 +207,30 @@ func (worker *JobMatchWorker) processJob(ctx context.Context, job models.BrowseJ
 	if err != nil {
 		return err
 	}
+
 	if analysis == nil {
 		return errors.New("job analysis was not saved")
 	}
+
 	match, err := worker.matcher.Match(ctx, job, *analysis, profile)
 	if err != nil {
 		if retries, ok := llmRetryMetadataFromError(err); ok {
 			worker.recordRetryEvents(ctx, runID, job.ID, "assessment", retries, "", false)
 		}
+
 		return err
 	}
+
 	worker.recordRetryEvents(ctx, runID, job.ID, "assessment", match.RetryMetadata, match.Assessment.Model, true)
 	content, err := json.Marshal(match.Assessment)
 	if err != nil {
 		return fmt.Errorf("encode job match assessment: %w", err)
 	}
+
 	if err := worker.queue.CompleteMatchRequest(ctx, job.ID, string(content)); err != nil {
 		return err
 	}
+
 	matchCompleted = true
 	return nil
 }
@@ -227,6 +244,7 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 			worker.recordEvent(ctx, runID, "job_match.analysis.failed", "error", "Job match analysis failed", map[string]any{"jobId": jobID, "stage": stage, "error": err.Error()})
 			return
 		}
+
 		worker.logger.Info("job analysis worker finished successfully", zap.Int64("job_id", jobID))
 	}()
 
@@ -234,6 +252,7 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 	if err != nil {
 		return err
 	}
+
 	if job == nil {
 		return ErrMatchJobNotFound
 	}
@@ -243,6 +262,7 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 	if err != nil {
 		return err
 	}
+
 	if jobAnalysisCurrent(existing, *job) {
 		worker.logger.Info("job analysis worker reused current analysis", zap.Int64("job_id", jobID))
 		worker.recordEvent(ctx, runID, "job_match.analysis.reused", "info", "Job match analysis reused", map[string]any{"jobId": jobID})
@@ -253,8 +273,10 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 			if retries, ok := llmRetryMetadataFromError(err); ok {
 				worker.recordRetryEvents(ctx, runID, jobID, "analysis", retries, "", false)
 			}
+
 			return err
 		}
+
 		worker.recordRetryEvents(ctx, runID, jobID, "analysis", analysis.RetryMetadata, analysis.Model, true)
 		stage = "save_analysis"
 		if err := worker.analyses.SaveJobAnalysis(ctx, models.JobAnalysisRecord{
@@ -269,6 +291,7 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 		}); err != nil {
 			return err
 		}
+
 		worker.recordEvent(ctx, runID, "job_match.analysis.completed", "info", "Job match analysis completed", map[string]any{"jobId": jobID})
 	}
 
@@ -278,12 +301,15 @@ func (worker *JobMatchWorker) ensureJobAnalysis(ctx context.Context, runID strin
 		if err != nil {
 			return err
 		}
+
 		if err := worker.jobs.SaveJobProfileMatchScore(ctx, jobID, score); err != nil {
 			return err
 		}
+
 		worker.logger.Info("job profile score saved", zap.Int64("job_id", jobID), zap.Int("score", score))
 		worker.recordEvent(ctx, runID, "job_match.profile_score.completed", "info", "Job profile score completed", map[string]any{"jobId": jobID, "score": score})
 	}
+
 	return nil
 }
 
@@ -291,6 +317,7 @@ func (worker *JobMatchWorker) recordEvent(ctx context.Context, runID, eventType,
 	if worker.events == nil {
 		return
 	}
+
 	if err := worker.events.RecordEvent(ctx, models.Event{Provider: "job_match", RunID: runID, Type: eventType, Level: level, Message: message, Data: data}); err != nil {
 		worker.logger.Error("record job match event failed", zap.String("run_id", runID), zap.String("event_type", eventType), zap.Error(err))
 	}
@@ -303,9 +330,11 @@ func (worker *JobMatchWorker) recordRetryEvents(ctx context.Context, runID strin
 			"jobId": jobID, "attempt": rejection.Attempt, "nextAttempt": rejection.Attempt + 1, "maxAttempts": validatedLLMResponseAttempts, "model": rejection.Model, "reason": rejection.Reason,
 		})
 	}
+
 	if len(retries.Rejections) == 0 {
 		return
 	}
+
 	last := retries.Rejections[len(retries.Rejections)-1]
 	if succeeded {
 		worker.logger.Info("job match response accepted after retry", zap.Int64("job_id", jobID), zap.String("stage", stage), zap.Int("attempt", len(retries.Rejections)+1), zap.String("model", model))
@@ -314,6 +343,7 @@ func (worker *JobMatchWorker) recordRetryEvents(ctx context.Context, runID strin
 		})
 		return
 	}
+
 	worker.logger.Error("job match response remained invalid after retries", zap.Int64("job_id", jobID), zap.String("stage", stage), zap.Int("attempt", last.Attempt), zap.String("model", last.Model), zap.String("reason", last.Reason))
 	worker.recordEvent(ctx, runID, "job_match."+stage+".retry_exhausted", "error", "Job match "+stage+" response remained invalid after retries", map[string]any{
 		"jobId": jobID, "attempt": last.Attempt, "maxAttempts": validatedLLMResponseAttempts, "model": last.Model, "reason": last.Reason,
@@ -355,23 +385,29 @@ func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearc
 	if search.Sort == "" {
 		search.Sort = "created-desc"
 	}
+
 	if search.Sort != "created-desc" && search.Sort != "created-asc" && search.Sort != "score-desc" && search.Sort != "score-asc" && search.Sort != "profile-score-desc" && search.Sort != "profile-score-asc" {
 		return models.JobMatchPage{}, ErrInvalidJobMatchSort
 	}
+
 	search.Viewed = strings.TrimSpace(strings.ToLower(search.Viewed))
 	if search.Viewed == "" {
 		search.Viewed = "all"
 	}
+
 	if search.Viewed != "all" && search.Viewed != "seen" && search.Viewed != "unseen" {
 		return models.JobMatchPage{}, ErrInvalidJobMatchViewed
 	}
+
 	search.Applied = strings.TrimSpace(strings.ToLower(search.Applied))
 	if search.Applied == "" {
 		search.Applied = "all"
 	}
+
 	if search.Applied != "all" && search.Applied != "applied" && search.Applied != "not-applied" {
 		return models.JobMatchPage{}, ErrInvalidJobMatchApplied
 	}
+
 	return matches.matches.JobMatches(ctx, search)
 }
 
@@ -390,16 +426,20 @@ func (requests *JobMatchRequests) Queue(ctx context.Context, jobID int64, redo b
 	if err != nil {
 		return err
 	}
+
 	if strings.TrimSpace(job.BodyText) == "" {
 		return ErrJobDescriptionRequired
 	}
+
 	found, err := requests.queue.QueueJobMatch(ctx, jobID, redo)
 	if err != nil {
 		return err
 	}
+
 	if !found {
 		return ErrMatchJobNotFound
 	}
+
 	requests.worker.Wake()
 	return nil
 }
@@ -409,9 +449,11 @@ func (requests *JobMatchRequests) QueueUnmatched(ctx context.Context, jobIDs []i
 	if err != nil {
 		return 0, err
 	}
+
 	if queued > 0 {
 		requests.worker.Wake()
 	}
+
 	return queued, nil
 }
 
@@ -424,9 +466,11 @@ func (requests *JobMatchRequests) Reorder(ctx context.Context, jobIDs []int64) e
 	if err != nil {
 		return err
 	}
+
 	if !found {
 		return ErrMatchJobNotFound
 	}
+
 	requests.worker.Wake()
 	return nil
 }

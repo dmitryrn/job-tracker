@@ -325,7 +325,7 @@ func TestJobMatchWorkerReusesCurrentJobAnalysis(t *testing.T) {
 
 	assert.Equal(t, 1, analyzer.calls)
 	assert.Equal(t, "job-1", analyzer.jobs[0].SourceID)
-	assert.Equal(t, `{"source":"test"}`, analyzer.jobs[0].MetadataJSON)
+	assert.JSONEq(t, `{"source":"test"}`, analyzer.jobs[0].MetadataJSON)
 	assert.Equal(t, []string{"job_match.started", "job_match.analysis.completed", "job_match.completed", "job_match.started", "job_match.analysis.reused", "job_match.completed"}, events.types())
 }
 
@@ -353,6 +353,7 @@ func (analyzer *recordingJobAnalyzer) Analyze(_ context.Context, job models.Job)
 	if analysis.InputSHA256 == "" {
 		analysis.InputSHA256 = jobAnalysisInputSHA256(job)
 	}
+
 	return analysis, analyzer.err
 }
 
@@ -384,5 +385,6 @@ func (recorder *jobMatchEventRecorder) types() []string {
 	for _, event := range recorder.events {
 		types = append(types, event.Type)
 	}
+
 	return types
 }

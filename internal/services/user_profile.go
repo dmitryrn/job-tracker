@@ -36,6 +36,7 @@ func (service *UserProfileService) Save(ctx context.Context, profile models.User
 			skills = append(skills, skill)
 		}
 	}
+
 	profile.Skills = skills
 
 	workHistory := make([]models.UserProfileWorkHistory, 0, len(profile.WorkHistory))
@@ -49,6 +50,7 @@ func (service *UserProfileService) Save(ctx context.Context, profile models.User
 			workHistory = append(workHistory, experience)
 		}
 	}
+
 	profile.WorkHistory = workHistory
 
 	education := make([]models.UserProfileEducation, 0, len(profile.Education))
@@ -62,6 +64,7 @@ func (service *UserProfileService) Save(ctx context.Context, profile models.User
 			education = append(education, entry)
 		}
 	}
+
 	profile.Education = education
 	return service.repository.SaveUserProfile(ctx, profile)
 }

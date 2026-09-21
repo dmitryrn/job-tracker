@@ -68,5 +68,6 @@ func (metrics *LinkedInMetrics) Complete(at time.Time, fetch LinkedInFetchResult
 	} else {
 		metrics.jobs.WithLabelValues(linkedInJobsErrors).Set(1)
 	}
+
 	metrics.lastRunFinished.Set(float64(at.Unix()))
 }

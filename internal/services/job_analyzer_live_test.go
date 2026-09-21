@@ -73,12 +73,14 @@ func TestSavedJobAnalysesMatchFixtures(t *testing.T) {
 	if os.IsNotExist(err) {
 		t.Skip("no job analyzer snapshots have been generated")
 	}
+
 	require.NoError(t, err)
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".result.json") {
 			continue
 		}
+
 		t.Run(entry.Name(), func(t *testing.T) {
 			contents, err := os.ReadFile(filepath.Join(resultsDirectory, entry.Name()))
 			require.NoError(t, err)
@@ -108,8 +110,10 @@ func jobFixtures(t *testing.T, root string) []string {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
+
 		fixtures = append(fixtures, filepath.Join(root, "jobs", entry.Name()))
 	}
+
 	require.NotEmpty(t, fixtures)
 	return fixtures
 }
@@ -126,6 +130,7 @@ func configuredJobAnalyzerModels(t *testing.T, defaultModel string) []string {
 	if strings.TrimSpace(modelList) == "" {
 		modelList = defaultModel
 	}
+
 	values := strings.Split(modelList, ",")
 	models := make([]string, 0, len(values))
 	for _, value := range values {
@@ -133,6 +138,7 @@ func configuredJobAnalyzerModels(t *testing.T, defaultModel string) []string {
 			models = append(models, model)
 		}
 	}
+
 	require.NotEmpty(t, models)
 	return models
 }

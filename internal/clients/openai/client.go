@@ -159,9 +159,11 @@ func (client *Client) Complete(ctx context.Context, model, sessionID string, inp
 		if err != nil {
 			return ChatResponse{}, fmt.Errorf("read unsuccessful LLM response: %w", err)
 		}
+
 		if body := strings.TrimSpace(string(body)); body != "" {
 			return ChatResponse{}, fmt.Errorf("LLM returned %s: %s", response.Status, body)
 		}
+
 		return ChatResponse{}, fmt.Errorf("LLM returned %s", response.Status)
 	}
 
@@ -181,35 +183,44 @@ func (client *Client) Complete(ctx context.Context, model, sessionID string, inp
 	if choice.Message.Content != nil {
 		content = *choice.Message.Content
 	}
+
 	if strings.TrimSpace(content) == "" && len(choice.Message.ToolCalls) == 0 {
 		reason := choice.NativeFinishReason
 		if reason == "" {
 			reason = choice.FinishReason
 		}
+
 		if choice.Message.Refusal != nil && strings.TrimSpace(*choice.Message.Refusal) != "" {
 			reason = "refusal"
 		}
+
 		if reason == "" {
 			return ChatResponse{}, noCompletionContentError(body.Model, "")
 		}
+
 		return ChatResponse{}, noCompletionContentError(body.Model, reason)
 	}
+
 	reasoning := choice.Message.ReasoningDetails
 	if len(reasoning) == 0 {
 		reasoning = choice.Message.Reasoning
 	}
+
 	reasoningSummary := ""
 	if json.Unmarshal(choice.Message.Reasoning, &reasoningSummary) != nil {
 		_ = json.Unmarshal(choice.Message.ReasoningDetails, &reasoningSummary)
 	}
+
 	refusal := ""
 	if choice.Message.Refusal != nil {
 		refusal = *choice.Message.Refusal
 	}
+
 	providerMetadata := body.Provider
 	if len(providerMetadata) == 0 {
 		providerMetadata = body.Metadata
 	}
+
 	return ChatResponse{Model: body.Model, Content: content, ToolCalls: choice.Message.ToolCalls, FinishReason: choice.FinishReason, Refusal: refusal, ReasoningSummary: reasoningSummary, Reasoning: reasoning, Usage: body.Usage, ProviderMetadata: providerMetadata}, nil
 }
 
@@ -217,6 +228,7 @@ func (client *Client) requestForEndpoint(input ChatRequest) ChatRequest {
 	if !client.supportsProviderPreferences {
 		input.Provider = nil
 	}
+
 	return input
 }
 
@@ -250,5 +262,6 @@ func noCompletionContentError(model, reason string) error {
 	if strings.TrimSpace(model) != "" {
 		message += " from " + model
 	}
+
 	return fmt.Errorf("%s", message)
 }

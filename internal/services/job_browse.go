@@ -32,15 +32,18 @@ func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) (mod
 	if err != nil {
 		return models.JobPage{}, err
 	}
+
 	search.Search = strings.TrimSpace(search.Search)
 	search.Provider = strings.TrimSpace(search.Provider)
 	search.Match = strings.TrimSpace(strings.ToLower(search.Match))
 	if search.Match == "all" {
 		search.Match = ""
 	}
+
 	if search.Match != "" && search.Match != "has" && search.Match != "none" {
 		return models.JobPage{}, ErrInvalidMatchFilter
 	}
+
 	search.Fields = fields
 	return browse.repository.List(ctx, search)
 }
@@ -53,6 +56,7 @@ func (browse *JobBrowse) OpenJob(ctx context.Context, id int64) (*models.BrowseJ
 	if err := browse.repository.MarkJobViewed(ctx, id); err != nil {
 		return nil, err
 	}
+
 	return browse.repository.Job(ctx, id)
 }
 
@@ -66,10 +70,12 @@ func (browse *JobBrowse) CreateCustomJob(ctx context.Context, custom models.Cust
 	if err != nil || validateFetchURL(parsed) != nil {
 		return models.BrowseJob{}, ErrInvalidCustomJobURL
 	}
+
 	job, err := browse.importer.Import(ctx, custom.SourceURL)
 	if err != nil {
 		return models.BrowseJob{}, err
 	}
+
 	return browse.repository.CreateCustomJob(ctx, job)
 }
 
@@ -82,6 +88,7 @@ func (browse *JobBrowse) RejectJob(ctx context.Context, id int64, reason string)
 	if reason == "" {
 		return false, ErrEmptyJobRejectionReason
 	}
+
 	return browse.repository.Reject(ctx, id, reason)
 }
 
@@ -112,13 +119,16 @@ func normalizeSearchFields(values []string) ([]string, error) {
 			if name == "" || seen[name] {
 				continue
 			}
+
 			field, found := allowed[name]
 			if !found {
 				return nil, fmt.Errorf("%w: %s", ErrInvalidSearchField, name)
 			}
+
 			seen[name] = true
 			fields = append(fields, field)
 		}
 	}
+
 	return fields, nil
 }

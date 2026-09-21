@@ -95,6 +95,7 @@ func NewHTTPJobPageFetcher() *HTTPJobPageFetcher {
 			if len(via) >= 5 {
 				return fmt.Errorf("job posting redirects too many times")
 			}
+
 			return validateFetchURL(request.URL)
 		},
 	}}
@@ -109,13 +110,16 @@ func (fetcher *HTTPJobPageFetcher) Fetch(ctx context.Context, sourceURL string) 
 	if err != nil {
 		return CustomJobPage{}, fmt.Errorf("parse job posting URL: %w", err)
 	}
+
 	if err := validateFetchURL(requestURL); err != nil {
 		return CustomJobPage{}, err
 	}
+
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return CustomJobPage{}, fmt.Errorf("create job posting request: %w", err)
 	}
+
 	request.Header.Set("Accept", "text/html,application/xhtml+xml")
 	request.Header.Set("User-Agent", "Mozilla/5.0 (compatible; NiceJobImporter/1.0)")
 
@@ -127,6 +131,7 @@ func (fetcher *HTTPJobPageFetcher) Fetch(ctx context.Context, sourceURL string) 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return CustomJobPage{}, fmt.Errorf("job posting returned %s", response.Status)
 	}
+
 	if contentType := response.Header.Get("Content-Type"); contentType != "" && !strings.Contains(strings.ToLower(contentType), "html") {
 		return CustomJobPage{}, fmt.Errorf("job posting returned unsupported content type %q", contentType)
 	}
@@ -135,16 +140,20 @@ func (fetcher *HTTPJobPageFetcher) Fetch(ctx context.Context, sourceURL string) 
 	if err != nil {
 		return CustomJobPage{}, fmt.Errorf("read job posting: %w", err)
 	}
+
 	if len(body) > customJobPageMaxBytes {
 		return CustomJobPage{}, fmt.Errorf("job posting exceeds %d byte limit", customJobPageMaxBytes)
 	}
+
 	page, err := customJobPageFromHTML(string(body), response.Request.URL)
 	if err != nil {
 		return CustomJobPage{}, err
 	}
+
 	if page.Markdown == "" {
 		return CustomJobPage{}, fmt.Errorf("job posting did not contain readable content")
 	}
+
 	return page, nil
 }
 
@@ -153,13 +162,16 @@ func (importer *CustomJobImporter) Import(ctx context.Context, sourceURL string)
 	if err != nil {
 		return models.Job{}, err
 	}
+
 	fields, err := importer.extract(ctx, sourceURL, page)
 	if err != nil {
 		return models.Job{}, err
 	}
+
 	if fields.Title == "" {
 		fields.Title = page.Title
 	}
+
 	return models.Job{
 		Source:         "custom",
 		SourceID:       sourceURL,
@@ -196,19 +208,24 @@ func (importer *CustomJobImporter) extract(ctx context.Context, sourceURL string
 		if err != nil {
 			return customJobFields{}, fmt.Errorf("extract custom job fields: %w", err)
 		}
+
 		var fields customJobFields
 		err = json.Unmarshal([]byte(response.Content), &fields)
 		if err == nil {
 			err = validateCustomJobFields(&fields)
 		}
+
 		if err == nil {
 			return fields, nil
 		}
+
 		if attempt == validatedLLMResponseAttempts {
 			return customJobFields{}, fmt.Errorf("validate custom job fields from %s: %w", response.Model, err)
 		}
+
 		request.Messages = correctedLLMMessages(request.Messages, response.Content, err)
 	}
+
 	return customJobFields{}, fmt.Errorf("custom job extraction retry limit reached")
 }
 
@@ -221,22 +238,27 @@ func validateCustomJobFields(fields *customJobFields) error {
 	if fields.Workplace == "" {
 		fields.Workplace = "unknown"
 	}
+
 	switch fields.Workplace {
 	case "remote", "hybrid", "onsite", "unknown":
 	default:
 		return fmt.Errorf("invalid workplace %q", fields.Workplace)
 	}
+
 	if fields.SalaryMin != nil && fields.SalaryMax != nil && *fields.SalaryMin > *fields.SalaryMax {
 		return fmt.Errorf("salary minimum exceeds salary maximum")
 	}
+
 	fields.PostedAt = strings.TrimSpace(fields.PostedAt)
 	if fields.PostedAt != "" {
 		postedAt, err := time.Parse(time.RFC3339, fields.PostedAt)
 		if err != nil {
 			return fmt.Errorf("posted date must use RFC3339: %w", err)
 		}
+
 		fields.PostedAt = postedAt.UTC().Format(time.RFC3339)
 	}
+
 	return nil
 }
 
@@ -244,9 +266,11 @@ func validateFetchURL(requestURL *url.URL) error {
 	if requestURL.Scheme != "http" && requestURL.Scheme != "https" {
 		return fmt.Errorf("job posting URL must use HTTP or HTTPS")
 	}
+
 	if requestURL.User != nil || requestURL.Hostname() == "" {
 		return fmt.Errorf("job posting URL is invalid")
 	}
+
 	return nil
 }
 
@@ -255,20 +279,24 @@ func dialPublicAddress(ctx context.Context, network, address string) (net.Conn, 
 	if err != nil {
 		return nil, fmt.Errorf("split job posting address: %w", err)
 	}
+
 	addresses, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 	if err != nil {
 		return nil, fmt.Errorf("resolve job posting host: %w", err)
 	}
+
 	dialer := &net.Dialer{}
 	for _, address := range addresses {
 		if !isPublicAddress(address) {
 			continue
 		}
+
 		connection, err := dialer.DialContext(ctx, network, net.JoinHostPort(address.String(), port))
 		if err == nil {
 			return connection, nil
 		}
 	}
+
 	return nil, fmt.Errorf("job posting host does not resolve to a public address")
 }
 
@@ -281,6 +309,7 @@ func customJobPageFromHTML(source string, baseURL *url.URL) (CustomJobPage, erro
 	if err != nil {
 		return CustomJobPage{}, fmt.Errorf("parse job posting HTML: %w", err)
 	}
+
 	renderer := markdownRenderer{baseURL: baseURL}
 	renderer.render(document)
 	return CustomJobPage{Title: documentTitle(document), Markdown: truncateMarkdown(renderer.markdown())}, nil
@@ -296,9 +325,11 @@ func (renderer *markdownRenderer) render(node *html.Node) {
 		renderer.text(node.Data)
 		return
 	}
+
 	if node.Type != html.ElementNode && node.Type != html.DocumentNode {
 		return
 	}
+
 	name := strings.ToLower(node.Data)
 	switch name {
 	case "script", "style", "svg", "noscript", "template", "nav", "footer", "form":
@@ -313,11 +344,13 @@ func (renderer *markdownRenderer) render(node *html.Node) {
 		if label == "" {
 			return
 		}
+
 		href, err := url.Parse(attribute(node, "href"))
 		if err == nil && href.String() != "" {
 			renderer.text("[" + label + "](" + renderer.baseURL.ResolveReference(href).String() + ")")
 			return
 		}
+
 		renderer.text(label)
 		return
 	case "h1", "h2", "h3", "h4", "h5", "h6":
@@ -329,9 +362,11 @@ func (renderer *markdownRenderer) render(node *html.Node) {
 	case "p", "div", "article", "section", "main", "header", "aside", "blockquote", "pre", "table", "tr":
 		renderer.block()
 	}
+
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
 		renderer.render(child)
 	}
+
 	switch name {
 	case "h1", "h2", "h3", "h4", "h5", "h6", "li", "p", "div", "article", "section", "main", "header", "aside", "blockquote", "pre", "table", "tr":
 		renderer.block()
@@ -343,6 +378,7 @@ func (renderer *markdownRenderer) text(value string) {
 	if value == "" {
 		return
 	}
+
 	if renderer.output.Len() > 0 {
 		current := renderer.output.String()
 		last := current[len(current)-1]
@@ -350,6 +386,7 @@ func (renderer *markdownRenderer) text(value string) {
 			renderer.output.WriteByte(' ')
 		}
 	}
+
 	renderer.output.WriteString(value)
 }
 
@@ -357,11 +394,13 @@ func (renderer *markdownRenderer) block() {
 	if renderer.output.Len() == 0 {
 		return
 	}
+
 	current := renderer.output.String()
 	if !strings.HasSuffix(current, "\n\n") {
 		if !strings.HasSuffix(current, "\n") {
 			renderer.output.WriteByte('\n')
 		}
+
 		renderer.output.WriteByte('\n')
 	}
 }
@@ -376,12 +415,15 @@ func (renderer *markdownRenderer) markdown() string {
 			if empty {
 				continue
 			}
+
 			empty = true
 		} else {
 			empty = false
 		}
+
 		result = append(result, line)
 	}
+
 	return strings.TrimSpace(strings.Join(result, "\n"))
 }
 
@@ -392,10 +434,12 @@ func documentTitle(document *html.Node) string {
 		if title != "" {
 			return
 		}
+
 		if node.Type == html.ElementNode && strings.EqualFold(node.Data, "title") {
 			title = strings.TrimSpace(nodeText(node))
 			return
 		}
+
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
 			visit(child)
 		}
@@ -411,6 +455,7 @@ func nodeText(node *html.Node) string {
 		if candidate.Type == html.TextNode {
 			output.WriteString(candidate.Data)
 		}
+
 		for child := candidate.FirstChild; child != nil; child = child.NextSibling {
 			visit(child)
 		}
@@ -425,6 +470,7 @@ func attribute(node *html.Node, name string) string {
 			return attribute.Val
 		}
 	}
+
 	return ""
 }
 
@@ -432,6 +478,7 @@ func truncateMarkdown(markdown string) string {
 	if len(markdown) <= customJobMarkdownMaxBytes {
 		return markdown
 	}
+
 	return strings.TrimSpace(markdown[:customJobMarkdownMaxBytes]) + "\n\n[Job posting truncated after " + strconv.Itoa(customJobMarkdownMaxBytes) + " bytes.]"
 }
 

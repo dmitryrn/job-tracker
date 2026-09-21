@@ -63,15 +63,18 @@ func (c *Client) Fetch(ctx context.Context, settings models.AdzunaSearchSettings
 		if err != nil {
 			return nil, err
 		}
+
 		for _, item := range result {
 			if matchesWorkplace(item, settings.Workplace) {
 				jobs = append(jobs, toModel(item))
 			}
 		}
+
 		if len(result) < settings.ResultsPerPage {
 			break
 		}
 	}
+
 	return jobs, nil
 }
 
@@ -81,6 +84,7 @@ func (c *Client) fetchPage(ctx context.Context, page int, settings models.Adzuna
 	if err != nil {
 		return nil, err
 	}
+
 	params := requestURL.Query()
 	params.Set("app_id", c.config.AppID)
 	params.Set("app_key", c.config.APIKey)
@@ -94,6 +98,7 @@ func (c *Client) fetchPage(ctx context.Context, page int, settings models.Adzuna
 	if err != nil {
 		return nil, err
 	}
+
 	request.Header.Set("Accept", "application/json")
 	httpResponse, err := c.http.Do(request)
 	if err != nil {
@@ -103,15 +108,17 @@ func (c *Client) fetchPage(ctx context.Context, page int, settings models.Adzuna
 	if httpResponse.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(io.LimitReader(httpResponse.Body, 4<<10))
 		if readErr != nil {
-			return nil, fmt.Errorf("Adzuna returned %s", httpResponse.Status)
+			return nil, fmt.Errorf("adzuna returned %s", httpResponse.Status)
 		}
-		return nil, fmt.Errorf("Adzuna returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
+
+		return nil, fmt.Errorf("adzuna returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
 	}
 
 	var result response
 	if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
 		return nil, err
 	}
+
 	return result.Results, nil
 }
 
@@ -119,10 +126,12 @@ func matchesWorkplace(job job, workplace string) bool {
 	if workplace == "any" {
 		return true
 	}
+
 	text := strings.ToLower(strings.Join([]string{job.Title, job.Description, job.Location.DisplayName}, " "))
 	if workplace == "remote" {
 		return strings.Contains(text, "remote")
 	}
+
 	return strings.Contains(text, "remote") || strings.Contains(text, "hybrid")
 }
 
@@ -166,9 +175,11 @@ func workplace(job job) string {
 	if strings.Contains(text, "remote") {
 		return "remote"
 	}
+
 	if strings.Contains(text, "hybrid") {
 		return "hybrid"
 	}
+
 	return "unknown"
 }
 
@@ -177,5 +188,6 @@ func parseTime(value string) string {
 	if err != nil {
 		return ""
 	}
+
 	return parsed.UTC().Format(time.RFC3339)
 }

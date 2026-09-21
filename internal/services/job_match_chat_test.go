@@ -106,9 +106,11 @@ func TestProviderRequestOmitsCandidateIdentityAndInstitutions(t *testing.T) {
 	} {
 		assert.NotContains(t, string(providerPayload), sensitiveValue)
 	}
+
 	for _, company := range []string{"Orchid Labs", "Harbor Works", "Cedar Systems"} {
 		assert.Contains(t, string(providerPayload), company)
 	}
+
 	assert.Contains(t, string(providerPayload), `\"country\":\"Canada\"`)
 	assert.NotContains(t, string(providerPayload), "Stale country")
 	assert.Contains(t, string(providerPayload), "Authorized to work in Canada")
@@ -206,9 +208,9 @@ func TestApplyResumePatchRejectsEducationDetailsWithWrongExpectedValue(t *testin
 		Op: "replace", Section: "educationDetails", ID: 7, Expected: "Honors", Value: "Thesis: distributed systems",
 	}}})
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, "Dean's list", resume.Education[0].Details)
-	assert.ErrorContains(t, err, `education ID 7, expected "Honors", current "Dean's list"`)
+	require.ErrorContains(t, err, `education ID 7, expected "Honors", current "Dean's list"`)
 }
 
 func TestCloneResumeDoesNotSharePatchableFields(t *testing.T) {

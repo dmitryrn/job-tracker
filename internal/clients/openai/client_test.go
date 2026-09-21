@@ -25,11 +25,11 @@ func TestCompleteOmitsProviderPreferencesForNonOpenRouterEndpoint(t *testing.T) 
 			Model string `json:"model"`
 			ChatRequest
 		}
-		require.NoError(t, json.NewDecoder(request.Body).Decode(&body))
+		assert.NoError(t, json.NewDecoder(request.Body).Decode(&body))
 		assert.Equal(t, model, body.Model)
 		assert.Equal(t, []Message{{Role: "user", Content: "Extract this CV"}}, body.Messages)
 		assert.Nil(t, body.Provider)
-		require.NotNil(t, body.Temperature)
+		assert.NotNil(t, body.Temperature)
 		assert.Zero(t, *body.Temperature)
 		assert.Equal(t, "high", body.ReasoningEffort)
 
@@ -48,7 +48,7 @@ func TestCompleteOmitsProviderPreferencesForNonOpenRouterEndpoint(t *testing.T) 
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "provider/model", response.Model)
-	assert.Equal(t, `{"name":"Riley"}`, response.Content)
+	assert.JSONEq(t, `{"name":"Riley"}`, response.Content)
 }
 
 func TestRequestForEndpointSendsProviderPreferencesToOpenRouter(t *testing.T) {
@@ -78,8 +78,8 @@ func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
 
 	client := newClient("test-key", server.Client(), server.URL)
 	_, err := client.Complete(context.Background(), "test-model", "session-456", ChatRequest{Messages: []Message{{Role: "user", Content: "CV"}}})
-	assert.ErrorContains(t, err, "429 Too Many Requests")
-	assert.ErrorContains(t, err, `{"error":{"code":429,"message":"Daily free model quota exhausted"}}`)
+	require.ErrorContains(t, err, "429 Too Many Requests")
+	require.ErrorContains(t, err, `{"error":{"code":429,"message":"Daily free model quota exhausted"}}`)
 }
 
 func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
@@ -97,8 +97,8 @@ func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
 func TestCompleteSupportsFunctionCalls(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var body struct{ ChatRequest }
-		require.NoError(t, json.NewDecoder(request.Body).Decode(&body))
-		require.Len(t, body.Tools, 1)
+		assert.NoError(t, json.NewDecoder(request.Body).Decode(&body))
+		assert.Len(t, body.Tools, 1)
 		assert.Equal(t, "revise_resume", body.Tools[0].Function.Name)
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"model":"provider/model","choices":[{"finish_reason":"tool_calls","message":{"content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"revise_resume","arguments":"{\"revision\":1}"}}]}}]}`))

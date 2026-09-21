@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,9 +17,10 @@ func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 			CASE WHEN photo_data IS NULL THEN 0 ELSE 1 END, updated_at
 		FROM resumes WHERE base_resume = 1`,
 	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Town, &resume.Country, &resume.Email, &resume.Phone, &resume.HasPhoto, &resume.UpdatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("get base resume: %w", err)
 	}
@@ -26,18 +28,23 @@ func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 	if resume.SummaryParagraphs, err = readResumeSummaryParagraphs(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
+
 	if resume.Links, err = readResumeLinks(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
+
 	if resume.Skills, err = readResumeSkills(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
+
 	if resume.Experience, err = readResumeExperience(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
+
 	if resume.Education, err = readResumeEducation(ctx, repository.db, resume.ID); err != nil {
 		return nil, err
 	}
+
 	return &resume, nil
 }
 
@@ -51,6 +58,7 @@ func (repository *SQLite) ResumePhoto(ctx context.Context) (*models.ResumePhoto,
 	if err != nil {
 		return nil, fmt.Errorf("get base resume photo: %w", err)
 	}
+
 	return &photo, nil
 }
 
@@ -64,13 +72,16 @@ func (repository *SQLite) SaveResumePhoto(ctx context.Context, photo models.Resu
 	if err != nil {
 		return fmt.Errorf("save base resume photo: %w", err)
 	}
+
 	updated, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("check base resume photo update: %w", err)
 	}
+
 	if updated == 0 {
 		return sql.ErrNoRows
 	}
+
 	return nil
 }
 
@@ -100,19 +111,24 @@ func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) 
 	); err != nil {
 		return models.Resume{}, fmt.Errorf("save base resume: %w", err)
 	}
+
 	if err := reconcileResumeSections(ctx, transaction, &resume); err != nil {
 		return models.Resume{}, err
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return models.Resume{}, fmt.Errorf("commit base resume: %w", err)
 	}
+
 	stored, err := repository.Resume(ctx)
 	if err != nil {
 		return models.Resume{}, err
 	}
+
 	if stored == nil {
 		return models.Resume{}, fmt.Errorf("load saved base resume: no resume found")
 	}
+
 	return *stored, nil
 }
 
@@ -121,18 +137,23 @@ func reconcileResumeSections(ctx context.Context, transaction *sql.Tx, resume *m
 	if resume.SummaryParagraphs, err = reconcileResumeText(ctx, transaction, "resume_summary_paragraphs", "resume_id", resume.ID, resume.SummaryParagraphs); err != nil {
 		return fmt.Errorf("save base resume summary paragraphs: %w", err)
 	}
+
 	if resume.Links, err = reconcileResumeLinks(ctx, transaction, resume.ID, resume.Links); err != nil {
 		return fmt.Errorf("save base resume links: %w", err)
 	}
+
 	if resume.Skills, err = reconcileResumeSkills(ctx, transaction, resume.ID, resume.Skills); err != nil {
 		return fmt.Errorf("save base resume skills: %w", err)
 	}
+
 	if resume.Experience, err = reconcileResumeExperience(ctx, transaction, resume.ID, resume.Experience); err != nil {
 		return fmt.Errorf("save base resume experience: %w", err)
 	}
+
 	if resume.Education, err = reconcileResumeEducation(ctx, transaction, resume.ID, resume.Education); err != nil {
 		return fmt.Errorf("save base resume education: %w", err)
 	}
+
 	return nil
 }
 
@@ -141,6 +162,7 @@ func reconcileResumeText(ctx context.Context, transaction *sql.Tx, table, parent
 	if err != nil {
 		return nil, err
 	}
+
 	seen := make(map[int64]bool, len(values))
 	for index := range values {
 		value := &values[index]
@@ -149,6 +171,7 @@ func reconcileResumeText(ctx context.Context, transaction *sql.Tx, table, parent
 			if err != nil {
 				return nil, err
 			}
+
 			value.ID, err = result.LastInsertId()
 			if err != nil {
 				return nil, err
@@ -157,12 +180,15 @@ func reconcileResumeText(ctx context.Context, transaction *sql.Tx, table, parent
 			if !existing[value.ID] || seen[value.ID] {
 				return nil, fmt.Errorf("invalid section ID %d", value.ID)
 			}
+
 			if _, err := transaction.ExecContext(ctx, fmt.Sprintf("UPDATE %s SET content = ?, sort_order = ? WHERE id = ? AND %s = ?", table, parentColumn), value.Content, index, value.ID, parentID); err != nil {
 				return nil, err
 			}
 		}
+
 		seen[value.ID] = true
 	}
+
 	return values, deleteUnseenSections(ctx, transaction, table, existing, seen)
 }
 
@@ -171,6 +197,7 @@ func reconcileResumeLinks(ctx context.Context, transaction *sql.Tx, resumeID int
 	if err != nil {
 		return nil, err
 	}
+
 	seen := make(map[int64]bool, len(values))
 	for index := range values {
 		value := &values[index]
@@ -179,6 +206,7 @@ func reconcileResumeLinks(ctx context.Context, transaction *sql.Tx, resumeID int
 			if err != nil {
 				return nil, err
 			}
+
 			value.ID, err = result.LastInsertId()
 			if err != nil {
 				return nil, err
@@ -188,8 +216,10 @@ func reconcileResumeLinks(ctx context.Context, transaction *sql.Tx, resumeID int
 		} else if _, err := transaction.ExecContext(ctx, `UPDATE resume_links SET label = ?, url = ?, sort_order = ? WHERE id = ? AND resume_id = ?`, value.Label, value.URL, index, value.ID, resumeID); err != nil {
 			return nil, err
 		}
+
 		seen[value.ID] = true
 	}
+
 	return values, deleteUnseenSections(ctx, transaction, "resume_links", existing, seen)
 }
 
@@ -198,6 +228,7 @@ func reconcileResumeSkills(ctx context.Context, transaction *sql.Tx, resumeID in
 	if err != nil {
 		return nil, err
 	}
+
 	seen := make(map[int64]bool, len(values))
 	for index := range values {
 		value := &values[index]
@@ -206,6 +237,7 @@ func reconcileResumeSkills(ctx context.Context, transaction *sql.Tx, resumeID in
 			if err != nil {
 				return nil, err
 			}
+
 			value.ID, err = result.LastInsertId()
 			if err != nil {
 				return nil, err
@@ -215,8 +247,10 @@ func reconcileResumeSkills(ctx context.Context, transaction *sql.Tx, resumeID in
 		} else if _, err := transaction.ExecContext(ctx, `UPDATE resume_skills SET name = ?, sort_order = ? WHERE id = ? AND resume_id = ?`, value.Name, index, value.ID, resumeID); err != nil {
 			return nil, err
 		}
+
 		seen[value.ID] = true
 	}
+
 	return values, deleteUnseenSections(ctx, transaction, "resume_skills", existing, seen)
 }
 
@@ -225,6 +259,7 @@ func reconcileResumeExperience(ctx context.Context, transaction *sql.Tx, resumeI
 	if err != nil {
 		return nil, err
 	}
+
 	seen := make(map[int64]bool, len(values))
 	for index := range values {
 		value := &values[index]
@@ -233,6 +268,7 @@ func reconcileResumeExperience(ctx context.Context, transaction *sql.Tx, resumeI
 			if err != nil {
 				return nil, err
 			}
+
 			value.ID, err = result.LastInsertId()
 			if err != nil {
 				return nil, err
@@ -242,13 +278,16 @@ func reconcileResumeExperience(ctx context.Context, transaction *sql.Tx, resumeI
 		} else if _, err := transaction.ExecContext(ctx, `UPDATE resume_experience SET company = ?, title = ?, location = ?, start_date = ?, end_date = ?, is_current = ?, stack = ?, sort_order = ? WHERE id = ? AND resume_id = ?`, value.Company, value.Title, value.Location, value.StartDate, value.EndDate, value.IsCurrent, value.Stack, index, value.ID, resumeID); err != nil {
 			return nil, err
 		}
+
 		var bulletErr error
 		value.Bullets, bulletErr = reconcileResumeText(ctx, transaction, "resume_experience_bullets", "experience_id", value.ID, value.Bullets)
 		if bulletErr != nil {
 			return nil, bulletErr
 		}
+
 		seen[value.ID] = true
 	}
+
 	return values, deleteUnseenSections(ctx, transaction, "resume_experience", existing, seen)
 }
 
@@ -257,6 +296,7 @@ func reconcileResumeEducation(ctx context.Context, transaction *sql.Tx, resumeID
 	if err != nil {
 		return nil, err
 	}
+
 	seen := make(map[int64]bool, len(values))
 	for index := range values {
 		value := &values[index]
@@ -265,6 +305,7 @@ func reconcileResumeEducation(ctx context.Context, transaction *sql.Tx, resumeID
 			if err != nil {
 				return nil, err
 			}
+
 			value.ID, err = result.LastInsertId()
 			if err != nil {
 				return nil, err
@@ -274,8 +315,10 @@ func reconcileResumeEducation(ctx context.Context, transaction *sql.Tx, resumeID
 		} else if _, err := transaction.ExecContext(ctx, `UPDATE resume_education SET institution = ?, location = ?, degree = ?, field_of_study = ?, start_date = ?, end_date = ?, details = ?, sort_order = ? WHERE id = ? AND resume_id = ?`, value.Institution, value.Location, value.Degree, value.FieldOfStudy, value.StartDate, value.EndDate, value.Details, index, value.ID, resumeID); err != nil {
 			return nil, err
 		}
+
 		seen[value.ID] = true
 	}
+
 	return values, deleteUnseenSections(ctx, transaction, "resume_education", existing, seen)
 }
 
@@ -291,8 +334,10 @@ func sectionIDs(ctx context.Context, transaction *sql.Tx, table, parentColumn st
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
+
 		ids[id] = true
 	}
+
 	return ids, rows.Err()
 }
 
@@ -304,6 +349,7 @@ func deleteUnseenSections(ctx context.Context, transaction *sql.Tx, table string
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -319,11 +365,14 @@ func readResumeSummaryParagraphs(ctx context.Context, database *sql.DB, resumeID
 		if err := rows.Scan(&paragraph.ID, &paragraph.Content); err != nil {
 			return nil, fmt.Errorf("scan base resume summary paragraph: %w", err)
 		}
+
 		paragraphs = append(paragraphs, paragraph)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate base resume summary paragraphs: %w", err)
 	}
+
 	return paragraphs, nil
 }
 
@@ -339,8 +388,10 @@ func readResumeLinks(ctx context.Context, database *sql.DB, resumeID int64) ([]m
 		if err := rows.Scan(&link.ID, &link.Label, &link.URL); err != nil {
 			return nil, fmt.Errorf("scan base resume link: %w", err)
 		}
+
 		links = append(links, link)
 	}
+
 	return links, rows.Err()
 }
 
@@ -356,8 +407,10 @@ func readResumeSkills(ctx context.Context, database *sql.DB, resumeID int64) ([]
 		if err := rows.Scan(&skill.ID, &skill.Name); err != nil {
 			return nil, fmt.Errorf("scan base resume skill: %w", err)
 		}
+
 		skills = append(skills, skill)
 	}
+
 	return skills, rows.Err()
 }
 
@@ -368,6 +421,7 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 	if err != nil {
 		return nil, fmt.Errorf("get base resume experience: %w", err)
 	}
+
 	type experienceRow struct {
 		id    int64
 		entry models.ResumeExperience
@@ -379,12 +433,15 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 			rows.Close()
 			return nil, fmt.Errorf("scan base resume experience: %w", err)
 		}
+
 		stored = append(stored, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return nil, fmt.Errorf("iterate base resume experience: %w", err)
 	}
+
 	rows.Close()
 
 	experience := make([]models.ResumeExperience, 0, len(stored))
@@ -393,6 +450,7 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 		if err != nil {
 			return nil, fmt.Errorf("get base resume experience bullets: %w", err)
 		}
+
 		entry := row.entry
 		entry.ID = row.id
 		entry.Bullets = make([]models.ResumeText, 0)
@@ -402,15 +460,19 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 				bulletRows.Close()
 				return nil, fmt.Errorf("scan base resume experience bullet: %w", err)
 			}
+
 			entry.Bullets = append(entry.Bullets, bullet)
 		}
+
 		if err := bulletRows.Err(); err != nil {
 			bulletRows.Close()
 			return nil, fmt.Errorf("iterate base resume experience bullets: %w", err)
 		}
+
 		bulletRows.Close()
 		experience = append(experience, entry)
 	}
+
 	return experience, nil
 }
 
@@ -428,10 +490,13 @@ func readResumeEducation(ctx context.Context, database *sql.DB, resumeID int64) 
 		if err := rows.Scan(&entry.ID, &entry.Institution, &entry.Location, &entry.Degree, &entry.FieldOfStudy, &entry.StartDate, &entry.EndDate, &entry.Details); err != nil {
 			return nil, fmt.Errorf("scan base resume education: %w", err)
 		}
+
 		education = append(education, entry)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate base resume education: %w", err)
 	}
+
 	return education, nil
 }

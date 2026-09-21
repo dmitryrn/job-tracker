@@ -37,6 +37,7 @@ changing a unit definition. Read recent service logs with
 - prefer narrow function parameters over passing whole structs when only a few fields are used
 - tests should assert behavior, not log output
 - run tests, build after making code changes
+- use `task wsl-fix` for `wsl_v5` auto-fixes the same way you would use `gofmt` for formatting cleanup
 - verify Go builds with `go build -o /dev/null ./cmd/server` to avoid build artifacts
 - live analyzer fixtures may use available free OpenRouter models; authentication loads from `.env.tokens` at runtime
 - when restarting a service, make sure it works, check logs, etc

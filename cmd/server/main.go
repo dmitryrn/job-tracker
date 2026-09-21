@@ -116,6 +116,7 @@ func newJobAnalyzer(clients completionClients, cfg config.Config) (*services.Job
 	if err != nil {
 		return nil, fmt.Errorf("select job analysis client: %w", err)
 	}
+
 	return services.NewJobAnalyzer(client, cfg.JobAnalysis.Model, cfg.JobAnalysis.ReasoningEffort), nil
 }
 
@@ -128,6 +129,7 @@ func newCustomJobImporter(clients completionClients, cfg config.Config) (*servic
 	if err != nil {
 		return nil, fmt.Errorf("select custom job import client: %w", err)
 	}
+
 	return services.NewCustomJobImporter(services.NewHTTPJobPageFetcher(), client, cfg.CustomJobImport.Model, cfg.CustomJobImport.ReasoningEffort), nil
 }
 
@@ -140,6 +142,7 @@ func newProfileJobMatcher(clients completionClients, cfg config.Config) (service
 	if err != nil {
 		return nil, fmt.Errorf("select profile matcher client: %w", err)
 	}
+
 	return services.NewLLMProfileJobMatcher(client, cfg.ProfileMatcher.Model, cfg.ProfileMatcher.ReasoningEffort), nil
 }
 
@@ -148,6 +151,7 @@ func newJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMa
 	if err != nil {
 		return nil, fmt.Errorf("select job chat client: %w", err)
 	}
+
 	return services.NewJobMatchChat(jobs, matches, items, profiles, resumes, client, cfg.JobChat.Model, cfg.JobChat.ReasoningEffort, logger), nil
 }
 
@@ -178,12 +182,14 @@ func registerLifecycle(
 			if err := eventWriter.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.started", Level: "info", Message: "Application started"}); err != nil {
 				logger.Error("record application start event failed", zap.Error(err))
 			}
+
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			if eventErr := eventWriter.RecordEvent(ctx, models.Event{Provider: "application", Type: "application.stopped", Level: "info", Message: "Application stopped"}); eventErr != nil {
 				logger.Error("record application stop event failed", zap.Error(eventErr))
 			}
+
 			return nil
 		},
 	})
@@ -203,15 +209,18 @@ func openDatabase(cfg config.Config, logger *zap.Logger) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
+
 	if err := migrations.Apply(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
+
 	logger.Info("database migrations applied", zap.String("path", cfg.DatabasePath))
 	return db, nil
 }

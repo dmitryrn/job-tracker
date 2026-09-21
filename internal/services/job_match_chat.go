@@ -103,8 +103,10 @@ func resumePatchOperationSummaries(operations []resumePatchOperation) []string {
 		if operation.ParentID != 0 {
 			summary += fmt.Sprintf("(parent:%d)", operation.ParentID)
 		}
+
 		summaries = append(summaries, summary)
 	}
+
 	return summaries
 }
 
@@ -112,15 +114,19 @@ func resumePatchAvailableIDs(resume models.Resume) (summary, skills, experiences
 	for _, value := range resume.SummaryParagraphs {
 		summary = append(summary, value.ID)
 	}
+
 	for _, value := range resume.Skills {
 		skills = append(skills, value.ID)
 	}
+
 	for _, value := range resume.Experience {
 		experiences = append(experiences, value.ID)
 	}
+
 	for _, value := range resume.Education {
 		education = append(education, value.ID)
 	}
+
 	return summary, skills, experiences, education
 }
 
@@ -169,6 +175,7 @@ func (service *JobMatchChat) Shutdown(ctx context.Context) error {
 	for _, turn := range service.active {
 		turns = append(turns, turn)
 	}
+
 	service.activeMu.Unlock()
 	for _, turn := range turns {
 		select {
@@ -177,6 +184,7 @@ func (service *JobMatchChat) Shutdown(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+
 	return nil
 }
 
@@ -189,17 +197,21 @@ func (service *JobMatchChat) LatestResume(ctx context.Context, jobID int64) (*mo
 	if err != nil {
 		return nil, fmt.Errorf("load application resume revisions: %w", err)
 	}
+
 	latest, err := latestResumeRevision(items)
 	if err != nil {
 		return nil, fmt.Errorf("load latest application resume revision: %w", err)
 	}
+
 	base, err := service.resumes.Resume(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load base resume for application download: %w", err)
 	}
+
 	if base == nil {
 		return nil, ErrResumeNotFound
 	}
+
 	resume := applicationResumeForDownload(*base, latest.Resume)
 	return &resume, nil
 }
@@ -210,6 +222,7 @@ func (service *JobMatchChat) Subscribe(jobID int64) (<-chan JobMatchChatUpdate, 
 	if service.subscribers[jobID] == nil {
 		service.subscribers[jobID] = make(map[chan JobMatchChatUpdate]struct{})
 	}
+
 	service.subscribers[jobID][updates] = struct{}{}
 	service.activeMu.Unlock()
 	return updates, func() {
@@ -218,6 +231,7 @@ func (service *JobMatchChat) Subscribe(jobID int64) (<-chan JobMatchChatUpdate, 
 		if len(service.subscribers[jobID]) == 0 {
 			delete(service.subscribers, jobID)
 		}
+
 		service.activeMu.Unlock()
 	}
 }
@@ -227,10 +241,12 @@ func (service *JobMatchChat) Send(ctx context.Context, jobID int64, content, req
 	if content == "" {
 		return models.JobMatchChatItem{}, ErrEmptyJobMatchChatMessage
 	}
+
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return models.JobMatchChatItem{}, ErrMissingJobMatchChatRequestID
 	}
+
 	unlock := service.lockJob(jobID)
 	defer unlock()
 
@@ -238,26 +254,33 @@ func (service *JobMatchChat) Send(ctx context.Context, jobID int64, content, req
 	if err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("load existing user chat item: %w", err)
 	}
+
 	if existing != nil {
 		return *existing, nil
 	}
+
 	if service.turn(jobID) != nil {
 		return models.JobMatchChatItem{}, ErrJobMatchChatTurnActive
 	}
+
 	if err := service.ensureInitialItems(ctx, jobID); err != nil {
 		return models.JobMatchChatItem{}, err
 	}
+
 	history, err := service.items.JobMatchChatItems(ctx, jobID, 0)
 	if err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("load job match chat history: %w", err)
 	}
+
 	if unansweredUserMessage(history) {
 		return models.JobMatchChatItem{}, ErrJobMatchChatUnansweredMessage
 	}
+
 	user, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "user_message", RequestID: requestID, Payload: payload(map[string]string{"content": content})})
 	if err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("save user chat item: %w", err)
 	}
+
 	turnContext, cancel := context.WithCancel(service.rootContext)
 	turn := &jobMatchChatTurn{requestID: requestID, cancel: cancel, done: make(chan struct{})}
 	service.activeMu.Lock()
@@ -274,6 +297,7 @@ func (service *JobMatchChat) Stop(jobID int64, requestID string) bool {
 	if turn == nil || turn.requestID != requestID {
 		return false
 	}
+
 	turn.cancel()
 	return true
 }
@@ -290,29 +314,35 @@ func (service *JobMatchChat) Revert(ctx context.Context, jobID, sequence int64) 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+
 		service.cancelTurnAndWait(ctx, jobID)
 		unlock := service.lockJob(jobID)
 		if service.turn(jobID) != nil {
 			unlock()
 			continue
 		}
+
 		items, err := service.items.JobMatchChatItems(ctx, jobID, sequence-1)
 		if err != nil {
 			unlock()
 			return fmt.Errorf("load user chat item to revert: %w", err)
 		}
+
 		if len(items) == 0 || items[0].Sequence != sequence || items[0].Type != "user_message" {
 			unlock()
 			return ErrJobMatchChatUserMessageNotFound
 		}
+
 		deleted, err := service.items.DeleteJobMatchChatItemsFrom(ctx, jobID, sequence)
 		unlock()
 		if err != nil {
 			return fmt.Errorf("delete chat items to revert: %w", err)
 		}
+
 		if !deleted {
 			return ErrJobMatchChatUserMessageNotFound
 		}
+
 		service.publish(jobID, JobMatchChatUpdate{Reset: true})
 		return nil
 	}
@@ -323,34 +353,43 @@ func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64
 	if err != nil {
 		return fmt.Errorf("load initial chat items: %w", err)
 	}
+
 	if len(items) > 0 {
 		return nil
 	}
+
 	match, err := service.matches.JobMatch(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("load current job match: %w", err)
 	}
+
 	if match == nil {
 		return ErrJobMatchChatUnavailable
 	}
+
 	job, err := service.jobs.Job(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("load job for chat: %w", err)
 	}
+
 	if job == nil {
 		return fmt.Errorf("load job for chat: job %d not found", jobID)
 	}
+
 	profile, err := service.profiles.UserProfile(ctx)
 	if err != nil {
 		return fmt.Errorf("load profile for chat: %w", err)
 	}
+
 	resume, err := service.resumes.Resume(ctx)
 	if err != nil {
 		return fmt.Errorf("load base resume for chat: %w", err)
 	}
+
 	if resume == nil {
 		return fmt.Errorf("load base resume for chat: no resume found")
 	}
+
 	for _, item := range []models.JobMatchChatItem{
 		{JobID: jobID, Type: "initial_instructions", Payload: payload(map[string]string{"content": jobMatchChatInstructions})},
 		{JobID: jobID, Type: "initial_context", Payload: payload(jobMatchChatInitialContext{Job: job, Match: match, Profile: profile})},
@@ -361,6 +400,7 @@ func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64
 			return fmt.Errorf("save initial chat item: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -371,6 +411,7 @@ func (service *JobMatchChat) runTurn(ctx context.Context, jobID int64, requestID
 		if service.active[jobID] == turn {
 			delete(service.active, jobID)
 		}
+
 		service.activeMu.Unlock()
 	}()
 
@@ -380,6 +421,7 @@ func (service *JobMatchChat) runTurn(ctx context.Context, jobID int64, requestID
 		service.logger.Error("job match chat turn failed", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Error(err))
 		return
 	}
+
 	service.logger.Info("job match chat turn completed", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
 }
 
@@ -388,17 +430,21 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 	if err != nil {
 		return fmt.Errorf("load turn history: %w", err)
 	}
+
 	current, err := latestResumeRevision(history)
 	if err != nil {
 		return fmt.Errorf("load current application resume revision: %w", err)
 	}
+
 	baseResume, err := service.resumes.Resume(ctx)
 	if err != nil {
 		return fmt.Errorf("load base resume for chat: %w", err)
 	}
+
 	if baseResume == nil {
 		return ErrResumeNotFound
 	}
+
 	sessionID := newLLMSessionID()
 	patchAttempts := 0
 	for {
@@ -407,13 +453,16 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
 			return nil
 		}
+
 		request, err := providerRequest(history, service.reasoning, baseResume.Country)
 		if err != nil {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("assemble provider request: %w", err))
 		}
+
 		if _, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "provider_request", RequestID: requestID, Payload: payload(map[string]any{"model": service.model, "reasoningEffort": service.reasoning, "messageCount": len(request.Messages)})}); err != nil {
 			return fmt.Errorf("record provider request: %w", err)
 		}
+
 		response, err := service.client.Complete(ctx, service.model, sessionID, request)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -421,41 +470,51 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 				service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
 				return nil
 			}
+
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("complete job match chat: %w", err))
 		}
+
 		responseItem, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "provider_response", RequestID: requestID, Payload: payload(map[string]any{"model": response.Model, "finishReason": response.FinishReason, "refusal": response.Refusal, "usage": rawJSON(response.Usage), "providerMetadata": rawJSON(response.ProviderMetadata)})})
 		if err != nil {
 			return fmt.Errorf("record provider response: %w", err)
 		}
+
 		history = append(history, responseItem)
 		if response.ReasoningSummary != "" || len(response.Reasoning) > 0 {
 			reasoning, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_reasoning", RequestID: requestID, Payload: payload(map[string]any{"summary": response.ReasoningSummary, "compatibility": rawJSON(response.Reasoning)})})
 			if err != nil {
 				return fmt.Errorf("record assistant reasoning: %w", err)
 			}
+
 			history = append(history, reasoning)
 		}
+
 		if len(response.ToolCalls) == 0 {
 			content := strings.TrimSpace(response.Content)
 			if content == "" {
 				return service.recordFailure(ctx, jobID, requestID, errors.New("provider returned no assistant message"))
 			}
+
 			assistant, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_message", RequestID: requestID, Payload: payload(map[string]string{"content": content})})
 			if err != nil {
 				return fmt.Errorf("record assistant message: %w", err)
 			}
+
 			history = append(history, assistant)
 			service.recordTerminal(ctx, jobID, requestID, "turn_completed", "assistant reply completed")
 			return nil
 		}
+
 		if len(response.ToolCalls) != 1 {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("provider returned %d tool calls; exactly one is supported", len(response.ToolCalls)))
 		}
+
 		toolCall := response.ToolCalls[0]
 		toolItem, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_tool_call", RequestID: requestID, Payload: payload(toolCall)})
 		if err != nil {
 			return fmt.Errorf("record assistant tool call: %w", err)
 		}
+
 		history = append(history, toolItem)
 		patchAttempts++
 		service.logger.Info("job match resume patch received",
@@ -470,15 +529,18 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 		if toolCall.Type != "function" || toolCall.Function.Name != resumePatchTool.Function.Name {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
 		}
+
 		var patch resumePatch
 		err = json.Unmarshal([]byte(toolCall.Function.Arguments), &patch)
 		if err == nil && patch.BaseRevision != current.Revision {
 			err = fmt.Errorf("patch was based on revision %d, but the current revision is %d", patch.BaseRevision, current.Revision)
 		}
+
 		updated := cloneResume(current.Resume)
 		if err == nil {
 			err = applyResumePatch(&updated, patch)
 		}
+
 		if err != nil {
 			summaryIDs, skillIDs, experienceIDs, educationIDs := resumePatchAvailableIDs(current.Resume)
 			service.logger.Warn("job match resume patch rejected",
@@ -500,6 +562,7 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			if resultErr != nil {
 				return fmt.Errorf("record rejected tool result: %w", resultErr)
 			}
+
 			history = append(history, result)
 			if patchAttempts >= resumePatchAttempts {
 				service.logger.Error("job match resume patch retries exhausted",
@@ -513,6 +576,7 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 				service.recordTerminal(ctx, jobID, requestID, "turn_halted", "resume patch retry limit reached")
 				return nil
 			}
+
 			service.logger.Info("job match resume patch retrying",
 				zap.Int64("job_id", jobID),
 				zap.String("request_id", requestID),
@@ -524,9 +588,11 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			if retryErr != nil {
 				return fmt.Errorf("record patch retry: %w", retryErr)
 			}
+
 			history = append(history, retry)
 			continue
 		}
+
 		service.logger.Info("job match resume patch accepted",
 			zap.Int64("job_id", jobID),
 			zap.String("request_id", requestID),
@@ -540,6 +606,7 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 		if err != nil {
 			return fmt.Errorf("record accepted tool result: %w", err)
 		}
+
 		history = append(history, result)
 		current = resumeRevisionPayload{Revision: current.Revision + 1, Resume: updated}
 	}
@@ -618,6 +685,7 @@ func providerRequest(items []models.JobMatchChatItem, reasoning, country string)
 	if err != nil {
 		return request, err
 	}
+
 	for _, item := range items {
 		switch item.Type {
 		case "initial_instructions":
@@ -627,18 +695,21 @@ func providerRequest(items []models.JobMatchChatItem, reasoning, country string)
 			if err := json.Unmarshal(item.Payload, &value); err != nil {
 				return request, err
 			}
+
 			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: value.Content})
 		case "initial_context":
 			content, err := redactedInitialContext(item.Payload)
 			if err != nil {
 				return request, err
 			}
+
 			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Immutable application context:\n" + content})
 		case "resume_revision":
 			content, err := redactedResumeRevision(item.Payload, country)
 			if err != nil {
 				return request, err
 			}
+
 			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Application resume revision 0:\n" + content})
 		case "user_message", "assistant_message":
 			var value struct {
@@ -647,29 +718,35 @@ func providerRequest(items []models.JobMatchChatItem, reasoning, country string)
 			if err := json.Unmarshal(item.Payload, &value); err != nil {
 				return request, err
 			}
+
 			role := "user"
 			if item.Type == "assistant_message" {
 				role = "assistant"
 			}
+
 			request.Messages = append(request.Messages, openai.Message{Role: role, Content: value.Content})
 		case "assistant_tool_call":
 			var call openai.ToolCall
 			if err := json.Unmarshal(item.Payload, &call); err != nil {
 				return request, err
 			}
+
 			request.Messages = append(request.Messages, openai.Message{Role: "assistant", ToolCalls: []openai.ToolCall{call}})
 		case "tool_result":
 			var result toolResultPayload
 			if err := json.Unmarshal(item.Payload, &result); err != nil {
 				return request, err
 			}
+
 			content, err := redactedToolResult(item.Payload, country)
 			if err != nil {
 				return request, err
 			}
+
 			request.Messages = append(request.Messages, openai.Message{Role: "tool", ToolCallID: result.ToolCallID, Content: content})
 		}
 	}
+
 	redactProviderRequest(&request, redactions)
 	return request, nil
 }
@@ -683,6 +760,7 @@ func chatRedactionValues(items []models.JobMatchChatItem) ([]string, error) {
 			if err := json.Unmarshal(item.Payload, &context); err != nil {
 				return nil, err
 			}
+
 			if context.Profile != nil {
 				values = appendUserProfileRedactionValues(values, *context.Profile)
 			}
@@ -691,12 +769,14 @@ func chatRedactionValues(items []models.JobMatchChatItem) ([]string, error) {
 			if err := json.Unmarshal(item.Payload, &revision); err != nil {
 				return nil, err
 			}
+
 			values = appendResumeRedactionValues(values, revision.Resume)
 		case "tool_result":
 			var result toolResultPayload
 			if err := json.Unmarshal(item.Payload, &result); err != nil {
 				return nil, err
 			}
+
 			if result.Resume != nil {
 				values = appendResumeRedactionValues(values, *result.Resume)
 			}
@@ -713,10 +793,12 @@ func normalizedRedactionValues(values []string) []string {
 			unique[value] = struct{}{}
 		}
 	}
+
 	values = values[:0]
 	for value := range unique {
 		values = append(values, value)
 	}
+
 	sort.Slice(values, func(i, j int) bool { return len(values[i]) > len(values[j]) })
 	return values
 }
@@ -726,9 +808,11 @@ func appendResumeRedactionValues(values []string, resume models.Resume) []string
 	for _, experience := range resume.Experience {
 		values = append(values, experience.Location)
 	}
+
 	for _, education := range resume.Education {
 		values = append(values, education.Institution, education.Location)
 	}
+
 	return values
 }
 
@@ -736,6 +820,7 @@ func appendUserProfileRedactionValues(values []string, profile models.UserProfil
 	for _, education := range profile.Education {
 		values = append(values, education.Institution)
 	}
+
 	return values
 }
 
@@ -744,11 +829,13 @@ func redactedInitialContext(payload json.RawMessage) (string, error) {
 	if err := json.Unmarshal(payload, &context); err != nil {
 		return "", err
 	}
+
 	chatContext := chatInitialContext{Job: context.Job, Match: context.Match}
 	if context.Profile != nil {
 		profile := profileForLLM(*context.Profile)
 		chatContext.Profile = &profile
 	}
+
 	return marshalChatPayload(chatContext)
 }
 
@@ -757,6 +844,7 @@ func redactedResumeRevision(payload json.RawMessage, country string) (string, er
 	if err := json.Unmarshal(payload, &revision); err != nil {
 		return "", err
 	}
+
 	return marshalChatPayload(chatResumeRevisionPayload{Revision: revision.Revision, Resume: chatResumeForLLM(revision.Resume, country)})
 }
 
@@ -765,10 +853,12 @@ func redactedToolResult(payload json.RawMessage, country string) (string, error)
 	if err := json.Unmarshal(payload, &result); err != nil {
 		return "", err
 	}
+
 	if result.Resume != nil {
 		resume := chatResumeForLLM(*result.Resume, country)
 		return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision, Resume: &resume})
 	}
+
 	return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision})
 }
 
@@ -777,6 +867,7 @@ func marshalChatPayload(value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return string(payload), nil
 }
 
@@ -792,9 +883,11 @@ func chatResumeForLLM(resume models.Resume, country string) chatResume {
 	for _, experience := range resume.Experience {
 		chat.Experience = append(chat.Experience, chatResumeExperience{ID: experience.ID, Company: experience.Company, Title: experience.Title, StartDate: experience.StartDate, EndDate: experience.EndDate, IsCurrent: experience.IsCurrent, Stack: experience.Stack, Bullets: experience.Bullets})
 	}
+
 	for _, education := range resume.Education {
 		chat.Education = append(chat.Education, chatResumeEducation{ID: education.ID, Degree: education.Degree, FieldOfStudy: education.FieldOfStudy, StartDate: education.StartDate, EndDate: education.EndDate, Details: education.Details})
 	}
+
 	return chat
 }
 
@@ -816,6 +909,7 @@ func redactSensitiveText(text string, values []string) string {
 			text = strings.ReplaceAll(text, string(encoded[1:len(encoded)-1]), "")
 		}
 	}
+
 	return text
 }
 
@@ -827,22 +921,27 @@ func latestResumeRevision(items []models.JobMatchChatItem) (resumeRevisionPayloa
 			if err := json.Unmarshal(item.Payload, &current); err != nil {
 				return current, err
 			}
+
 			found = true
 		}
+
 		if item.Type == "tool_result" {
 			var result toolResultPayload
 			if err := json.Unmarshal(item.Payload, &result); err != nil {
 				return current, err
 			}
+
 			if result.Status == "accepted" && result.Resume != nil {
 				current = resumeRevisionPayload{Revision: result.Revision, Resume: *result.Resume}
 				found = true
 			}
 		}
 	}
+
 	if !found {
 		return current, ErrApplicationResumeNotFound
 	}
+
 	return current, nil
 }
 
@@ -860,10 +959,12 @@ func applicationResumeSnapshot(resume models.Resume) models.Resume {
 	for index := range snapshot.Experience {
 		snapshot.Experience[index].Location = ""
 	}
+
 	for index := range snapshot.Education {
 		snapshot.Education[index].Institution = ""
 		snapshot.Education[index].Location = ""
 	}
+
 	return snapshot
 }
 
@@ -876,6 +977,7 @@ func cloneResume(resume models.Resume) models.Resume {
 	for index := range clone.Experience {
 		clone.Experience[index].Bullets = append([]models.ResumeText(nil), resume.Experience[index].Bullets...)
 	}
+
 	clone.Education = append([]models.ResumeEducation(nil), resume.Education...)
 	return clone
 }
@@ -896,20 +998,24 @@ func applicationResumeForDownload(base, revision models.Resume) models.Resume {
 	for _, experience := range base.Experience {
 		baseExperience[experience.ID] = experience.Location
 	}
+
 	for index := range resume.Experience {
 		resume.Experience[index].Location = baseExperience[resume.Experience[index].ID]
 	}
+
 	resume.Education = append([]models.ResumeEducation(nil), revision.Education...)
 	baseEducation := make(map[int64]models.ResumeEducation, len(base.Education))
 	for _, education := range base.Education {
 		baseEducation[education.ID] = education
 	}
+
 	for index := range resume.Education {
 		if education, ok := baseEducation[resume.Education[index].ID]; ok {
 			resume.Education[index].Institution = education.Institution
 			resume.Education[index].Location = education.Location
 		}
 	}
+
 	return resume
 }
 
@@ -920,6 +1026,7 @@ func unansweredUserMessage(items []models.JobMatchChatItem) bool {
 			last = item.Type
 		}
 	}
+
 	return last == "user_message"
 }
 
@@ -928,6 +1035,7 @@ func rawJSON(value json.RawMessage) any {
 	if len(value) == 0 {
 		return nil
 	}
+
 	return json.RawMessage(value)
 }
 
@@ -936,6 +1044,7 @@ func (service *JobMatchChat) append(ctx context.Context, item models.JobMatchCha
 	if err == nil {
 		service.publish(created.JobID, JobMatchChatUpdate{Item: &created})
 	}
+
 	return created, err
 }
 
@@ -963,6 +1072,7 @@ func (service *JobMatchChat) cancelTurnAndWait(ctx context.Context, jobID int64)
 	if turn == nil {
 		return
 	}
+
 	turn.cancel()
 	select {
 	case <-turn.done:
@@ -972,8 +1082,9 @@ func (service *JobMatchChat) cancelTurnAndWait(ctx context.Context, jobID int64)
 
 func (service *JobMatchChat) recordFailure(ctx context.Context, jobID int64, requestID string, err error) error {
 	if _, recordErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "turn_error", RequestID: requestID, Payload: payload(map[string]string{"error": err.Error()})}); recordErr != nil {
-		return fmt.Errorf("%w; record turn error: %v", err, recordErr)
+		return fmt.Errorf("%w; record turn error: %w", err, recordErr)
 	}
+
 	service.recordTerminal(ctx, jobID, requestID, "turn_halted", "provider turn failed")
 	return err
 }
@@ -988,6 +1099,7 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 	if len(patch.Operations) == 0 {
 		return errors.New("patch must include at least one operation")
 	}
+
 	for _, operation := range patch.Operations {
 		value := strings.TrimSpace(operation.Value)
 		expected := strings.TrimSpace(operation.Expected)
@@ -996,6 +1108,7 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			if operation.Op != "replace" || operation.ID != 0 || strings.TrimSpace(resume.Headline) != expected || value == "" {
 				return fmt.Errorf("headline replacement did not match current value (expected %q, current %q)", expected, strings.TrimSpace(resume.Headline))
 			}
+
 			resume.Headline = value
 		case "summary":
 			if err := patchResumeText(&resume.SummaryParagraphs, operation, value, expected); err != nil {
@@ -1010,6 +1123,7 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			if experience == nil {
 				return fmt.Errorf("experience %d does not exist", operation.ParentID)
 			}
+
 			if err := patchResumeText(&experience.Bullets, operation, value, expected); err != nil {
 				return fmt.Errorf("experience bullet patch: %w", err)
 			}
@@ -1018,13 +1132,16 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			if education == nil {
 				return fmt.Errorf("education ID %d does not exist", operation.ID)
 			}
+
 			if operation.ParentID != 0 {
 				return fmt.Errorf("education details must not have a parent ID (education ID %d, parent ID %d)", operation.ID, operation.ParentID)
 			}
+
 			current := strings.TrimSpace(education.Details)
 			if value == "" {
 				return fmt.Errorf("education details value must not be empty (education ID %d)", operation.ID)
 			}
+
 			switch operation.Op {
 			case "add":
 				if current != "" || expected != "" {
@@ -1037,11 +1154,13 @@ func applyResumePatch(resume *models.Resume, patch resumePatch) error {
 			default:
 				return fmt.Errorf("education details supports add for empty details or replace (education ID %d, op %q)", operation.ID, operation.Op)
 			}
+
 			education.Details = value
 		default:
 			return fmt.Errorf("unsupported patch section %q", operation.Section)
 		}
 	}
+
 	return nil
 }
 
@@ -1054,15 +1173,18 @@ func patchResumeText(values *[]models.ResumeText, operation resumePatchOperation
 				if current != expected || value == "" {
 					return fmt.Errorf("expected text did not match (text ID %d, expected %q, current %q)", operation.ID, expected, current)
 				}
+
 				(*values)[index].Content = value
 				return nil
 			}
 		}
+
 		return fmt.Errorf("text ID %d does not exist", operation.ID)
 	case "add":
 		if operation.ID != 0 || value == "" {
 			return errors.New("new text must have no ID and nonempty content")
 		}
+
 		*values = append(*values, models.ResumeText{ID: nextResumeTextID(*values), Content: value})
 		return nil
 	case "remove":
@@ -1071,10 +1193,12 @@ func patchResumeText(values *[]models.ResumeText, operation resumePatchOperation
 				if strings.TrimSpace((*values)[index].Content) != expected {
 					return errors.New("expected text did not match")
 				}
+
 				*values = append((*values)[:index], (*values)[index+1:]...)
 				return nil
 			}
 		}
+
 		return fmt.Errorf("text ID %d does not exist", operation.ID)
 	default:
 		return fmt.Errorf("unsupported operation %q", operation.Op)
@@ -1090,6 +1214,7 @@ func patchResumeSkill(values *[]models.ResumeSkill, operation resumePatchOperati
 				if current != expected || value == "" {
 					return fmt.Errorf("expected skill did not match (skill ID %d, expected %q, current %q)", operation.ID, expected, current)
 				}
+
 				(*values)[index].Name = value
 				return nil
 			}
@@ -1106,6 +1231,7 @@ func patchResumeSkill(values *[]models.ResumeSkill, operation resumePatchOperati
 				if current != expected {
 					return fmt.Errorf("expected skill did not match (skill ID %d, expected %q, current %q)", operation.ID, expected, current)
 				}
+
 				*values = append((*values)[:index], (*values)[index+1:]...)
 				return nil
 			}
@@ -1113,6 +1239,7 @@ func patchResumeSkill(values *[]models.ResumeSkill, operation resumePatchOperati
 	default:
 		return fmt.Errorf("unsupported operation %q", operation.Op)
 	}
+
 	return fmt.Errorf("skill ID %d does not exist", operation.ID)
 }
 
@@ -1122,6 +1249,7 @@ func findExperience(values []models.ResumeExperience, id int64) *models.ResumeEx
 			return &values[index]
 		}
 	}
+
 	return nil
 }
 
@@ -1131,6 +1259,7 @@ func findEducation(values []models.ResumeEducation, id int64) *models.ResumeEduc
 			return &values[index]
 		}
 	}
+
 	return nil
 }
 
@@ -1141,6 +1270,7 @@ func nextResumeTextID(values []models.ResumeText) int64 {
 			maximum = value.ID
 		}
 	}
+
 	return maximum + 1
 }
 
@@ -1151,5 +1281,6 @@ func nextResumeSkillID(values []models.ResumeSkill) int64 {
 			maximum = value.ID
 		}
 	}
+
 	return maximum + 1
 }

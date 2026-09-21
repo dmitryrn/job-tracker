@@ -226,6 +226,7 @@ func (client *fakeJobCompletionClient) Complete(_ context.Context, model, sessio
 	if len(client.responses) == 0 {
 		return client.response, client.err
 	}
+
 	response := client.responses[0]
 	client.responses = client.responses[1:]
 	return response, client.err

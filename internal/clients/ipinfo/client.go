@@ -41,6 +41,7 @@ func (c *Client) Lookup(ctx context.Context) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
+
 	request.Header.Set("Accept", "application/json")
 	httpResponse, err := c.http.Do(request)
 	if err != nil {
@@ -52,6 +53,7 @@ func (c *Client) Lookup(ctx context.Context) (Info, error) {
 		if readErr != nil {
 			return Info{}, fmt.Errorf("IPinfo returned %s", httpResponse.Status)
 		}
+
 		return Info{}, fmt.Errorf("IPinfo returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
 	}
 
@@ -59,9 +61,11 @@ func (c *Client) Lookup(ctx context.Context) (Info, error) {
 	if err := json.NewDecoder(httpResponse.Body).Decode(&info); err != nil {
 		return Info{}, err
 	}
+
 	info.Country = strings.ToUpper(strings.TrimSpace(info.Country))
 	if info.Country == "" {
 		return Info{}, fmt.Errorf("IPinfo response did not include a country code")
 	}
+
 	return info, nil
 }

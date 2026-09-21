@@ -15,5 +15,6 @@ func Apply(db *sql.DB) error {
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return err
 	}
+
 	return goose.Up(db, "sql")
 }

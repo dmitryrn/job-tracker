@@ -47,12 +47,15 @@ func NewClient(apiKey, baseURL, model string) (*Client, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("TypeSafe API key is required")
 	}
+
 	if baseURL == "" {
 		return nil, fmt.Errorf("TypeSafe API URL is required")
 	}
+
 	if model == "" {
 		return nil, fmt.Errorf("TypeSafe model is required")
 	}
+
 	return &Client{
 		apiKey:  apiKey,
 		http:    &http.Client{Timeout: 30 * time.Second},
@@ -75,6 +78,7 @@ func (client *Client) SystemOne(ctx context.Context, state any, questions map[st
 	if err != nil {
 		return Response{}, fmt.Errorf("create TypeSafe request: %w", err)
 	}
+
 	request.Header.Set("Authorization", "Bearer "+client.apiKey)
 	request.Header.Set("Content-Type", "application/json")
 
@@ -88,10 +92,12 @@ func (client *Client) SystemOne(ctx context.Context, state any, questions map[st
 	if err != nil {
 		return Response{}, fmt.Errorf("read TypeSafe response: %w", err)
 	}
+
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		if message := strings.TrimSpace(string(body)); message != "" {
 			return Response{}, fmt.Errorf("TypeSafe returned %s: %s", response.Status, message)
 		}
+
 		return Response{}, fmt.Errorf("TypeSafe returned %s", response.Status)
 	}
 
@@ -99,5 +105,6 @@ func (client *Client) SystemOne(ctx context.Context, state any, questions map[st
 	if err := json.Unmarshal(body, &result); err != nil {
 		return Response{}, fmt.Errorf("decode TypeSafe response: %w", err)
 	}
+
 	return result, nil
 }

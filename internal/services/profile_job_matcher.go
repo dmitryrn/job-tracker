@@ -61,6 +61,7 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 	if err != nil {
 		return ProfileJobMatch{}, fmt.Errorf("encode profile-job match input: %w", err)
 	}
+
 	input = []byte(redactSensitiveText(string(input), redactions))
 
 	temperature := 0.2
@@ -88,19 +89,23 @@ func (matcher *LLMProfileJobMatcher) Match(ctx context.Context, job models.Brows
 		if err == nil {
 			err = validateProfileJobMatch(&assessment)
 		}
+
 		if err == nil {
 			assessment.MatcherVersion = LLMProfileJobMatcherVersion
 			assessment.Model = response.Model
 			assessment.Label = matchScoreLabel(assessment.Score)
 			return ProfileJobMatch{Assessment: assessment, RetryMetadata: retries}, nil
 		}
+
 		retries.Rejections = append(retries.Rejections, llmResponseRejection(attempt, response.Model, err))
 		if attempt == validatedLLMResponseAttempts {
 			if !decoded {
 				return ProfileJobMatch{}, fmt.Errorf("decode profile-job match from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
 			}
+
 			return ProfileJobMatch{}, fmt.Errorf("validate profile-job match from %s: %w", response.Model, &llmResponseValidationError{metadata: retries, err: err})
 		}
+
 		request.Messages = correctedLLMMessages(request.Messages, response.Content, err)
 	}
 
@@ -117,10 +122,12 @@ func decodeProfileJobMatch(content string) (models.JobMatchAssessment, error) {
 	if start == -1 {
 		return models.JobMatchAssessment{}, fmt.Errorf("response does not contain a JSON object")
 	}
+
 	decoder := json.NewDecoder(strings.NewReader(content[start:]))
 	if err := decoder.Decode(&assessment); err != nil {
 		return models.JobMatchAssessment{}, err
 	}
+
 	return assessment, nil
 }
 
@@ -137,11 +144,13 @@ func validateProfileJobMatch(assessment *models.JobMatchAssessment) error {
 	if assessment.Score < 0 || assessment.Score > 100 {
 		return fmt.Errorf("score must be between 0 and 100")
 	}
+
 	assessment.Summary = strings.TrimSpace(assessment.Summary)
 	assessment.ApplicationAngle = strings.TrimSpace(assessment.ApplicationAngle)
 	if assessment.Summary == "" {
 		return fmt.Errorf("summary is required")
 	}
+
 	for _, values := range [][]string{assessment.Strengths, assessment.Gaps, assessment.Questions} {
 		for _, value := range values {
 			if strings.TrimSpace(value) == "" {
@@ -149,6 +158,7 @@ func validateProfileJobMatch(assessment *models.JobMatchAssessment) error {
 			}
 		}
 	}
+
 	return nil
 }
 

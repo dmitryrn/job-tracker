@@ -56,7 +56,7 @@ func TestLLMProfileJobMatcherRejectsInvalidScore(t *testing.T) {
 	}`}}
 
 	_, err := NewLLMProfileJobMatcher(client, "matcher-test-model", "high").Match(context.Background(), models.BrowseJob{}, models.JobAnalysisRecord{}, models.UserProfile{})
-	assert.ErrorContains(t, err, "score must be between 0 and 100")
+	require.ErrorContains(t, err, "score must be between 0 and 100")
 	assert.Len(t, client.requests, validatedLLMResponseAttempts)
 }
 
@@ -123,6 +123,7 @@ func TestLLMProfileJobMatcherOmitsInstitutionNames(t *testing.T) {
 	for _, sensitiveValue := range []string{"Riverside College"} {
 		assert.NotContains(t, string(providerPayload), sensitiveValue)
 	}
+
 	assert.Contains(t, string(providerPayload), "Cedar Systems")
 	assert.Contains(t, string(providerPayload), "Authorized to work in Canada")
 	assert.Equal(t, "Cedar Systems", profile.WorkHistory[0].Company)
@@ -166,6 +167,7 @@ func (client *recordingMatchCompletionClient) Complete(_ context.Context, model,
 	if len(client.responses) == 0 {
 		return client.response, client.err
 	}
+
 	response := client.responses[0]
 	client.responses = client.responses[1:]
 	return response, client.err

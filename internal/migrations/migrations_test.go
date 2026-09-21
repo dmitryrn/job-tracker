@@ -129,6 +129,7 @@ func TestSummaryParagraphMigrationPreservesExistingParagraphs(t *testing.T) {
 		require.NoError(t, rows.Scan(&paragraph))
 		paragraphs = append(paragraphs, paragraph)
 	}
+
 	require.NoError(t, rows.Err())
 	assert.Equal(t, []string{"First paragraph.", "Second paragraph."}, paragraphs)
 

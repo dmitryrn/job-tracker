@@ -71,23 +71,28 @@ func (c *Client) Fetch(ctx context.Context, settings models.JobicySearchSettings
 	if err != nil {
 		return nil, err
 	}
+
 	params := requestURL.Query()
 	params.Set("count", strconv.Itoa(settings.Count))
 	if settings.Geo != "" {
 		params.Set("geo", settings.Geo)
 	}
+
 	if settings.Industry != "" {
 		params.Set("industry", settings.Industry)
 	}
+
 	if settings.Tag != "" {
 		params.Set("tag", settings.Tag)
 	}
+
 	requestURL.RawQuery = params.Encode()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
+
 	request.Header.Set("Accept", "application/json")
 	httpResponse, err := c.http.Do(request)
 	if err != nil {
@@ -97,22 +102,26 @@ func (c *Client) Fetch(ctx context.Context, settings models.JobicySearchSettings
 	if httpResponse.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(io.LimitReader(httpResponse.Body, 4<<10))
 		if readErr != nil {
-			return nil, fmt.Errorf("Jobicy returned %s", httpResponse.Status)
+			return nil, fmt.Errorf("jobicy returned %s", httpResponse.Status)
 		}
-		return nil, fmt.Errorf("Jobicy returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
+
+		return nil, fmt.Errorf("jobicy returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
 	}
 
 	var result response
 	if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
 		return nil, err
 	}
+
 	jobs := make([]models.Job, 0, len(result.Jobs))
 	for _, item := range result.Jobs {
 		if industryName != "" && !matchesIndustry(item, industryName) {
 			continue
 		}
+
 		jobs = append(jobs, toModel(item))
 	}
+
 	return jobs, nil
 }
 
@@ -125,6 +134,7 @@ func (c *Client) industryName(ctx context.Context, industrySlug string) (string,
 	if err != nil {
 		return "", err
 	}
+
 	params := requestURL.Query()
 	params.Set("get", "industries")
 	requestURL.RawQuery = params.Encode()
@@ -133,6 +143,7 @@ func (c *Client) industryName(ctx context.Context, industrySlug string) (string,
 	if err != nil {
 		return "", err
 	}
+
 	request.Header.Set("Accept", "application/json")
 	httpResponse, err := c.http.Do(request)
 	if err != nil {
@@ -142,21 +153,24 @@ func (c *Client) industryName(ctx context.Context, industrySlug string) (string,
 	if httpResponse.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(io.LimitReader(httpResponse.Body, 4<<10))
 		if readErr != nil {
-			return "", fmt.Errorf("Jobicy returned %s", httpResponse.Status)
+			return "", fmt.Errorf("jobicy returned %s", httpResponse.Status)
 		}
-		return "", fmt.Errorf("Jobicy returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
+
+		return "", fmt.Errorf("jobicy returned %s: %s", httpResponse.Status, strings.TrimSpace(string(body)))
 	}
 
 	var result industriesResponse
 	if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
 		return "", err
 	}
+
 	for _, industry := range result.Industries {
 		if industry.Slug == industrySlug {
 			return industry.Name, nil
 		}
 	}
-	return "", fmt.Errorf("Jobicy industry %q was not found", industrySlug)
+
+	return "", fmt.Errorf("jobicy industry %q was not found", industrySlug)
 }
 
 func matchesIndustry(job job, industry string) bool {
@@ -165,6 +179,7 @@ func matchesIndustry(job job, industry string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -199,5 +214,6 @@ func parseTime(value string) string {
 	if err != nil {
 		return ""
 	}
+
 	return parsed.UTC().Format(time.RFC3339)
 }

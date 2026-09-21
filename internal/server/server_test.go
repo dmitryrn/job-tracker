@@ -768,10 +768,12 @@ func TestJobMatchChatCreatesApplicationResumeRevision(t *testing.T) {
 		if item.Type == "resume_revision" {
 			initial = item
 		}
+
 		if item.Type == "tool_result" {
 			accepted = item
 		}
 	}
+
 	var baseRevision struct {
 		Resume models.Resume `json:"resume"`
 	}
@@ -990,10 +992,12 @@ func waitForChatTurn(t *testing.T, repository *repositories.SQLite, jobID int64)
 		if err != nil {
 			return false
 		}
+
 		types = types[:0]
 		for _, item := range items {
 			types = append(types, item.Type)
 		}
+
 		return len(items) > 0 && (items[len(items)-1].Type == "turn_completed" || items[len(items)-1].Type == "turn_halted" || items[len(items)-1].Type == "turn_stopped")
 	}, time.Second, 10*time.Millisecond)
 	require.True(t, completed, "chat item types: %v", types)
@@ -1046,6 +1050,7 @@ func (resumePatchCompletionClient) Complete(_ context.Context, _ string, _ strin
 			return openai.ChatResponse{Model: "test-model", Content: "The resume has been tailored."}, nil
 		}
 	}
+
 	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "patch-call", Type: "function", Function: openai.ToolFunction{Name: "revise_application_resume", Arguments: `{"baseRevision":0,"operations":[{"op":"replace","section":"headline","id":0,"parentId":0,"expected":"Software engineer","value":"Backend engineer"}]}`}}}}, nil
 }
 

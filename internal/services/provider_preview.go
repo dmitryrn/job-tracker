@@ -70,6 +70,7 @@ func (service *ProviderPreviewService) StreamPreview(ctx context.Context, provid
 		if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) {
 			return fmt.Errorf("%w: check Adzuna required fields and numeric limits", ErrInvalidDiscoverySettings)
 		}
+
 		jobs, err := service.adzuna.Fetch(ctx, settings.Adzuna)
 		return emitPreviewJobs(jobs, err, onJob)
 	case "remotive":
@@ -78,6 +79,7 @@ func (service *ProviderPreviewService) StreamPreview(ctx context.Context, provid
 		if settings.Remotive.Query == "" || settings.Remotive.Category == "" {
 			return fmt.Errorf("%w: check Remotive required fields", ErrInvalidDiscoverySettings)
 		}
+
 		jobs, err := service.remotive.Fetch(ctx, settings.Remotive)
 		return emitPreviewJobs(jobs, err, onJob)
 	case "jobicy":
@@ -87,6 +89,7 @@ func (service *ProviderPreviewService) StreamPreview(ctx context.Context, provid
 		if settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 {
 			return fmt.Errorf("%w: Jobicy results must be between 1 and 200", ErrInvalidDiscoverySettings)
 		}
+
 		jobs, err := service.jobicy.Fetch(ctx, settings.Jobicy)
 		return emitPreviewJobs(jobs, err, onJob)
 	case "linkedin":
@@ -98,6 +101,7 @@ func (service *ProviderPreviewService) StreamPreview(ctx context.Context, provid
 		if settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
 			return fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and %d", ErrInvalidDiscoverySettings, maxLinkedInResults)
 		}
+
 		_, err := service.linkedin.PreviewStream(ctx, settings.LinkedIn, service.linkedInPreviewRequestInterval, onJob)
 		return err
 	default:
@@ -109,10 +113,12 @@ func emitPreviewJobs(jobs []models.Job, fetchErr error, onJob func(models.Job) e
 	if fetchErr != nil {
 		return fetchErr
 	}
+
 	for _, job := range jobs {
 		if err := onJob(job); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

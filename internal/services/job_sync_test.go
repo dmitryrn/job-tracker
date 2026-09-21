@@ -80,6 +80,7 @@ func TestJobSyncRunsProvidersConcurrently(t *testing.T) {
 			t.Fatal("providers did not begin concurrently")
 		}
 	}
+
 	close(release)
 	<-done
 

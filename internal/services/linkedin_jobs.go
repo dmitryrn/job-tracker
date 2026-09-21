@@ -95,8 +95,10 @@ func (service *LinkedInJobs) previewResult(fetch LinkedInFetchResult, err error)
 		if service.logger != nil {
 			service.logger.Warn("LinkedIn preview incomplete; returning fetched jobs", zap.Int("job_count", len(fetch.Jobs)), zap.Error(err))
 		}
+
 		return fetch, nil
 	}
+
 	return fetch, err
 }
 
@@ -122,6 +124,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				return fetch, err
 			}
 		}
+
 		requested = true
 		service.recordEvent(ctx, runID, "linkedin.search.started", "info", "LinkedIn search started", map[string]any{
 			"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "start": start, "requestedLimit": settings.Limit,
@@ -140,6 +143,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 			})
 			return fetch, &linkedInClientError{cause: err}
 		}
+
 		fetch.SearchResults += len(results)
 		service.recordEvent(ctx, runID, "linkedin.search.succeeded", "info", "LinkedIn search succeeded", map[string]any{
 			"start": start, "resultCount": len(results), "searchResultsFetched": fetch.SearchResults, "requestedLimit": settings.Limit,
@@ -147,17 +151,21 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 		if len(results) == 0 {
 			break
 		}
+
 		for _, candidate := range results {
 			if len(fetch.Jobs) == settings.Limit {
 				break
 			}
+
 			if !validLinkedInSearchResult(candidate) {
 				fetch.InvalidJobs++
 				continue
 			}
+
 			if _, exists := seen[candidate.ID]; exists {
 				continue
 			}
+
 			seen[candidate.ID] = struct{}{}
 			exists, err := service.jobs.JobExists(ctx, "linkedin", candidate.ID)
 			if err != nil {
@@ -167,21 +175,26 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				if service.logger != nil {
 					service.logger.Error("check LinkedIn job existence failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
 				}
+
 				return fetch, err
 			}
+
 			if exists {
 				if service.typeSafe != nil {
 					service.classifyExistingJob(ctx, runID, candidate)
 				}
+
 				fetch.SkippedJobs++
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.skipped", "info", "LinkedIn job already exists", map[string]any{
 					"jobID": candidate.ID, "reason": "already_exists",
 				})
 				continue
 			}
+
 			if err := service.wait(ctx, requestInterval); err != nil {
 				return fetch, err
 			}
+
 			fetch.DetailRequests++
 			service.recordEvent(ctx, runID, "linkedin.job_fetch.started", "info", "LinkedIn job fetch started", map[string]any{
 				"jobID": candidate.ID, "title": candidate.Title, "detailRequests": fetch.DetailRequests,
@@ -193,6 +206,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				})
 				return fetch, &linkedInClientError{cause: err}
 			}
+
 			if !validLinkedInJob(details) {
 				fetch.InvalidJobs++
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
@@ -200,6 +214,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				})
 				continue
 			}
+
 			job := toLinkedInJob(candidate, details)
 			if !validLinkedInResult(job) {
 				fetch.InvalidJobs++
@@ -208,6 +223,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				})
 				continue
 			}
+
 			if service.typeSafe != nil {
 				workplace, classificationJSON, err := service.classifyWorkplace(ctx, candidate.Title, details.Description)
 				if err != nil {
@@ -228,6 +244,7 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 					}
 				}
 			}
+
 			fetch.FetchedJobs++
 			service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded", map[string]any{
 				"jobID": candidate.ID, "accepted": true, "fetchedJobCount": fetch.FetchedJobs,
@@ -240,13 +257,16 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 					if service.logger != nil {
 						service.logger.Error("save LinkedIn job failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
 					}
+
 					return fetch, err
 				}
+
 				fetch.SavedJobs++
 				service.recordEvent(ctx, runID, "linkedin.job_save.succeeded", "info", "LinkedIn job saved", map[string]any{
 					"jobID": candidate.ID, "savedJobCount": fetch.SavedJobs,
 				})
 			}
+
 			fetch.Jobs = append(fetch.Jobs, job)
 			if onJob != nil {
 				if err := onJob(job); err != nil {
@@ -254,8 +274,10 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				}
 			}
 		}
+
 		start += len(results)
 	}
+
 	return fetch, nil
 }
 
@@ -268,11 +290,14 @@ func (service *LinkedInJobs) classifyExistingJob(ctx context.Context, runID stri
 		if service.logger != nil {
 			service.logger.Error("look up stored LinkedIn job for workplace classification failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
 		}
+
 		return
 	}
+
 	if existing == nil || existing.WorkplaceClassificationJSON != nil {
 		return
 	}
+
 	workplace, classificationJSON, err := service.classifyWorkplace(ctx, existing.Title, existing.BodyText)
 	if err != nil {
 		service.recordEvent(ctx, runID, "linkedin.workplace_classification.failed", "error", "LinkedIn workplace classification failed", map[string]any{
@@ -281,8 +306,10 @@ func (service *LinkedInJobs) classifyExistingJob(ctx context.Context, runID stri
 		if service.logger != nil {
 			service.logger.Error("classify stored LinkedIn workplace failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
 		}
+
 		return
 	}
+
 	existing.Workplace = workplace
 	existing.WorkplaceClassificationJSON = classificationJSON
 	if err := service.jobs.Upsert(ctx, []models.Job{*existing}); err != nil {
@@ -292,8 +319,10 @@ func (service *LinkedInJobs) classifyExistingJob(ctx context.Context, runID stri
 		if service.logger != nil {
 			service.logger.Error("save stored LinkedIn workplace classification failed", zap.String("run_id", runID), zap.String("job_id", candidate.ID), zap.Error(err))
 		}
+
 		return
 	}
+
 	service.recordEvent(ctx, runID, "linkedin.workplace_classification.succeeded", "info", "Stored LinkedIn workplace classified", map[string]any{
 		"jobID": candidate.ID, "workplace": workplace,
 	})
@@ -306,6 +335,7 @@ func (service *LinkedInJobs) recordEvent(ctx context.Context, runID, eventType, 
 	if runID == "" || service.events == nil {
 		return
 	}
+
 	if err := service.events.RecordEvent(ctx, models.Event{Provider: "linkedin", RunID: runID, Type: eventType, Level: level, Message: message, Data: data}); err != nil && service.logger != nil {
 		service.logger.Error("record LinkedIn event failed", zap.String("run_id", runID), zap.String("event_type", eventType), zap.Error(err))
 	}
@@ -315,6 +345,7 @@ func (service *LinkedInJobs) wait(ctx context.Context, requestInterval time.Dura
 	if requestInterval <= 0 {
 		return nil
 	}
+
 	timer := time.NewTimer(requestInterval)
 	defer timer.Stop()
 	select {
@@ -350,6 +381,7 @@ func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) models.Jo
 	if workplace == "" {
 		workplace = "unknown"
 	}
+
 	return models.Job{
 		Source:         "linkedin",
 		SourceID:       result.ID,
@@ -398,13 +430,16 @@ func (service *LinkedInJobs) classifyWorkplace(ctx context.Context, title, descr
 	if err != nil {
 		return "", nil, fmt.Errorf("call TypeSafe workplace choice: %w", err)
 	}
+
 	answer, found := response.Answers[linkedInWorkplaceQuestionID]
 	if !found || answer.Type != "choice" {
 		return "", nil, fmt.Errorf("TypeSafe response did not contain a workplace choice")
 	}
+
 	if _, valid := linkedInWorkplaceOptions[answer.Choice]; !valid {
 		return "", nil, fmt.Errorf("TypeSafe workplace choice %q is not supported", answer.Choice)
 	}
+
 	classificationJSON, err := json.Marshal(linkedInWorkplaceClassification{
 		Confidence:    answer.Confidence,
 		Probabilities: answer.Probabilities,
@@ -412,6 +447,7 @@ func (service *LinkedInJobs) classifyWorkplace(ctx context.Context, title, descr
 	if err != nil {
 		return "", nil, fmt.Errorf("encode TypeSafe workplace classification: %w", err)
 	}
+
 	classification := string(classificationJSON)
 	return answer.Choice, &classification, nil
 }
@@ -421,9 +457,11 @@ func linkedInPostedAt(value string) string {
 	if err == nil {
 		return parsed.UTC().Format(time.RFC3339)
 	}
+
 	parsed, err = time.Parse(time.RFC3339, value)
 	if err != nil {
 		return ""
 	}
+
 	return parsed.UTC().Format(time.RFC3339)
 }

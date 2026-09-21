@@ -60,6 +60,7 @@ func TestJobProfileScorerUsesTheSharedSafeProfileProjection(t *testing.T) {
 	} {
 		assert.NotContains(t, serialized, privateValue)
 	}
+
 	assert.Contains(t, serialized, "Cedar Systems")
 	assert.Contains(t, serialized, "Kubernetes")
 }

@@ -30,11 +30,13 @@ func (repository *SQLite) JobExists(ctx context.Context, source, sourceID string
 	if err != nil {
 		return false, err
 	}
+
 	var id int64
 	err = repository.db.QueryRowContext(ctx, statement, args...).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
+
 	return err == nil, err
 }
 
@@ -62,6 +64,7 @@ func (repository *SQLite) JobBySourceID(ctx context.Context, source, sourceID st
 	if err != nil {
 		return nil, fmt.Errorf("build source job query: %w", err)
 	}
+
 	var job models.Job
 	if err := repository.db.QueryRowContext(ctx, statement, args...).Scan(
 		&job.Source,
@@ -84,6 +87,7 @@ func (repository *SQLite) JobBySourceID(ctx context.Context, source, sourceID st
 	} else if err != nil {
 		return nil, fmt.Errorf("get source job: %w", err)
 	}
+
 	return &job, nil
 }
 
@@ -100,6 +104,7 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 		if err != nil {
 			return err
 		}
+
 		if _, err := transaction.ExecContext(ctx, `
 			INSERT INTO jobs (
 				source,
@@ -153,6 +158,7 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 			return err
 		}
 	}
+
 	return transaction.Commit()
 }
 
@@ -168,6 +174,7 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("upsert custom job company: %w", err)
 	}
+
 	statement, args, err := sqlBuilder.Insert("jobs").
 		Columns(
 			"source",
@@ -223,6 +230,7 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("build custom job insert: %w", err)
 	}
+
 	if _, err := transaction.ExecContext(ctx, statement, args...); err != nil {
 		return models.BrowseJob{}, fmt.Errorf("insert custom job: %w", err)
 	}
@@ -231,17 +239,21 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("build custom job lookup: %w", err)
 	}
+
 	var jobID int64
 	if err := transaction.QueryRowContext(ctx, statement, args...).Scan(&jobID); err != nil {
 		return models.BrowseJob{}, fmt.Errorf("lookup custom job: %w", err)
 	}
+
 	created, err := repository.job(ctx, transaction, jobID)
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("load custom job: %w", err)
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return models.BrowseJob{}, fmt.Errorf("commit custom job: %w", err)
 	}
+
 	return *created, nil
 }
 
@@ -254,14 +266,16 @@ func (repository *SQLite) StartProviderRun(ctx context.Context, provider string,
 
 	var lastRun string
 	err = transaction.QueryRowContext(ctx, `SELECT last_run_at FROM provider_runs WHERE provider = ?`, provider).Scan(&lastRun)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
+
 	if err == nil {
 		lastRunAt, err := time.Parse(time.RFC3339Nano, lastRun)
 		if err != nil {
 			return false, fmt.Errorf("parse last run time for %s: %w", provider, err)
 		}
+
 		if now.Sub(lastRunAt) < interval {
 			return false, transaction.Commit()
 		}
@@ -273,9 +287,11 @@ func (repository *SQLite) StartProviderRun(ctx context.Context, provider string,
 		ON CONFLICT(provider) DO UPDATE SET last_run_at = excluded.last_run_at`, provider, now.UTC().Format(time.RFC3339Nano)); err != nil {
 		return false, err
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return false, err
 	}
+
 	return true, nil
 }
 
@@ -302,27 +318,33 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 		for _, field := range search.Fields {
 			matches = append(matches, squirrel.Expr(field+" LIKE ?", "%"+search.Search+"%"))
 		}
+
 		query = query.Where(matches)
 		countQuery = countQuery.Where(matches)
 	}
+
 	if search.Provider != "" {
 		query = query.Where(squirrel.Eq{"jobs.source": search.Provider})
 		countQuery = countQuery.Where(squirrel.Eq{"jobs.source": search.Provider})
 	}
+
 	if search.Match == "has" {
 		match := squirrel.Expr("EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)")
 		query = query.Where(match)
 		countQuery = countQuery.Where(match)
 	}
+
 	if search.Match == "none" {
 		match := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)")
 		query = query.Where(match)
 		countQuery = countQuery.Where(match)
 	}
+
 	statement, args, err := query.OrderBy("jobs.posted_at DESC", "jobs.id DESC").Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
 	if err != nil {
 		return models.JobPage{}, fmt.Errorf("build jobs query: %w", err)
 	}
+
 	rows, err := repository.db.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return models.JobPage{}, fmt.Errorf("query jobs: %w", err)
@@ -337,18 +359,23 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 			&job.PostedAt, &job.BodyText, &job.LastViewedAt, &job.HasMatch, &job.ProfileMatchScore); err != nil {
 			return models.JobPage{}, fmt.Errorf("scan job: %w", err)
 		}
+
 		page.Jobs = append(page.Jobs, job)
 	}
+
 	if err := rows.Err(); err != nil {
 		return models.JobPage{}, fmt.Errorf("iterate jobs: %w", err)
 	}
+
 	countStatement, countArgs, err := countQuery.ToSql()
 	if err != nil {
 		return models.JobPage{}, fmt.Errorf("build jobs count query: %w", err)
 	}
+
 	if err := repository.db.QueryRowContext(ctx, countStatement, countArgs...).Scan(&page.Total); err != nil {
 		return models.JobPage{}, fmt.Errorf("count jobs: %w", err)
 	}
+
 	return page, nil
 }
 
@@ -364,17 +391,21 @@ func (repository *SQLite) MarkJobViewed(ctx context.Context, id int64) error {
 	if err != nil {
 		return fmt.Errorf("build mark job viewed query: %w", err)
 	}
+
 	result, err := repository.db.ExecContext(ctx, statement, args...)
 	if err != nil {
 		return fmt.Errorf("mark job viewed: %w", err)
 	}
+
 	updated, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("count marked job viewed: %w", err)
 	}
+
 	if updated == 0 {
 		return sql.ErrNoRows
 	}
+
 	return nil
 }
 
@@ -417,9 +448,11 @@ func (repository *SQLite) AnalysisJob(ctx context.Context, jobID int64) (*models
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("get job for analysis: %w", err)
 	}
+
 	return &job, nil
 }
 
@@ -427,6 +460,7 @@ func (repository *SQLite) SaveJobProfileMatchScore(ctx context.Context, jobID in
 	if score < 0 || score > 10 {
 		return fmt.Errorf("profile match score must be between 0 and 10")
 	}
+
 	statement, args, err := sqlBuilder.Update("jobs").
 		Set("profile_match_score", score).
 		Where(squirrel.Eq{"id": jobID}).
@@ -434,17 +468,21 @@ func (repository *SQLite) SaveJobProfileMatchScore(ctx context.Context, jobID in
 	if err != nil {
 		return fmt.Errorf("build profile match score update: %w", err)
 	}
+
 	result, err := repository.db.ExecContext(ctx, statement, args...)
 	if err != nil {
 		return fmt.Errorf("save profile match score: %w", err)
 	}
+
 	updated, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("count profile match score update: %w", err)
 	}
+
 	if updated == 0 {
 		return sql.ErrNoRows
 	}
+
 	return nil
 }
 
@@ -459,6 +497,7 @@ func (repository *SQLite) Delete(ctx context.Context, id int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	if updatedQueue, removed := removeAllMatchRequests(queue, id); removed {
 		queue = updatedQueue
 		if err := writeMatchQueue(ctx, transaction, queue); err != nil {
@@ -470,13 +509,16 @@ func (repository *SQLite) Delete(ctx context.Context, id int64) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("delete job: %w", err)
 	}
+
 	deleted, err := result.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("count deleted jobs: %w", err)
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return false, fmt.Errorf("commit delete job: %w", err)
 	}
+
 	return deleted > 0, nil
 }
 
@@ -492,10 +534,12 @@ func (repository *SQLite) Reject(ctx context.Context, id int64, reason string) (
 	} else if err != nil {
 		return false, err
 	}
+
 	queue, err := readMatchQueue(ctx, transaction)
 	if err != nil {
 		return false, err
 	}
+
 	if updatedQueue, removed := removeAllMatchRequests(queue, id); removed {
 		if err := writeMatchQueue(ctx, transaction, updatedQueue); err != nil {
 			return false, err
@@ -510,12 +554,15 @@ func (repository *SQLite) Reject(ctx context.Context, id int64, reason string) (
 	if err != nil {
 		return false, fmt.Errorf("build reject job query: %w", err)
 	}
+
 	if _, err := transaction.ExecContext(ctx, statement, args...); err != nil {
 		return false, fmt.Errorf("reject job: %w", err)
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return false, fmt.Errorf("commit reject job: %w", err)
 	}
+
 	return true, nil
 }
 
@@ -524,6 +571,7 @@ func (repository *SQLite) Providers(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build providers query: %w", err)
 	}
+
 	rows, err := repository.db.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query providers: %w", err)
@@ -536,11 +584,14 @@ func (repository *SQLite) Providers(ctx context.Context) ([]string, error) {
 		if err := rows.Scan(&provider); err != nil {
 			return nil, fmt.Errorf("scan provider: %w", err)
 		}
+
 		providers = append(providers, provider)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate providers: %w", err)
 	}
+
 	return providers, nil
 }
 
@@ -551,10 +602,12 @@ func (repository *SQLite) Companies(ctx context.Context, search string) ([]model
 	if search != "" {
 		query = query.Where(squirrel.Expr("companies.name LIKE ?", "%"+search+"%"))
 	}
+
 	statement, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build companies query: %w", err)
 	}
+
 	rows, err := repository.db.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query companies: %w", err)
@@ -567,11 +620,14 @@ func (repository *SQLite) Companies(ctx context.Context, search string) ([]model
 		if err := rows.Scan(&company.ID, &company.Name, &company.JobCount, &company.LastSeenAt); err != nil {
 			return nil, fmt.Errorf("scan company: %w", err)
 		}
+
 		companies = append(companies, company)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate companies: %w", err)
 	}
+
 	return companies, nil
 }
 
@@ -586,24 +642,30 @@ func (repository *SQLite) UserProfile(ctx context.Context) (*models.UserProfile,
 	if err != nil {
 		return nil, fmt.Errorf("build user profile query: %w", err)
 	}
+
 	err = repository.db.QueryRowContext(ctx, statement, args...).Scan(
 		&profile.ID, &profile.Headline, &profile.WorkAuthorization, &profile.GitHubURL, &profile.LinkedInURL, &profile.Summary, &skills, &workHistory, &education, &profile.UpdatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("get user profile: %w", err)
 	}
+
 	if err := json.Unmarshal([]byte(skills), &profile.Skills); err != nil {
 		return nil, fmt.Errorf("decode user profile skills: %w", err)
 	}
+
 	if err := json.Unmarshal([]byte(workHistory), &profile.WorkHistory); err != nil {
 		return nil, fmt.Errorf("decode user profile work history: %w", err)
 	}
+
 	if err := json.Unmarshal([]byte(education), &profile.Education); err != nil {
 		return nil, fmt.Errorf("decode user profile education: %w", err)
 	}
+
 	return &profile, nil
 }
 
@@ -612,14 +674,17 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 	if err != nil {
 		return models.UserProfile{}, fmt.Errorf("encode user profile skills: %w", err)
 	}
+
 	workHistory, err := json.Marshal(profile.WorkHistory)
 	if err != nil {
 		return models.UserProfile{}, fmt.Errorf("encode user profile work history: %w", err)
 	}
+
 	education, err := json.Marshal(profile.Education)
 	if err != nil {
 		return models.UserProfile{}, fmt.Errorf("encode user profile education: %w", err)
 	}
+
 	profile.ID = 1
 	profile.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	statement, args, err := sqlBuilder.
@@ -640,10 +705,12 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 	if err != nil {
 		return models.UserProfile{}, fmt.Errorf("build save user profile query: %w", err)
 	}
+
 	_, err = repository.db.ExecContext(ctx, statement, args...)
 	if err != nil {
 		return models.UserProfile{}, fmt.Errorf("save user profile: %w", err)
 	}
+
 	return profile, nil
 }
 
@@ -652,6 +719,7 @@ func (repository *SQLite) JobMatchExists(ctx context.Context, jobID int64) (bool
 	if err := repository.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM job_matches WHERE job_id = ?)`, jobID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("check job match: %w", err)
 	}
+
 	return exists, nil
 }
 
@@ -667,12 +735,15 @@ func (repository *SQLite) JobAnalysis(ctx context.Context, jobID int64) (*models
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("get job analysis: %w", err)
 	}
+
 	if err := json.Unmarshal([]byte(raw), &analysis.Analysis); err != nil {
 		return nil, fmt.Errorf("decode job analysis: %w", err)
 	}
+
 	return &analysis, nil
 }
 
@@ -681,6 +752,7 @@ func (repository *SQLite) SaveJobAnalysis(ctx context.Context, analysis models.J
 	if err != nil {
 		return fmt.Errorf("encode job analysis: %w", err)
 	}
+
 	_, err = repository.db.ExecContext(ctx, `
 		INSERT INTO job_analyses (
 			job_id, analyzer_version, prompt_version, input_sha256, model, analyzed_at,
@@ -700,6 +772,7 @@ func (repository *SQLite) SaveJobAnalysis(ctx context.Context, analysis models.J
 	if err != nil {
 		return fmt.Errorf("save job analysis: %w", err)
 	}
+
 	return nil
 }
 
@@ -711,6 +784,7 @@ func (repository *SQLite) CreateJobMatch(ctx context.Context, jobID int64, conte
 	if err != nil {
 		return fmt.Errorf("create job match: %w", err)
 	}
+
 	return nil
 }
 
@@ -722,13 +796,16 @@ func (repository *SQLite) JobMatch(ctx context.Context, jobID int64) (*models.Jo
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("get job match: %w", err)
 	}
+
 	var assessment models.JobMatchAssessment
 	if err := json.Unmarshal([]byte(match.Content), &assessment); err == nil && assessment.MatcherVersion != "" {
 		match.Assessment = &assessment
 	}
+
 	return &match, nil
 }
 
@@ -767,6 +844,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		query = query.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
 		countQuery = countQuery.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
 	}
+
 	applied := squirrel.Expr("EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)")
 	switch search.Applied {
 	case "applied":
@@ -777,11 +855,13 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		query = query.Where(notApplied)
 		countQuery = countQuery.Where(notApplied)
 	}
+
 	if search.MinimumScore != nil {
 		minimumScore := squirrel.Expr(assessmentScore+" >= ?", *search.MinimumScore)
 		query = query.Where(minimumScore)
 		countQuery = countQuery.Where(minimumScore)
 	}
+
 	switch search.Sort {
 	case "created-asc":
 		query = query.OrderBy("job_matches.created_at ASC", "job_matches.job_id ASC")
@@ -796,10 +876,12 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 	default:
 		query = query.OrderBy("job_matches.created_at DESC", "job_matches.job_id DESC")
 	}
+
 	statement, arguments, err := query.Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
 	if err != nil {
 		return models.JobMatchPage{}, fmt.Errorf("build job matches query: %w", err)
 	}
+
 	rows, err := repository.db.QueryContext(ctx, statement, arguments...)
 	if err != nil {
 		return models.JobMatchPage{}, fmt.Errorf("query job matches: %w", err)
@@ -832,23 +914,29 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		); err != nil {
 			return models.JobMatchPage{}, fmt.Errorf("scan job match: %w", err)
 		}
+
 		var assessment models.JobMatchAssessment
 		if err := json.Unmarshal([]byte(content), &assessment); err == nil && assessment.MatcherVersion != "" {
 			match.Score = assessment.Score
 			match.Label = assessment.Label
 		}
+
 		page.Matches = append(page.Matches, match)
 	}
+
 	if err := rows.Err(); err != nil {
 		return models.JobMatchPage{}, fmt.Errorf("iterate job matches: %w", err)
 	}
+
 	countStatement, countArguments, err := countQuery.ToSql()
 	if err != nil {
 		return models.JobMatchPage{}, fmt.Errorf("build job matches count query: %w", err)
 	}
+
 	if err := repository.db.QueryRowContext(ctx, countStatement, countArguments...).Scan(&page.Total); err != nil {
 		return models.JobMatchPage{}, fmt.Errorf("count job matches: %w", err)
 	}
+
 	return page, nil
 }
 
@@ -857,17 +945,21 @@ func (repository *SQLite) MatchQueue(ctx context.Context) ([]models.BrowseJob, e
 	if err != nil {
 		return nil, err
 	}
+
 	jobs := make([]models.BrowseJob, 0, len(queue))
 	for _, jobID := range queue {
 		job, err := repository.job(ctx, repository.db, jobID)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}
+
 		if err != nil {
 			return nil, err
 		}
+
 		jobs = append(jobs, *job)
 	}
+
 	return jobs, nil
 }
 
@@ -883,22 +975,27 @@ func (repository *SQLite) QueueJobMatch(ctx context.Context, jobID int64, redo b
 	} else if err != nil {
 		return false, err
 	}
+
 	if redo {
 		if _, err := transaction.ExecContext(ctx, `DELETE FROM job_matches WHERE job_id = ?`, jobID); err != nil {
 			return false, fmt.Errorf("delete job match for redo: %w", err)
 		}
 	}
+
 	queue, err := readMatchQueue(ctx, transaction)
 	if err != nil {
 		return false, err
 	}
+
 	queue = append([]int64{jobID}, queue...)
 	if err := writeMatchQueue(ctx, transaction, queue); err != nil {
 		return false, err
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return false, fmt.Errorf("commit queue match request: %w", err)
 	}
+
 	return true, nil
 }
 
@@ -913,6 +1010,7 @@ func (repository *SQLite) QueueJobsWithoutMatches(ctx context.Context, jobIDs []
 	if err != nil {
 		return 0, err
 	}
+
 	alreadyQueued := make(map[int64]struct{}, len(queue))
 	for _, jobID := range queue {
 		alreadyQueued[jobID] = struct{}{}
@@ -924,6 +1022,7 @@ func (repository *SQLite) QueueJobsWithoutMatches(ctx context.Context, jobIDs []
 		if _, duplicate := seen[jobID]; duplicate {
 			continue
 		}
+
 		seen[jobID] = struct{}{}
 		if _, queued := alreadyQueued[jobID]; queued {
 			continue
@@ -933,15 +1032,19 @@ func (repository *SQLite) QueueJobsWithoutMatches(ctx context.Context, jobIDs []
 		if err := transaction.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM jobs WHERE id = ?)`, jobID).Scan(&exists); err != nil {
 			return 0, fmt.Errorf("check job for match queue: %w", err)
 		}
+
 		if !exists {
 			continue
 		}
+
 		if err := transaction.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM job_matches WHERE job_id = ?)`, jobID).Scan(&hasMatch); err != nil {
 			return 0, fmt.Errorf("check job match for match queue: %w", err)
 		}
+
 		if hasMatch {
 			continue
 		}
+
 		requested = append(requested, jobID)
 	}
 
@@ -951,9 +1054,11 @@ func (repository *SQLite) QueueJobsWithoutMatches(ctx context.Context, jobIDs []
 			return 0, err
 		}
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return 0, fmt.Errorf("commit queue unmatched job matches: %w", err)
 	}
+
 	return len(requested), nil
 }
 
@@ -970,12 +1075,15 @@ func (repository *SQLite) ReplaceMatchQueue(ctx context.Context, jobIDs []int64)
 			return false, err
 		}
 	}
+
 	if err := writeMatchQueue(ctx, transaction, jobIDs); err != nil {
 		return false, err
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return false, fmt.Errorf("commit replace match queue: %w", err)
 	}
+
 	return true, nil
 }
 
@@ -989,15 +1097,18 @@ func (repository *SQLite) RemoveMatchRequest(ctx context.Context, jobID int64) e
 	if err != nil {
 		return err
 	}
+
 	if updatedQueue, removed := removeFirstMatchRequest(queue, jobID); removed {
 		queue = updatedQueue
 		if err := writeMatchQueue(ctx, transaction, queue); err != nil {
 			return err
 		}
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return fmt.Errorf("commit remove match request: %w", err)
 	}
+
 	return nil
 }
 
@@ -1011,10 +1122,12 @@ func (repository *SQLite) CompleteMatchRequest(ctx context.Context, jobID int64,
 	if err != nil {
 		return err
 	}
+
 	updatedQueue, removed := removeFirstMatchRequest(queue, jobID)
 	if !removed {
 		return transaction.Commit()
 	}
+
 	queue = updatedQueue
 	if _, err := transaction.ExecContext(ctx, `
 		INSERT INTO job_matches (job_id, content, created_at) VALUES (?, ?, ?)
@@ -1022,12 +1135,15 @@ func (repository *SQLite) CompleteMatchRequest(ctx context.Context, jobID int64,
 		jobID, content, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		return fmt.Errorf("save completed job match: %w", err)
 	}
+
 	if err := writeMatchQueue(ctx, transaction, queue); err != nil {
 		return err
 	}
+
 	if err := transaction.Commit(); err != nil {
 		return fmt.Errorf("commit completed match request: %w", err)
 	}
+
 	return nil
 }
 
@@ -1079,6 +1195,7 @@ func (repository *SQLite) job(ctx context.Context, query queryRower, jobID int64
 	if err != nil {
 		return nil, fmt.Errorf("get queued job: %w", err)
 	}
+
 	return &job, nil
 }
 
@@ -1087,10 +1204,12 @@ func readMatchQueue(ctx context.Context, query queryRower) ([]int64, error) {
 	if err := query.QueryRowContext(ctx, `SELECT job_ids_json FROM job_match_queue WHERE id = 1`).Scan(&raw); err != nil {
 		return nil, fmt.Errorf("read job match queue: %w", err)
 	}
+
 	queue := make([]int64, 0)
 	if err := json.Unmarshal([]byte(raw), &queue); err != nil {
 		return nil, fmt.Errorf("decode job match queue: %w", err)
 	}
+
 	return queue, nil
 }
 
@@ -1099,9 +1218,11 @@ func writeMatchQueue(ctx context.Context, query matchQueueQuerier, queue []int64
 	if err != nil {
 		return fmt.Errorf("encode job match queue: %w", err)
 	}
+
 	if _, err := query.ExecContext(ctx, `UPDATE job_match_queue SET job_ids_json = ? WHERE id = 1`, string(encoded)); err != nil {
 		return fmt.Errorf("write job match queue: %w", err)
 	}
+
 	return nil
 }
 
@@ -1112,9 +1233,11 @@ func uniqueMatchRequests(queue []int64) []int64 {
 		if _, duplicate := seen[jobID]; duplicate {
 			continue
 		}
+
 		seen[jobID] = struct{}{}
 		unique = append(unique, jobID)
 	}
+
 	return unique
 }
 
@@ -1125,6 +1248,7 @@ func removeFirstMatchRequest(queue []int64, jobID int64) ([]int64, bool) {
 			return queue[:len(queue)-1], true
 		}
 	}
+
 	return queue, false
 }
 
@@ -1136,8 +1260,10 @@ func removeAllMatchRequests(queue []int64, jobID int64) ([]int64, bool) {
 			removed = true
 			continue
 		}
+
 		filtered = append(filtered, queuedJobID)
 	}
+
 	return filtered, removed
 }
 
@@ -1146,6 +1272,7 @@ func upsertCompany(ctx context.Context, transaction *sql.Tx, name, now string) (
 	if name == "" {
 		return nil, nil
 	}
+
 	normalized := strings.Join(strings.Fields(strings.ToLower(name)), " ")
 	if _, err := transaction.ExecContext(ctx, `
 		INSERT INTO companies (name, normalized_name, first_seen_at, last_seen_at)
@@ -1154,9 +1281,11 @@ func upsertCompany(ctx context.Context, transaction *sql.Tx, name, now string) (
 		name, normalized, now, now); err != nil {
 		return nil, err
 	}
+
 	var id int64
 	if err := transaction.QueryRowContext(ctx, "SELECT id FROM companies WHERE normalized_name = ?", normalized).Scan(&id); err != nil {
 		return nil, fmt.Errorf("get company ID: %w", err)
 	}
+
 	return id, nil
 }

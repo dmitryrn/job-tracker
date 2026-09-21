@@ -112,11 +112,13 @@ func resumePDFHandler(pdf resumePDFGenerator, logger *zap.Logger) http.HandlerFu
 			writeError(writer, http.StatusNotFound, "base resume not found")
 			return
 		}
+
 		if err != nil {
 			logger.Error("generate base resume PDF failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not generate resume PDF")
 			return
 		}
+
 		writer.Header().Set("Cache-Control", "no-store")
 		writer.Header().Set("Content-Disposition", `attachment; filename="resume.pdf"`)
 		writer.Header().Set("Content-Type", "application/pdf")
@@ -135,28 +137,33 @@ func jobApplicationResumePDFHandler(chat applicationResumeProvider, pdf applicat
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		resume, err := chat.LatestResume(request.Context(), jobID)
 		if errors.Is(err, services.ErrApplicationResumeNotFound) {
 			logger.Warn("generate application resume PDF without a resume", zap.Int64("job_id", jobID), zap.Error(err))
 			writeError(writer, http.StatusNotFound, "application resume not found")
 			return
 		}
+
 		if errors.Is(err, services.ErrResumeNotFound) {
 			logger.Warn("generate application resume PDF without a base resume", zap.Int64("job_id", jobID), zap.Error(err))
 			writeError(writer, http.StatusNotFound, "base resume not found")
 			return
 		}
+
 		if err != nil {
 			logger.Error("load latest application resume failed", zap.Int64("job_id", jobID), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load application resume")
 			return
 		}
+
 		content, err := pdf.GenerateResume(request.Context(), *resume)
 		if err != nil {
 			logger.Error("generate application resume PDF failed", zap.Int64("job_id", jobID), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not generate application resume PDF")
 			return
 		}
+
 		writer.Header().Set("Cache-Control", "no-store")
 		writer.Header().Set("Content-Disposition", `attachment; filename="application-resume.pdf"`)
 		writer.Header().Set("Content-Type", "application/pdf")
@@ -175,11 +182,13 @@ func resumePhotoHandler(resume *services.ResumeService, logger *zap.Logger) http
 			writeError(writer, http.StatusNotFound, "resume photo not found")
 			return
 		}
+
 		if err != nil {
 			logger.Error("load base resume photo failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load resume photo")
 			return
 		}
+
 		writer.Header().Set("Cache-Control", "no-store")
 		writer.Header().Set("Content-Type", photo.ContentType)
 		if _, err := writer.Write(photo.Data); err != nil {
@@ -204,22 +213,26 @@ func saveResumePhotoHandler(resume *services.ResumeService, logger *zap.Logger) 
 			writeError(writer, http.StatusInternalServerError, "could not read resume photo")
 			return
 		}
+
 		saved, err := resume.SavePhoto(request.Context(), data)
 		if errors.Is(err, services.ErrInvalidResumePhoto) {
 			logger.Warn("invalid base resume photo", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Warn("save base resume photo without a resume", zap.Error(err))
 			writeError(writer, http.StatusNotFound, "base resume not found")
 			return
 		}
+
 		if err != nil {
 			logger.Error("save base resume photo failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not save resume photo")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"resume": saved})
 	}
 }
@@ -232,12 +245,14 @@ func eventsHandler(events *services.EventLog, logger *zap.Logger) http.HandlerFu
 			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
 			return
 		}
+
 		offset, err := paginationQueryInt(request, "offset", 0)
 		if err != nil {
 			logger.Warn("invalid events offset", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
 			return
 		}
+
 		page, err := events.Events(request.Context(), models.EventSearch{
 			Provider: strings.TrimSpace(request.URL.Query().Get("provider")),
 			RunID:    strings.TrimSpace(request.URL.Query().Get("runId")),
@@ -251,11 +266,13 @@ func eventsHandler(events *services.EventLog, logger *zap.Logger) http.HandlerFu
 			writeError(writer, http.StatusBadRequest, "invalid event search")
 			return
 		}
+
 		if err != nil {
 			logger.Error("list events failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load events")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, page)
 	}
 }
@@ -265,16 +282,20 @@ func paginationQueryInt(request *http.Request, name string, fallback int) (int, 
 	if value == "" {
 		return fallback, nil
 	}
+
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		return 0, err
 	}
+
 	if name == "limit" && (parsed < 1 || parsed > 100) {
 		return 0, errors.New("limit out of range")
 	}
+
 	if name == "offset" && parsed < 0 {
 		return 0, errors.New("negative offset")
 	}
+
 	return parsed, nil
 }
 
@@ -303,6 +324,7 @@ func discoveryPreviewHandler(previews discoveryPreviewer, logger *zap.Logger) ht
 			writeDiscoveryPreviewError(writer, logger, provider, err)
 			return
 		}
+
 		if jobs == nil {
 			jobs = []models.Job{}
 		}
@@ -319,6 +341,7 @@ func discoveryPreviewStreamHandler(writer http.ResponseWriter, request *http.Req
 		writeError(writer, http.StatusInternalServerError, "discovery preview events are unavailable")
 		return
 	}
+
 	writer.Header().Set("Cache-Control", "no-cache")
 	writer.Header().Set("Connection", "keep-alive")
 	writer.Header().Set("Content-Type", "text/event-stream")
@@ -329,6 +352,7 @@ func discoveryPreviewStreamHandler(writer http.ResponseWriter, request *http.Req
 		if err := writeSSE(writer, "job", job); err != nil {
 			return err
 		}
+
 		jobCount++
 		flusher.Flush()
 		return nil
@@ -345,6 +369,7 @@ func discoveryPreviewStreamHandler(writer http.ResponseWriter, request *http.Req
 				logger.Error("write discovery preview SSE error failed", zap.String("provider", provider), zap.Error(writeErr))
 			}
 		}
+
 		flusher.Flush()
 		return
 	}
@@ -354,6 +379,7 @@ func discoveryPreviewStreamHandler(writer http.ResponseWriter, request *http.Req
 		logger.Error("write discovery preview SSE completion failed", zap.String("provider", provider), zap.Error(err))
 		return
 	}
+
 	flusher.Flush()
 }
 
@@ -363,6 +389,7 @@ func writeDiscoveryPreviewError(writer http.ResponseWriter, logger *zap.Logger, 
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	logger.Error("discovery preview failed", zap.String("provider", provider), zap.Error(err))
 	writeError(writer, http.StatusBadGateway, "could not fetch provider preview")
 }
@@ -372,6 +399,7 @@ func writeSSE(writer io.Writer, event string, value any) error {
 	if err != nil {
 		return err
 	}
+
 	_, err = fmt.Fprintf(writer, "event: %s\ndata: %s\n\n", event, data)
 	return err
 }
@@ -384,6 +412,7 @@ func discoverySettingsHandler(settings *services.DiscoverySettingsService, logge
 			writeError(writer, http.StatusInternalServerError, "could not load discovery settings")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"settings": value})
 	}
 }
@@ -396,6 +425,7 @@ func saveDiscoverySettingsHandler(settings *services.DiscoverySettingsService, l
 			writeError(writer, http.StatusBadRequest, "settings must be valid JSON")
 			return
 		}
+
 		saved, err := settings.Save(request.Context(), value)
 		if err != nil {
 			if errors.Is(err, services.ErrInvalidDiscoverySettings) {
@@ -403,10 +433,12 @@ func saveDiscoverySettingsHandler(settings *services.DiscoverySettingsService, l
 				writeError(writer, http.StatusBadRequest, err.Error())
 				return
 			}
+
 			logger.Error("save discovery settings failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not save discovery settings")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"settings": saved})
 	}
 }
@@ -419,6 +451,7 @@ func discoverySyncHandler(syncer syncTrigger, logger *zap.Logger) http.HandlerFu
 			writeError(writer, http.StatusBadRequest, "unknown discovery provider")
 			return
 		}
+
 		started := syncer.Trigger(provider)
 		logger.Info("discovery sync requested", zap.String("provider", provider), zap.Bool("started", started))
 		writeJSON(writer, http.StatusAccepted, map[string]bool{"started": started})
@@ -442,6 +475,7 @@ func profileHandler(profile *services.UserProfileService, logger *zap.Logger) ht
 			writeError(writer, http.StatusInternalServerError, "could not load profile")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"profile": userProfile})
 	}
 }
@@ -454,12 +488,14 @@ func saveProfileHandler(profile *services.UserProfileService, logger *zap.Logger
 			writeError(writer, http.StatusBadRequest, "profile must be valid JSON")
 			return
 		}
+
 		savedProfile, err := profile.Save(request.Context(), userProfile)
 		if err != nil {
 			logger.Error("save user profile failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not save profile")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"profile": savedProfile})
 	}
 }
@@ -472,6 +508,7 @@ func resumeHandler(resume *services.ResumeService, logger *zap.Logger) http.Hand
 			writeError(writer, http.StatusInternalServerError, "could not load resume")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"resume": value})
 	}
 }
@@ -484,12 +521,14 @@ func saveResumeHandler(resume *services.ResumeService, logger *zap.Logger) http.
 			writeError(writer, http.StatusBadRequest, "resume must be valid JSON")
 			return
 		}
+
 		saved, err := resume.Save(request.Context(), value)
 		if err != nil {
 			logger.Error("save base resume failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not save resume")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"resume": saved})
 	}
 }
@@ -502,12 +541,14 @@ func jobsHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFun
 			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
 			return
 		}
+
 		offset, err := paginationQueryInt(request, "offset", 0)
 		if err != nil {
 			logger.Warn("invalid jobs offset", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
 			return
 		}
+
 		page, err := browse.Jobs(request.Context(), models.JobSearch{
 			Search:   request.URL.Query().Get("search"),
 			Provider: request.URL.Query().Get("provider"),
@@ -522,10 +563,12 @@ func jobsHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFun
 				writeError(writer, http.StatusBadRequest, err.Error())
 				return
 			}
+
 			logger.Error("list jobs failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load jobs")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, page)
 	}
 }
@@ -538,16 +581,19 @@ func jobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		job, err := browse.OpenJob(request.Context(), id)
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(writer, http.StatusNotFound, "job not found")
 			return
 		}
+
 		if err != nil {
 			logger.Error("load job failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load job")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"job": job})
 	}
 }
@@ -561,17 +607,20 @@ func createCustomJobHandler(browse *services.JobBrowse, logger *zap.Logger) http
 			writeError(writer, http.StatusBadRequest, "job must be valid JSON")
 			return
 		}
+
 		job, err := browse.CreateCustomJob(request.Context(), custom)
 		if errors.Is(err, services.ErrInvalidCustomJobURL) {
 			logger.Warn("invalid custom job URL", zap.String("source_url", custom.SourceURL), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		if err != nil {
 			logger.Error("import custom job failed", zap.String("source_url", custom.SourceURL), zap.Error(err))
 			writeError(writer, http.StatusBadGateway, "could not import job posting")
 			return
 		}
+
 		logger.Info("custom job imported", zap.Int64("job_id", job.ID), zap.String("source_url", job.SourceURL))
 		writeJSON(writer, http.StatusCreated, map[string]any{"job": job})
 	}
@@ -585,16 +634,19 @@ func deleteJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		deleted, err := browse.DeleteJob(request.Context(), id)
 		if err != nil {
 			logger.Error("delete job failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not delete job")
 			return
 		}
+
 		if !deleted {
 			writeError(writer, http.StatusNotFound, "job not found")
 			return
 		}
+
 		writer.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -607,6 +659,7 @@ func rejectJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		var body struct {
 			Reason string `json:"reason"`
 		}
@@ -615,22 +668,26 @@ func rejectJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 			writeError(writer, http.StatusBadRequest, "rejection must be valid JSON")
 			return
 		}
+
 		rejected, err := browse.RejectJob(request.Context(), id, body.Reason)
 		if errors.Is(err, services.ErrEmptyJobRejectionReason) {
 			logger.Warn("job rejection without a reason", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		if err != nil {
 			logger.Error("reject job failed", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not reject job")
 			return
 		}
+
 		if !rejected {
 			logger.Warn("reject job not found", zap.Int64("job_id", id))
 			writeError(writer, http.StatusNotFound, "job not found")
 			return
 		}
+
 		logger.Info("job marked as won't apply", zap.Int64("job_id", id))
 		writer.WriteHeader(http.StatusNoContent)
 	}
@@ -644,6 +701,7 @@ func jobMatchHandler(matches *services.JobMatches, applications *services.Applic
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		if err := browse.MarkJobViewed(request.Context(), id); errors.Is(err, sql.ErrNoRows) {
 			logger.Warn("mark missing job viewed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusNotFound, "job not found")
@@ -653,24 +711,28 @@ func jobMatchHandler(matches *services.JobMatches, applications *services.Applic
 			writeError(writer, http.StatusInternalServerError, "could not mark job viewed")
 			return
 		}
+
 		match, err := matches.Match(request.Context(), id)
 		if err != nil {
 			logger.Error("load job match failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load job match")
 			return
 		}
+
 		analysis, err := matches.Analysis(request.Context(), id)
 		if err != nil {
 			logger.Error("load job analysis failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load job analysis")
 			return
 		}
+
 		application, err := applications.Application(request.Context(), id)
 		if err != nil {
 			logger.Error("load job application with match failed", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load job application")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"match": match, "analysis": analysis, "application": application})
 	}
 }
@@ -681,6 +743,7 @@ func parseJobID(request *http.Request, logger *zap.Logger, message string) (int6
 		logger.Warn(message, zap.String("id", request.PathValue("id")))
 		return 0, errors.New("job ID must be a positive integer")
 	}
+
 	return id, nil
 }
 
@@ -691,12 +754,14 @@ func jobApplicationHandler(applications *services.Applications, logger *zap.Logg
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		application, err := applications.Application(request.Context(), id)
 		if err != nil {
 			logger.Error("load job application failed", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load job application")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"application": application})
 	}
 }
@@ -708,17 +773,20 @@ func applyJobHandler(applications *services.Applications, logger *zap.Logger) ht
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		application, err := applications.Apply(request.Context(), id)
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Warn("apply missing job", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusNotFound, "job not found")
 			return
 		}
+
 		if err != nil {
 			logger.Error("apply to job failed", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not mark job applied")
 			return
 		}
+
 		logger.Info("job marked applied", zap.Int64("job_id", id))
 		writeJSON(writer, http.StatusOK, map[string]any{"application": application})
 	}
@@ -731,12 +799,14 @@ func unapplyJobHandler(applications *services.Applications, logger *zap.Logger) 
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		removed, err := applications.Unapply(request.Context(), id)
 		if err != nil {
 			logger.Error("unapply from job failed", zap.Int64("job_id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not mark job unapplied")
 			return
 		}
+
 		logger.Info("job marked unapplied", zap.Int64("job_id", id), zap.Bool("removed", removed))
 		writer.WriteHeader(http.StatusNoContent)
 	}
@@ -750,18 +820,21 @@ func applicationsHandler(applications *services.Applications, logger *zap.Logger
 			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
 			return
 		}
+
 		offset, err := paginationQueryInt(request, "offset", 0)
 		if err != nil {
 			logger.Warn("invalid applications offset", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
 			return
 		}
+
 		page, err := applications.List(request.Context(), models.ApplicationSearch{Limit: limit, Offset: offset})
 		if err != nil {
 			logger.Error("list applications failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load applications")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, page)
 	}
 }
@@ -774,18 +847,21 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
 			return
 		}
+
 		offset, err := paginationQueryInt(request, "offset", 0)
 		if err != nil {
 			logger.Warn("invalid job matches offset", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
 			return
 		}
+
 		minimumScore, err := minimumMatchScore(request)
 		if err != nil {
 			logger.Warn("invalid job matches minimum score", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "minimumScore must be an integer from 0 to 100")
 			return
 		}
+
 		page, err := matches.List(request.Context(), models.JobMatchSearch{
 			MinimumScore: minimumScore,
 			Sort:         request.URL.Query().Get("sort"),
@@ -799,21 +875,25 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		if errors.Is(err, services.ErrInvalidJobMatchViewed) {
 			logger.Warn("invalid job matches viewed filter", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		if errors.Is(err, services.ErrInvalidJobMatchApplied) {
 			logger.Warn("invalid job matches applied filter", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		if err != nil {
 			logger.Error("list job matches failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load job matches")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, page)
 	}
 }
@@ -823,10 +903,12 @@ func minimumMatchScore(request *http.Request) (*int, error) {
 	if value == "" {
 		return nil, nil
 	}
+
 	score, err := strconv.Atoi(value)
 	if err != nil || score < 0 || score > 100 {
 		return nil, errors.New("score out of range")
 	}
+
 	return &score, nil
 }
 
@@ -838,18 +920,21 @@ func jobMatchChatItemsHandler(chat *services.JobMatchChat, logger *zap.Logger) h
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		after, err := chatAfterSequence(request)
 		if err != nil {
 			logger.Warn("invalid match chat item sequence", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "after must be a non-negative integer")
 			return
 		}
+
 		items, err := chat.Items(request.Context(), id, after)
 		if err != nil {
 			logger.Error("load job match chat items failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not load match chat")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"items": items})
 	}
 }
@@ -859,10 +944,12 @@ func chatAfterSequence(request *http.Request) (int64, error) {
 	if value == "" {
 		return 0, nil
 	}
+
 	after, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || after < 0 {
 		return 0, errors.New("invalid after sequence")
 	}
+
 	return after, nil
 }
 
@@ -874,18 +961,21 @@ func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		after, err := chatAfterSequence(request)
 		if err != nil {
 			logger.Warn("invalid match chat event sequence", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, "after must be a non-negative integer")
 			return
 		}
+
 		flusher, ok := writer.(http.Flusher)
 		if !ok {
 			logger.Error("match chat SSE is not supported", zap.Int64("id", id))
 			writeError(writer, http.StatusInternalServerError, "match chat events are unavailable")
 			return
 		}
+
 		writer.Header().Set("Cache-Control", "no-cache")
 		writer.Header().Set("Connection", "keep-alive")
 		writer.Header().Set("Content-Type", "text/event-stream")
@@ -897,24 +987,29 @@ func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 				logger.Error("load match chat SSE items failed", zap.Int64("id", id), zap.Error(err))
 				return false
 			}
+
 			for _, item := range items {
 				data, err := json.Marshal(item)
 				if err != nil {
 					logger.Error("encode match chat SSE item failed", zap.Int64("id", id), zap.Error(err))
 					return false
 				}
+
 				if _, err := writer.Write([]byte("event: item\ndata: " + string(data) + "\n\n")); err != nil {
 					logger.Error("write match chat SSE item failed", zap.Int64("id", id), zap.Error(err))
 					return false
 				}
+
 				after = item.Sequence
 			}
+
 			flusher.Flush()
 			return true
 		}
 		if !writeChatItems() {
 			return
 		}
+
 		for {
 			select {
 			case <-request.Context().Done():
@@ -925,9 +1020,11 @@ func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 						logger.Error("write match chat SSE reset failed", zap.Int64("id", id), zap.Error(err))
 						return
 					}
+
 					flusher.Flush()
 					continue
 				}
+
 				if !writeChatItems() {
 					return
 				}
@@ -944,6 +1041,7 @@ func jobMatchChatSendHandler(chat *services.JobMatchChat, logger *zap.Logger) ht
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		var body struct {
 			Content   string `json:"content"`
 			RequestID string `json:"requestId"`
@@ -953,27 +1051,32 @@ func jobMatchChatSendHandler(chat *services.JobMatchChat, logger *zap.Logger) ht
 			writeError(writer, http.StatusBadRequest, "message must be valid JSON")
 			return
 		}
+
 		item, err := chat.Send(request.Context(), id, body.Content, body.RequestID)
 		if errors.Is(err, services.ErrEmptyJobMatchChatMessage) || errors.Is(err, services.ErrMissingJobMatchChatRequestID) {
 			logger.Warn("empty job match chat message", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		if errors.Is(err, services.ErrJobMatchChatUnavailable) {
 			logger.Warn("job match chat unavailable", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusConflict, err.Error())
 			return
 		}
+
 		if errors.Is(err, services.ErrJobMatchChatTurnActive) || errors.Is(err, services.ErrJobMatchChatUnansweredMessage) {
 			logger.Warn("job match chat turn rejected", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusConflict, err.Error())
 			return
 		}
+
 		if err != nil {
 			logger.Error("reply to job match chat failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not reply to match chat")
 			return
 		}
+
 		writeJSON(writer, http.StatusAccepted, map[string]any{"item": item})
 	}
 }
@@ -986,17 +1089,20 @@ func jobMatchChatStopHandler(chat *services.JobMatchChat, logger *zap.Logger) ht
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		requestID := strings.TrimSpace(request.PathValue("requestID"))
 		if requestID == "" {
 			logger.Warn("missing match chat request ID for stop", zap.Int64("job_id", jobID))
 			writeError(writer, http.StatusBadRequest, "request ID is required")
 			return
 		}
+
 		if !chat.Stop(jobID, requestID) {
 			logger.Warn("active match chat turn not found for stop", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
 			writeError(writer, http.StatusNotFound, "active chat turn not found")
 			return
 		}
+
 		writer.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -1009,22 +1115,26 @@ func jobMatchChatRevertHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		sequence, err := strconv.ParseInt(request.PathValue("sequence"), 10, 64)
 		if err != nil || sequence < 1 {
 			logger.Warn("invalid item sequence for match chat revert", zap.Int64("job_id", jobID), zap.String("sequence", request.PathValue("sequence")))
 			writeError(writer, http.StatusBadRequest, "item sequence must be a positive integer")
 			return
 		}
+
 		if err := chat.Revert(request.Context(), jobID, sequence); err != nil {
 			if errors.Is(err, services.ErrJobMatchChatUserMessageNotFound) {
 				logger.Warn("user chat item not found for revert", zap.Int64("job_id", jobID), zap.Int64("sequence", sequence), zap.Error(err))
 				writeError(writer, http.StatusNotFound, err.Error())
 				return
 			}
+
 			logger.Error("revert job match chat failed", zap.Int64("job_id", jobID), zap.Int64("sequence", sequence), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not revert match chat")
 			return
 		}
+
 		writer.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -1037,20 +1147,24 @@ func queueJobMatchHandler(requests *services.JobMatchRequests, logger *zap.Logge
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		if err := requests.Queue(request.Context(), id, redo); err != nil {
 			if errors.Is(err, services.ErrMatchJobNotFound) {
 				writeError(writer, http.StatusNotFound, "job not found")
 				return
 			}
+
 			if errors.Is(err, services.ErrJobDescriptionRequired) {
 				logger.Warn("queue job match without a description", zap.Int64("id", id), zap.Bool("redo", redo), zap.Error(err))
 				writeError(writer, http.StatusBadRequest, err.Error())
 				return
 			}
+
 			logger.Error("queue job match failed", zap.Int64("id", id), zap.Bool("redo", redo), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not queue job match")
 			return
 		}
+
 		writeJSON(writer, http.StatusAccepted, map[string]bool{"queued": true})
 	}
 }
@@ -1063,6 +1177,7 @@ func matchQueueHandler(requests *services.JobMatchRequests, logger *zap.Logger) 
 			writeError(writer, http.StatusInternalServerError, "could not load job match queue")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"jobs": queue})
 	}
 }
@@ -1077,6 +1192,7 @@ func queueUnmatchedJobMatchesHandler(requests *services.JobMatchRequests, logger
 			writeError(writer, http.StatusBadRequest, "jobIds must be valid JSON")
 			return
 		}
+
 		for _, id := range body.JobIDs {
 			if id < 1 {
 				logger.Warn("invalid unmatched job match queue ID", zap.Int64("id", id))
@@ -1084,12 +1200,14 @@ func queueUnmatchedJobMatchesHandler(requests *services.JobMatchRequests, logger
 				return
 			}
 		}
+
 		queued, err := requests.QueueUnmatched(request.Context(), body.JobIDs)
 		if err != nil {
 			logger.Error("queue unmatched job matches failed", zap.Int64s("job_ids", body.JobIDs), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not queue unmatched job matches")
 			return
 		}
+
 		writeJSON(writer, http.StatusAccepted, map[string]int{"queued": queued})
 	}
 }
@@ -1104,21 +1222,25 @@ func reorderMatchQueueHandler(requests *services.JobMatchRequests, logger *zap.L
 			writeError(writer, http.StatusBadRequest, "jobIds must be valid JSON")
 			return
 		}
+
 		for _, id := range body.JobIDs {
 			if id < 1 {
 				writeError(writer, http.StatusBadRequest, "job IDs must be positive integers")
 				return
 			}
 		}
+
 		if err := requests.Reorder(request.Context(), body.JobIDs); err != nil {
 			if errors.Is(err, services.ErrMatchJobNotFound) {
 				writeError(writer, http.StatusNotFound, "a queued job was not found")
 				return
 			}
+
 			logger.Error("reorder job match queue failed", zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not reorder job match queue")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]bool{"queued": true})
 	}
 }
@@ -1131,11 +1253,13 @@ func removeMatchQueueHandler(requests *services.JobMatchRequests, logger *zap.Lo
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
+
 		if err := requests.Remove(request.Context(), id); err != nil {
 			logger.Error("remove job from match queue failed", zap.Int64("id", id), zap.Error(err))
 			writeError(writer, http.StatusInternalServerError, "could not remove job from match queue")
 			return
 		}
+
 		writer.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -1148,6 +1272,7 @@ func providersHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 			writeError(writer, http.StatusInternalServerError, "could not load providers")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"providers": providers})
 	}
 }
@@ -1160,6 +1285,7 @@ func companiesHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 			writeError(writer, http.StatusInternalServerError, "could not load companies")
 			return
 		}
+
 		writeJSON(writer, http.StatusOK, map[string]any{"companies": companies})
 	}
 }
@@ -1209,6 +1335,7 @@ func (server *Server) Register(lifecycle fx.Lifecycle) {
 				server.logger.Error("metrics server start failed", zap.String("path", server.metricsSocketPath), zap.Error(err))
 				return err
 			}
+
 			server.listener = listener
 			server.logger.Info("metrics server starting", zap.String("path", server.metricsSocketPath))
 			go func() {
@@ -1223,16 +1350,19 @@ func (server *Server) Register(lifecycle fx.Lifecycle) {
 				server.logger.Error("HTTP server shutdown failed", zap.Error(err))
 				return err
 			}
+
 			if err := server.metrics.Shutdown(ctx); err != nil {
 				server.logger.Error("metrics server shutdown failed", zap.Error(err))
 				return err
 			}
+
 			if server.listener != nil {
 				if err := os.Remove(server.listener.Addr().String()); err != nil && !errors.Is(err, os.ErrNotExist) {
 					server.logger.Error("remove metrics socket failed", zap.Error(err))
 					return err
 				}
 			}
+
 			return nil
 		},
 	})
@@ -1242,16 +1372,20 @@ func listenMetrics(path string) (net.Listener, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, fmt.Errorf("create metrics socket directory: %w", err)
 	}
+
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("remove stale metrics socket: %w", err)
 	}
+
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		return nil, fmt.Errorf("listen on metrics socket: %w", err)
 	}
+
 	if err := os.Chmod(path, 0o660); err != nil {
 		listener.Close()
 		return nil, fmt.Errorf("set metrics socket permissions: %w", err)
 	}
+
 	return listener, nil
 }

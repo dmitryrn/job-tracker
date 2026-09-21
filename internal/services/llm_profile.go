@@ -51,6 +51,7 @@ func profileForLLM(profile models.UserProfile) llmUserProfile {
 		skill.Notes = redactProfileContactText(skill.Notes)
 		result.Skills = append(result.Skills, skill)
 	}
+
 	for _, experience := range profile.WorkHistory {
 		result.WorkHistory = append(result.WorkHistory, llmWorkHistory{
 			Company:   redactProfileContactText(experience.Company),
@@ -60,6 +61,7 @@ func profileForLLM(profile models.UserProfile) llmUserProfile {
 			Body:      redactProfileContactText(experience.Body),
 		})
 	}
+
 	for _, education := range profile.Education {
 		result.Education = append(result.Education, llmEducation{
 			Degree:    redactProfileContactText(education.Degree),
@@ -68,6 +70,7 @@ func profileForLLM(profile models.UserProfile) llmUserProfile {
 			Body:      redactProfileContactText(education.Body),
 		})
 	}
+
 	return result
 }
 

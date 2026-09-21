@@ -26,10 +26,12 @@ func canonicalConcept(concept string) string {
 			previousSeparator = false
 			continue
 		}
+
 		if !previousSeparator && normalized.Len() > 0 {
 			normalized.WriteByte('_')
 			previousSeparator = true
 		}
 	}
+
 	return strings.Trim(normalized.String(), "_")
 }

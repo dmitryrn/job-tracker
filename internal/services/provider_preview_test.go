@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -39,13 +38,13 @@ func TestProviderPreviewRejectsInvalidOrUnknownProvider(t *testing.T) {
 	service := ProviderPreviewService{}
 
 	_, err := service.Preview(context.Background(), "adzuna", models.DiscoverySettings{})
-	assert.ErrorIs(t, err, ErrInvalidDiscoverySettings)
+	require.ErrorIs(t, err, ErrInvalidDiscoverySettings)
 
 	_, err = service.Preview(context.Background(), "unknown", models.DiscoverySettings{})
-	assert.True(t, errors.Is(err, ErrUnknownDiscoveryProvider))
+	require.ErrorIs(t, err, ErrUnknownDiscoveryProvider)
 
 	_, err = service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: models.LinkedInSearchSettings{Query: "engineer", Workplace: "remote", Limit: 25}})
-	assert.ErrorIs(t, err, ErrInvalidDiscoverySettings)
+	require.ErrorIs(t, err, ErrInvalidDiscoverySettings)
 }
 
 func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
@@ -102,5 +101,6 @@ func (stub *linkedInPreviewStub) PreviewStream(_ context.Context, settings model
 			return LinkedInFetchResult{}, err
 		}
 	}
+
 	return LinkedInFetchResult{Jobs: stub.jobs}, nil
 }

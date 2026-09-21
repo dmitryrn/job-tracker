@@ -61,6 +61,7 @@ func (writer *EventWriter) RecordEvent(_ context.Context, event models.Event) er
 	if !writer.running {
 		return ErrEventWriterStopped
 	}
+
 	event.OccurredAt = time.Now().UTC().Format(time.RFC3339Nano)
 	writer.queue <- event
 	return nil
@@ -72,6 +73,7 @@ func (writer *EventWriter) start() {
 	if writer.running {
 		return
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	writer.cancel = cancel
 	writer.done = make(chan struct{})
@@ -86,6 +88,7 @@ func (writer *EventWriter) stop(ctx context.Context) error {
 		writer.mutex.Unlock()
 		return nil
 	}
+
 	writer.running = false
 	cancel := writer.cancel
 	done := writer.done
@@ -108,12 +111,14 @@ func (writer *EventWriter) run(ctx context.Context) {
 	if !timer.Stop() {
 		<-timer.C
 	}
+
 	defer timer.Stop()
 
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
+
 		for {
 			if err := writer.repository.RecordEvents(context.Background(), batch); err == nil {
 				writer.logger.Info("event batch recorded", zap.Int("count", len(batch)))
@@ -122,6 +127,7 @@ func (writer *EventWriter) run(ctx context.Context) {
 			} else {
 				writer.logger.Error("record event batch failed", zap.Int("count", len(batch)), zap.Error(err))
 			}
+
 			time.Sleep(eventWriteRetryInterval)
 		}
 	}
@@ -131,12 +137,14 @@ func (writer *EventWriter) run(ctx context.Context) {
 		if len(batch) > 0 {
 			timerChannel = timer.C
 		}
+
 		select {
 		case event := <-writer.queue:
 			batch = append(batch, event)
 			if len(batch) == 1 {
 				timer.Reset(writer.flushInterval)
 			}
+
 			if len(batch) == writer.batchSize {
 				if !timer.Stop() {
 					select {
@@ -144,6 +152,7 @@ func (writer *EventWriter) run(ctx context.Context) {
 					default:
 					}
 				}
+
 				flush()
 			}
 		case <-timerChannel:
