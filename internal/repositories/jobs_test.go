@@ -62,6 +62,32 @@ func TestJobExistsFindsJobBySourceAndSourceID(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func TestLinkedInWorkplaceClassificationRoundTrips(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	classification := `{"confidence":0.42,"probabilities":{"remote":0.04,"hybrid":0.61,"onsite":0.1,"unknown":0.25}}`
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source:                      "linkedin",
+		SourceID:                    "classification",
+		SourceURL:                   "https://www.linkedin.com/jobs/view/classification",
+		Title:                       "Engineer",
+		Workplace:                   "hybrid",
+		WorkplaceClassificationJSON: &classification,
+		MetadataJSON:                "{}",
+	}}))
+
+	job, err := repository.JobBySourceID(context.Background(), "linkedin", "classification")
+	require.NoError(t, err)
+	require.NotNil(t, job)
+	assert.Equal(t, "hybrid", job.Workplace)
+	require.NotNil(t, job.WorkplaceClassificationJSON)
+	assert.JSONEq(t, classification, *job.WorkplaceClassificationJSON)
+}
+
 func TestMatchQueueDoesNotStoreDuplicateJobs(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)

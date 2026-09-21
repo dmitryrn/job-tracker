@@ -22,6 +22,8 @@ type Route = {
 	tab?: "post" | "match" | "chat";
 };
 
+const matchesPath = "/matches?minimumScore=60&sort=profile-score-desc&applied=not-applied";
+
 function readRoute(): Route {
   const parts = window.location.pathname.split("/").filter(Boolean);
   if (parts[0] === "jobs" && /^\d+$/.test(parts[1] ?? "")) {
@@ -36,6 +38,9 @@ function readRoute(): Route {
 function routePath(route: Route) {
   if (route.jobID) {
 		return `/jobs/${route.jobID}${route.tab === "post" ? "" : `/${route.tab ?? "post"}`}`;
+  }
+  if (route.view === "matches") {
+    return matchesPath;
   }
   return route.view === "explorer" ? "/database" : `/${route.view}`;
 }
@@ -98,7 +103,7 @@ export default function App() {
 
   function navigate(nextRoute: Route) {
     const path = routePath(nextRoute);
-    if (window.location.pathname !== path) {
+    if (`${window.location.pathname}${window.location.search}` !== path) {
       window.history.pushState({}, "", path);
     }
     setRoute(nextRoute);
@@ -283,7 +288,7 @@ export default function App() {
         ) : route.view === "match-queue" ? (
           <MatchQueueView onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "post" })} />
          ) : route.view === "matches" ? (
-           <JobMatchesView onOpenMatch={(job) => navigate({ view: "jobs", jobID: job.id, tab: "match" })} />
+           <JobMatchesView key={window.location.search} onOpenMatch={(job) => navigate({ view: "jobs", jobID: job.id, tab: "match" })} />
          ) : route.view === "applications" ? (
            <ApplicationsView onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "match" })} />
          ) : route.view === "profile" ? (

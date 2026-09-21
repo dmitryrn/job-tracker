@@ -88,11 +88,23 @@ func application(ctx context.Context, query queryRower, jobID int64) (*models.Ap
 
 func (repository *SQLite) Applications(ctx context.Context, search models.ApplicationSearch) (models.ApplicationPage, error) {
 	columns := []string{
-		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
-		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
-		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text",
-		"COALESCE(jobs.last_viewed_at, '')", "EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)",
-		"jobs.profile_match_score", "applications.applied_at",
+		"jobs.id",
+		"jobs.source",
+		"jobs.source_url",
+		"jobs.title",
+		"COALESCE(companies.name, '')",
+		"COALESCE(jobs.location, '')",
+		"jobs.workplace",
+		"jobs.workplace_classification_json",
+		"COALESCE(jobs.employment_type, '')",
+		"jobs.salary_min",
+		"jobs.salary_max",
+		"COALESCE(jobs.posted_at, '')",
+		"jobs.body_text",
+		"COALESCE(jobs.last_viewed_at, '')",
+		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)",
+		"jobs.profile_match_score",
+		"applications.applied_at",
 	}
 	query := sqlBuilder.Select(columns...).From("applications").Join("jobs ON jobs.id = applications.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	statement, arguments, err := query.OrderBy("applications.applied_at DESC", "applications.job_id DESC").Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
@@ -108,9 +120,25 @@ func (repository *SQLite) Applications(ctx context.Context, search models.Applic
 	page := models.ApplicationPage{Applications: make([]models.ApplicationSummary, 0)}
 	for rows.Next() {
 		var item models.ApplicationSummary
-		if err := rows.Scan(&item.Job.ID, &item.Job.Source, &item.Job.SourceURL, &item.Job.Title, &item.Job.Company,
-			&item.Job.Location, &item.Job.Workplace, &item.Job.EmploymentType, &item.Job.SalaryMin, &item.Job.SalaryMax,
-			&item.Job.PostedAt, &item.Job.BodyText, &item.Job.LastViewedAt, &item.Job.HasMatch, &item.Job.ProfileMatchScore, &item.AppliedAt); err != nil {
+		if err := rows.Scan(
+			&item.Job.ID,
+			&item.Job.Source,
+			&item.Job.SourceURL,
+			&item.Job.Title,
+			&item.Job.Company,
+			&item.Job.Location,
+			&item.Job.Workplace,
+			&item.Job.WorkplaceClassificationJSON,
+			&item.Job.EmploymentType,
+			&item.Job.SalaryMin,
+			&item.Job.SalaryMax,
+			&item.Job.PostedAt,
+			&item.Job.BodyText,
+			&item.Job.LastViewedAt,
+			&item.Job.HasMatch,
+			&item.Job.ProfileMatchScore,
+			&item.AppliedAt,
+		); err != nil {
 			return models.ApplicationPage{}, fmt.Errorf("scan application: %w", err)
 		}
 		page.Applications = append(page.Applications, item)

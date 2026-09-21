@@ -3,20 +3,21 @@ package models
 import "encoding/json"
 
 type Job struct {
-	Source            string `json:"source"`
-	SourceID          string `json:"sourceId"`
-	SourceURL         string `json:"sourceURL"`
-	Title             string `json:"title"`
-	BodyText          string `json:"bodyText"`
-	Company           string `json:"company"`
-	Location          string `json:"location"`
-	Workplace         string `json:"workplace"`
-	EmploymentType    string `json:"employmentType"`
-	SalaryMin         *int64 `json:"salaryMin"`
-	SalaryMax         *int64 `json:"salaryMax"`
-	PostedAt          string `json:"postedAt"`
-	MetadataJSON      string `json:"metadataJSON"`
-	ProfileMatchScore *int   `json:"profileMatchScore,omitempty"`
+	Source                      string  `json:"source"`
+	SourceID                    string  `json:"sourceId"`
+	SourceURL                   string  `json:"sourceURL"`
+	Title                       string  `json:"title"`
+	BodyText                    string  `json:"bodyText"`
+	Company                     string  `json:"company"`
+	Location                    string  `json:"location"`
+	Workplace                   string  `json:"workplace"`
+	WorkplaceClassificationJSON *string `json:"workplaceClassificationJSON"`
+	EmploymentType              string  `json:"employmentType"`
+	SalaryMin                   *int64  `json:"salaryMin"`
+	SalaryMax                   *int64  `json:"salaryMax"`
+	PostedAt                    string  `json:"postedAt"`
+	MetadataJSON                string  `json:"metadataJSON"`
+	ProfileMatchScore           *int    `json:"profileMatchScore,omitempty"`
 }
 
 type CustomJob struct {
@@ -104,21 +105,22 @@ type LinkedInSearchSettings struct {
 }
 
 type BrowseJob struct {
-	ID                int64  `json:"id"`
-	Source            string `json:"source"`
-	SourceURL         string `json:"sourceURL"`
-	Title             string `json:"title"`
-	Company           string `json:"company"`
-	Location          string `json:"location"`
-	Workplace         string `json:"workplace"`
-	EmploymentType    string `json:"employmentType"`
-	SalaryMin         *int64 `json:"salaryMin"`
-	SalaryMax         *int64 `json:"salaryMax"`
-	PostedAt          string `json:"postedAt"`
-	BodyText          string `json:"bodyText"`
-	LastViewedAt      string `json:"lastViewedAt"`
-	HasMatch          bool   `json:"hasMatch"`
-	ProfileMatchScore *int   `json:"profileMatchScore"`
+	ID                          int64   `json:"id"`
+	Source                      string  `json:"source"`
+	SourceURL                   string  `json:"sourceURL"`
+	Title                       string  `json:"title"`
+	Company                     string  `json:"company"`
+	Location                    string  `json:"location"`
+	Workplace                   string  `json:"workplace"`
+	WorkplaceClassificationJSON *string `json:"workplaceClassificationJSON"`
+	EmploymentType              string  `json:"employmentType"`
+	SalaryMin                   *int64  `json:"salaryMin"`
+	SalaryMax                   *int64  `json:"salaryMax"`
+	PostedAt                    string  `json:"postedAt"`
+	BodyText                    string  `json:"bodyText"`
+	LastViewedAt                string  `json:"lastViewedAt"`
+	HasMatch                    bool    `json:"hasMatch"`
+	ProfileMatchScore           *int    `json:"profileMatchScore"`
 }
 
 type BrowseCompany struct {

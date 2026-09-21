@@ -38,6 +38,55 @@ func (repository *SQLite) JobExists(ctx context.Context, source, sourceID string
 	return err == nil, err
 }
 
+func (repository *SQLite) JobBySourceID(ctx context.Context, source, sourceID string) (*models.Job, error) {
+	statement, args, err := sqlBuilder.Select(
+		"jobs.source",
+		"jobs.source_job_id",
+		"jobs.source_url",
+		"jobs.title",
+		"jobs.body_text",
+		"COALESCE(companies.name, '')",
+		"COALESCE(jobs.location, '')",
+		"jobs.workplace",
+		"jobs.workplace_classification_json",
+		"COALESCE(jobs.employment_type, '')",
+		"jobs.salary_min",
+		"jobs.salary_max",
+		"COALESCE(jobs.posted_at, '')",
+		"jobs.metadata_json",
+		"jobs.profile_match_score",
+	).From("jobs").LeftJoin("companies ON companies.id = jobs.company_id").Where(squirrel.Eq{
+		"jobs.source":        source,
+		"jobs.source_job_id": sourceID,
+	}).Limit(1).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build source job query: %w", err)
+	}
+	var job models.Job
+	if err := repository.db.QueryRowContext(ctx, statement, args...).Scan(
+		&job.Source,
+		&job.SourceID,
+		&job.SourceURL,
+		&job.Title,
+		&job.BodyText,
+		&job.Company,
+		&job.Location,
+		&job.Workplace,
+		&job.WorkplaceClassificationJSON,
+		&job.EmploymentType,
+		&job.SalaryMin,
+		&job.SalaryMax,
+		&job.PostedAt,
+		&job.MetadataJSON,
+		&job.ProfileMatchScore,
+	); err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("get source job: %w", err)
+	}
+	return &job, nil
+}
+
 func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 	transaction, err := repository.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -53,10 +102,23 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 		}
 		if _, err := transaction.ExecContext(ctx, `
 			INSERT INTO jobs (
-				source, source_job_id, company_id, source_url, title, body_text, location,
-				workplace, employment_type, salary_min, salary_max, posted_at,
-				first_seen_at, last_seen_at, metadata_json
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				source,
+				source_job_id,
+				company_id,
+				source_url,
+				title,
+				body_text,
+				location,
+				workplace,
+				workplace_classification_json,
+				employment_type,
+				salary_min,
+				salary_max,
+				posted_at,
+				first_seen_at,
+				last_seen_at,
+				metadata_json
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(source, source_job_id) DO UPDATE SET
 				company_id = excluded.company_id,
 				source_url = excluded.source_url,
@@ -64,15 +126,30 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 				body_text = excluded.body_text,
 				location = excluded.location,
 				workplace = excluded.workplace,
+				workplace_classification_json = excluded.workplace_classification_json,
 				employment_type = excluded.employment_type,
 				salary_min = excluded.salary_min,
 				salary_max = excluded.salary_max,
 				posted_at = excluded.posted_at,
 				last_seen_at = excluded.last_seen_at,
 				metadata_json = excluded.metadata_json`,
-			job.Source, job.SourceID, companyID, job.SourceURL, job.Title, job.BodyText,
-			job.Location, job.Workplace, job.EmploymentType, job.SalaryMin, job.SalaryMax,
-			job.PostedAt, now, now, job.MetadataJSON); err != nil {
+			job.Source,
+			job.SourceID,
+			companyID,
+			job.SourceURL,
+			job.Title,
+			job.BodyText,
+			job.Location,
+			job.Workplace,
+			job.WorkplaceClassificationJSON,
+			job.EmploymentType,
+			job.SalaryMin,
+			job.SalaryMax,
+			job.PostedAt,
+			now,
+			now,
+			job.MetadataJSON,
+		); err != nil {
 			return err
 		}
 	}
@@ -92,9 +169,56 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 		return models.BrowseJob{}, fmt.Errorf("upsert custom job company: %w", err)
 	}
 	statement, args, err := sqlBuilder.Insert("jobs").
-		Columns("source", "source_job_id", "company_id", "source_url", "title", "body_text", "location", "workplace", "employment_type", "salary_min", "salary_max", "posted_at", "first_seen_at", "last_seen_at", "metadata_json").
-		Values(job.Source, job.SourceID, companyID, job.SourceURL, job.Title, job.BodyText, job.Location, job.Workplace, job.EmploymentType, job.SalaryMin, job.SalaryMax, job.PostedAt, now, now, job.MetadataJSON).
-		Suffix("ON CONFLICT(source, source_job_id) DO UPDATE SET source_url = excluded.source_url, company_id = excluded.company_id, title = excluded.title, body_text = excluded.body_text, location = excluded.location, workplace = excluded.workplace, employment_type = excluded.employment_type, salary_min = excluded.salary_min, salary_max = excluded.salary_max, posted_at = excluded.posted_at, last_seen_at = excluded.last_seen_at, metadata_json = excluded.metadata_json").
+		Columns(
+			"source",
+			"source_job_id",
+			"company_id",
+			"source_url",
+			"title",
+			"body_text",
+			"location",
+			"workplace",
+			"workplace_classification_json",
+			"employment_type",
+			"salary_min",
+			"salary_max",
+			"posted_at",
+			"first_seen_at",
+			"last_seen_at",
+			"metadata_json",
+		).
+		Values(
+			job.Source,
+			job.SourceID,
+			companyID,
+			job.SourceURL,
+			job.Title,
+			job.BodyText,
+			job.Location,
+			job.Workplace,
+			job.WorkplaceClassificationJSON,
+			job.EmploymentType,
+			job.SalaryMin,
+			job.SalaryMax,
+			job.PostedAt,
+			now,
+			now,
+			job.MetadataJSON,
+		).
+		Suffix(`ON CONFLICT(source, source_job_id) DO UPDATE SET
+			source_url = excluded.source_url,
+			company_id = excluded.company_id,
+			title = excluded.title,
+			body_text = excluded.body_text,
+			location = excluded.location,
+			workplace = excluded.workplace,
+			workplace_classification_json = excluded.workplace_classification_json,
+			employment_type = excluded.employment_type,
+			salary_min = excluded.salary_min,
+			salary_max = excluded.salary_max,
+			posted_at = excluded.posted_at,
+			last_seen_at = excluded.last_seen_at,
+			metadata_json = excluded.metadata_json`).
 		ToSql()
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("build custom job insert: %w", err)
@@ -157,8 +281,15 @@ func (repository *SQLite) StartProviderRun(ctx context.Context, provider string,
 
 func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (models.JobPage, error) {
 	query := sqlBuilder.Select(
-		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
-		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
+		"jobs.id",
+		"jobs.source",
+		"jobs.source_url",
+		"jobs.title",
+		"COALESCE(companies.name, '')",
+		"COALESCE(jobs.location, '')",
+		"jobs.workplace",
+		"jobs.workplace_classification_json",
+		"COALESCE(jobs.employment_type, '')",
 		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text", "COALESCE(jobs.last_viewed_at, '')",
 		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)", "jobs.profile_match_score",
 	).From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
@@ -202,7 +333,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 	for rows.Next() {
 		var job models.BrowseJob
 		if err := rows.Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company,
-			&job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
+			&job.Location, &job.Workplace, &job.WorkplaceClassificationJSON, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
 			&job.PostedAt, &job.BodyText, &job.LastViewedAt, &job.HasMatch, &job.ProfileMatchScore); err != nil {
 			return models.JobPage{}, fmt.Errorf("scan job: %w", err)
 		}
@@ -250,14 +381,39 @@ func (repository *SQLite) MarkJobViewed(ctx context.Context, id int64) error {
 func (repository *SQLite) AnalysisJob(ctx context.Context, jobID int64) (*models.Job, error) {
 	var job models.Job
 	err := repository.db.QueryRowContext(ctx, `
-		SELECT jobs.source, jobs.source_job_id, jobs.source_url, jobs.title, jobs.body_text,
-			COALESCE(companies.name, ''), COALESCE(jobs.location, ''), jobs.workplace,
-			COALESCE(jobs.employment_type, ''), jobs.salary_min, jobs.salary_max,
-			COALESCE(jobs.posted_at, ''), jobs.metadata_json, jobs.profile_match_score
+		SELECT jobs.source,
+			jobs.source_job_id,
+			jobs.source_url,
+			jobs.title,
+			jobs.body_text,
+			COALESCE(companies.name, ''),
+			COALESCE(jobs.location, ''),
+			jobs.workplace,
+			jobs.workplace_classification_json,
+			COALESCE(jobs.employment_type, ''),
+			jobs.salary_min,
+			jobs.salary_max,
+			COALESCE(jobs.posted_at, ''),
+			jobs.metadata_json,
+			jobs.profile_match_score
 		FROM jobs LEFT JOIN companies ON companies.id = jobs.company_id WHERE jobs.id = ?`, jobID,
-	).Scan(&job.Source, &job.SourceID, &job.SourceURL, &job.Title, &job.BodyText,
-		&job.Company, &job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin,
-		&job.SalaryMax, &job.PostedAt, &job.MetadataJSON, &job.ProfileMatchScore)
+	).Scan(
+		&job.Source,
+		&job.SourceID,
+		&job.SourceURL,
+		&job.Title,
+		&job.BodyText,
+		&job.Company,
+		&job.Location,
+		&job.Workplace,
+		&job.WorkplaceClassificationJSON,
+		&job.EmploymentType,
+		&job.SalaryMin,
+		&job.SalaryMax,
+		&job.PostedAt,
+		&job.MetadataJSON,
+		&job.ProfileMatchScore,
+	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -587,6 +743,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		"COALESCE(companies.name, '')",
 		"COALESCE(jobs.location, '')",
 		"jobs.workplace",
+		"jobs.workplace_classification_json",
 		"COALESCE(jobs.employment_type, '')",
 		"jobs.salary_min",
 		"jobs.salary_max",
@@ -661,6 +818,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 			&match.Job.Company,
 			&match.Job.Location,
 			&match.Job.Workplace,
+			&match.Job.WorkplaceClassificationJSON,
 			&match.Job.EmploymentType,
 			&match.Job.SalaryMin,
 			&match.Job.SalaryMax,
@@ -885,13 +1043,39 @@ type matchQueueQuerier interface {
 func (repository *SQLite) job(ctx context.Context, query queryRower, jobID int64) (*models.BrowseJob, error) {
 	var job models.BrowseJob
 	err := query.QueryRowContext(ctx, `
-		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
-			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
-			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text, COALESCE(jobs.last_viewed_at, ''),
+		SELECT jobs.id,
+			jobs.source,
+			jobs.source_url,
+			jobs.title,
+			COALESCE(companies.name, ''),
+			COALESCE(jobs.location, ''),
+			jobs.workplace,
+			jobs.workplace_classification_json,
+			COALESCE(jobs.employment_type, ''),
+			jobs.salary_min,
+			jobs.salary_max,
+			COALESCE(jobs.posted_at, ''),
+			jobs.body_text,
+			COALESCE(jobs.last_viewed_at, ''),
 			jobs.profile_match_score
 		FROM jobs LEFT JOIN companies ON companies.id = jobs.company_id WHERE jobs.id = ?`, jobID,
-	).Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company, &job.Location,
-		&job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax, &job.PostedAt, &job.BodyText, &job.LastViewedAt, &job.ProfileMatchScore)
+	).Scan(
+		&job.ID,
+		&job.Source,
+		&job.SourceURL,
+		&job.Title,
+		&job.Company,
+		&job.Location,
+		&job.Workplace,
+		&job.WorkplaceClassificationJSON,
+		&job.EmploymentType,
+		&job.SalaryMin,
+		&job.SalaryMax,
+		&job.PostedAt,
+		&job.BodyText,
+		&job.LastViewedAt,
+		&job.ProfileMatchScore,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("get queued job: %w", err)
 	}

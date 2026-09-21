@@ -9,6 +9,7 @@ import (
 
 type JobRepository interface {
 	JobExists(context.Context, string, string) (bool, error)
+	JobBySourceID(context.Context, string, string) (*models.Job, error)
 	Upsert(context.Context, []models.Job) error
 	CreateCustomJob(context.Context, models.Job) (models.BrowseJob, error)
 	List(context.Context, models.JobSearch) (models.JobPage, error)

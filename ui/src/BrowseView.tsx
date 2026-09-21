@@ -110,6 +110,20 @@ export function workplaceLabel(value: string) {
   }
 }
 
+export function workplaceClassificationTitle(value: string | null) {
+  if (!value) {
+    return "";
+  }
+  try {
+    const classification = JSON.parse(value) as { confidence?: number; probabilities?: Record<string, number> };
+    const probabilities = Object.entries(classification.probabilities ?? {}).map(([option, probability]) => `${workplaceLabel(option) || option}: ${probability}`).join(", ");
+    const confidence = typeof classification.confidence === "number" ? `Confidence: ${classification.confidence}. ` : "";
+    return `${confidence}Jev probabilities: ${probabilities}`.trim();
+  } catch {
+    return "";
+  }
+}
+
 function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
   const lastViewed = formatRelativeTime(job.lastViewedAt);
   return (
@@ -122,10 +136,10 @@ function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
         <h2>{job.title || "Untitled job"}</h2>
         <p className="company-name">{job.company || "Company not listed"}</p>
         <p className="job-excerpt">{plainText(job.bodyText).replace(/\s+/g, " ").trim()}</p>
-         <div className="job-meta">
-           <span>{job.location || "Location flexible"}</span>
-           <span>{workplaceLabel(job.workplace) || "Work arrangement not listed"}</span>
-           <span>{job.employmentType || "Role type not listed"}</span>
+           <div className="job-meta">
+            <span>{job.location || "Location flexible"}</span>
+            <span title={workplaceClassificationTitle(job.workplaceClassificationJSON)}>{workplaceLabel(job.workplace) || "Work arrangement not listed"}</span>
+            <span>{job.employmentType || "Role type not listed"}</span>
          </div>
       </button>
       <div className="job-card-footer">

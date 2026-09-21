@@ -34,6 +34,8 @@ changing a unit definition. Read recent service logs with
 - LLM retries, pipelines, and chats must use append-only context: preserve existing messages exactly, especially the initial user prompt, and append responses or correction feedback rather than rewriting prior context; reuse the session identifier within a retry loop to preserve prefix-cache eligibility
 - keep each repository interface and its persistence implementation in one dedicated file under `internal/repositories`; do not combine unrelated repositories in one file
 - use Squirrel builders for all new SQL queries
+- format SQL column lists and scan/value argument lists with one field per line
+- prefer narrow function parameters over passing whole structs when only a few fields are used
 - tests should assert behavior, not log output
 - run tests, build after making code changes
 - verify Go builds with `go build -o /dev/null ./cmd/server` to avoid build artifacts

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nice/internal/clients/linkedin"
+	"nice/internal/clients/typesafe"
 	"nice/internal/models"
 )
 
@@ -46,12 +48,44 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	assert.Equal(t, "Full-time", jobs[0].EmploymentType)
 }
 
-func TestLinkedInWorkplaceUsesStructuredValueOnly(t *testing.T) {
+func TestLinkedInWorkplaceUsesStructuredValueWhenPresent(t *testing.T) {
 	result := linkedin.SearchResult{ID: "1", PostedAt: "2026-09-02"}
 
 	assert.Equal(t, "unknown", toLinkedInJob(result, linkedin.Job{Description: "Hybrid work with remote days"}).Workplace)
 	assert.Equal(t, "hybrid", toLinkedInJob(result, linkedin.Job{WorkplaceType: "Hybrid"}).Workplace)
 	assert.Equal(t, "onsite", toLinkedInJob(result, linkedin.Job{WorkplaceType: "On-site"}).Workplace)
+}
+
+func TestLinkedInWorkplaceClassificationUsesChoiceAndStoresRawOutput(t *testing.T) {
+	client := &linkedInTypeSafeStub{response: typesafe.Response{
+		Answers: map[string]typesafe.Answer{
+			linkedInWorkplaceQuestionID: {
+				Type:       "choice",
+				Choice:     "hybrid",
+				Confidence: 0.42,
+				Probabilities: map[string]float64{
+					"remote":  0.04,
+					"hybrid":  0.61,
+					"onsite":  0.10,
+					"unknown": 0.25,
+				},
+			},
+		},
+	}}
+	service := LinkedInJobs{typeSafe: client}
+
+	workplace, classification, err := service.classifyWorkplace(context.Background(), "Senior Engineer", "Work from home two days each week.")
+
+	require.NoError(t, err)
+	assert.Equal(t, "hybrid", workplace)
+	require.NotNil(t, classification)
+	assert.JSONEq(t, `{"confidence":0.42,"probabilities":{"hybrid":0.61,"onsite":0.1,"remote":0.04,"unknown":0.25}}`, *classification)
+	require.NotNil(t, client.state)
+	state, err := json.Marshal(client.state)
+	require.NoError(t, err)
+	assert.Contains(t, string(state), "Work from home two days each week.")
+	assert.Equal(t, "choice", client.questions[linkedInWorkplaceQuestionID].Type)
+	assert.Equal(t, "The role intentionally combines remote work with regular in-person work.", linkedInWorkplaceOptions["hybrid"])
 }
 
 func TestLinkedInJobsFetchSkipsIncompleteJobs(t *testing.T) {
@@ -262,6 +296,18 @@ type linkedInClientStub struct {
 	jobAt     time.Time
 }
 
+type linkedInTypeSafeStub struct {
+	state     any
+	questions map[string]typesafe.Question
+	response  typesafe.Response
+}
+
+func (stub *linkedInTypeSafeStub) SystemOne(_ context.Context, state any, questions map[string]typesafe.Question) (typesafe.Response, error) {
+	stub.state = state
+	stub.questions = questions
+	return stub.response, nil
+}
+
 func (stub *linkedInClientStub) Search(_ context.Context, filter linkedin.SearchFilter) ([]linkedin.SearchResult, error) {
 	stub.searchAt = time.Now()
 	stub.starts = append(stub.starts, filter.Start)
@@ -291,6 +337,10 @@ func (stub *linkedInJobRepositoryStub) JobExists(_ context.Context, source, sour
 	}
 	stub.checked = append(stub.checked, sourceID)
 	return stub.existing[sourceID], nil
+}
+
+func (*linkedInJobRepositoryStub) JobBySourceID(context.Context, string, string) (*models.Job, error) {
+	return nil, nil
 }
 
 func (stub *linkedInJobRepositoryStub) Upsert(_ context.Context, jobs []models.Job) error {

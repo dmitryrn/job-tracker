@@ -6,6 +6,7 @@ export type BrowseJob = {
   company: string;
   location: string;
   workplace: string;
+  workplaceClassificationJSON: string | null;
   employmentType: string;
   salaryMin: number | null;
   salaryMax: number | null;

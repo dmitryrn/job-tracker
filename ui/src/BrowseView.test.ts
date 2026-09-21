@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, jobsReadyToQueue, workplaceLabel } from "./BrowseView";
+import { formatDate, jobsReadyToQueue, workplaceClassificationTitle, workplaceLabel } from "./BrowseView";
 
 describe("formatDate", () => {
   const now = new Date("2026-08-27T12:00:00Z");
@@ -40,5 +40,16 @@ describe("workplaceLabel", () => {
 
   it("labels an explicitly unknown workplace arrangement", () => {
     expect(workplaceLabel("unknown")).toBe("Unknown");
+  });
+});
+
+describe("workplaceClassificationTitle", () => {
+  it("shows Jev confidence and the returned probabilities without recalculating them", () => {
+    expect(workplaceClassificationTitle('{"confidence":0.42,"probabilities":{"remote":0.04,"hybrid":0.61,"onsite":0.1,"unknown":0.25}}')).toBe("Confidence: 0.42. Jev probabilities: Remote: 0.04, Hybrid: 0.61, On-site: 0.1, Unknown: 0.25");
+  });
+
+  it("ignores missing or invalid classification data", () => {
+    expect(workplaceClassificationTitle(null)).toBe("");
+    expect(workplaceClassificationTitle("not json")).toBe("");
   });
 });
