@@ -236,10 +236,13 @@ button { cursor: pointer; }
 .eligibility-results { display: grid; gap: 10px; margin-top: 20px; }
 .eligibility-result { align-items: center; background: #fff; border: 1px solid #e4e1d9; display: flex; gap: 16px; justify-content: space-between; padding: 14px; }
 .eligibility-result strong { color: #304860; font-size: 13px; font-weight: 600; }
+.eligibility-result-collapsible { display: block; padding: 0; }
+.eligibility-result-collapsible summary { cursor: pointer; padding: 14px; }
+.eligibility-collapsible-content { align-items: center; display: flex; gap: 16px; justify-content: flex-end; padding: 0 14px 14px; }
 .eligibility-answer { border-radius: 999px; font-size: 11px; font-weight: 700; padding: 5px 9px; white-space: nowrap; }
-.eligibility-answer.yes { background: #f5dfda; color: #8c3526; }
-.eligibility-answer.no { background: #e5f0eb; color: #1e5948; }
-.eligibility-answer.indecisive { background: #e4e7e8; color: #53616b; }
+.eligibility-answer.negative { background: hsl(0 90% 72%); color: hsl(0 75% 20%); }
+.eligibility-answer.positive { background: hsl(108 90% 72%); color: hsl(108 75% 20%); }
+.eligibility-answer.indecisive { background: #e9edf0; color: #4b6075; }
 .eligibility-distribution { color: #65758a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; white-space: nowrap; }
 .eligibility-timestamp { color: #65758a; font-size: 13px; }
 .eligibility-timestamp { margin: 14px 0 0; }
@@ -456,6 +459,7 @@ tr:hover td { background: #fffbed; }
   .analysis-panel-header { flex-direction: column; }
   .analysis-panel-header > p { text-align: left; }
   .eligibility-panel-header, .eligibility-result { align-items: start; flex-direction: column; }
+  .eligibility-collapsible-content { align-items: start; flex-direction: column; }
   .match-chat-message, .match-chat-user-turn { max-width: 100%; }
   .match-chat-message.user { padding: 10px 12px; }
   .value-dialog-header { padding: 15px 16px; }

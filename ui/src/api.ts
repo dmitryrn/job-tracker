@@ -161,17 +161,25 @@ export type JobMatch = {
 };
 
 export type JobEligibilityAnswer = {
+  id: string;
+  question: string;
   answer: "yes" | "no";
   noul: number;
+  positive: boolean;
+  collapseWhen?: {
+    operator: "or" | "and";
+    conditions: Array<{
+      questionId: string;
+      value: boolean;
+    }>;
+  };
 };
 
 export type JobEligibilityCheck = {
   jobId: number;
   model: string;
   checkedAt: string;
-  europeanUnionJobRights: JobEligibilityAnswer;
-  specificCountryResidence: JobEligibilityAnswer;
-  visaSponsorship: JobEligibilityAnswer;
+  answers: JobEligibilityAnswer[];
 };
 
 export type JobMatchChatItem = {

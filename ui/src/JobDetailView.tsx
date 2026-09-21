@@ -115,30 +115,54 @@ function JobMatchAssessmentPanel({ assessment }: { assessment: JobMatchAssessmen
 }
 
 export function eligibilityDecision(answer: JobEligibilityAnswer) {
-  if (Math.max(answer.noul, 1 - answer.noul) < 0.7) {
+  const value = eligibilityAnswerValue(answer);
+  if (value === null) {
     return { label: "Indecisive", className: "eligibility-answer indecisive" };
   }
-  return answer.answer === "yes"
-    ? { label: "Yes", className: "eligibility-answer yes" }
-    : { label: "No", className: "eligibility-answer no" };
+  return {
+    label: value ? "Yes" : "No",
+    className: answer.positive ? "eligibility-answer positive" : "eligibility-answer negative",
+  };
+}
+
+function eligibilityAnswerValue(answer: JobEligibilityAnswer) {
+  if (Math.max(answer.noul, 1 - answer.noul) < 0.7) return null;
+  return answer.answer === "yes";
+}
+
+export function shouldCollapseEligibilityAnswer(answer: JobEligibilityAnswer, answers: JobEligibilityAnswer[]) {
+  const rule = answer.collapseWhen;
+  if (!rule || rule.conditions.length === 0) return false;
+  const matches = (condition: (typeof rule.conditions)[number]) => {
+    const dependency = answers.find((candidate) => candidate.id === condition.questionId);
+    return dependency !== undefined && eligibilityAnswerValue(dependency) === condition.value;
+  };
+  return rule.operator === "and" ? rule.conditions.every(matches) : rule.conditions.some(matches);
 }
 
 function eligibilityDistribution(answer: JobEligibilityAnswer) {
   return `Yes ${Math.round(answer.noul * 100)}% / No ${Math.round((1 - answer.noul) * 100)}%`;
 }
 
+function JobEligibilityResult({ answer, answers }: { answer: JobEligibilityAnswer; answers: JobEligibilityAnswer[] }) {
+  const decision = eligibilityDecision(answer);
+  const result = <><span className={decision.className}>{decision.label}</span><span className="eligibility-distribution">{eligibilityDistribution(answer)}</span></>;
+  if (shouldCollapseEligibilityAnswer(answer, answers)) {
+    return <details className="eligibility-result eligibility-result-collapsible">
+      <summary><strong>{answer.question}</strong></summary>
+      <div className="eligibility-collapsible-content">{result}</div>
+    </details>;
+  }
+  return <div className="eligibility-result"><strong>{answer.question}</strong>{result}</div>;
+}
+
 function JobEligibilityPanel({ check, running, onRun }: { check: JobEligibilityCheck | null; running: boolean; onRun: () => void }) {
-  const questions = check ? [
-    ["Does this job require European Union job rights?", check.europeanUnionJobRights],
-    ["Does this job require to reside in a specific country?", check.specificCountryResidence],
-    ["Does this job provide visa sponsorship?", check.visaSponsorship],
-  ] as const : [];
   return <section className="eligibility-panel">
     <p className="eyebrow">Jev check</p>
     <div className="eligibility-panel-header">
       <button type="button" className="secondary-action" disabled={running} onClick={onRun}>Run</button>
     </div>
-    {questions.length > 0 && <div className="eligibility-results">{questions.map(([question, answer]) => { const decision = eligibilityDecision(answer); return <div className="eligibility-result" key={question}><strong>{question}</strong><span className={decision.className}>{decision.label}</span><span className="eligibility-distribution">{eligibilityDistribution(answer)}</span></div>; })}</div>}
+    {check && check.answers.length > 0 && <div className="eligibility-results">{check.answers.map((answer) => <JobEligibilityResult answer={answer} answers={check.answers} key={`${check.checkedAt}:${answer.id}`} />)}</div>}
     {check && <p className="eligibility-timestamp">Checked {formatTimestamp(check.checkedAt)}</p>}
   </section>;
 }

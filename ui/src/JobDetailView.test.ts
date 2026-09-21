@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eligibilityDecision, mergeChatItems } from "./JobDetailView";
+import { eligibilityDecision, mergeChatItems, shouldCollapseEligibilityAnswer } from "./JobDetailView";
 import type { JobEligibilityAnswer, JobMatchChatItem } from "./api";
 
 function item(sequence: number): JobMatchChatItem {
@@ -19,13 +19,43 @@ describe("mergeChatItems", () => {
 
 describe("eligibilityDecision", () => {
   it("marks distributions wider than 70/30 as indecisive", () => {
-    const answer: JobEligibilityAnswer = { answer: "no", noul: 0.54 };
+    const answer: JobEligibilityAnswer = { id: "test", question: "Test?", answer: "no", noul: 0.54, positive: true };
 
     expect(eligibilityDecision(answer)).toEqual({ label: "Indecisive", className: "eligibility-answer indecisive" });
   });
 
-  it("keeps decisive yes and no answers", () => {
-    expect(eligibilityDecision({ answer: "yes", noul: 0.99 })).toEqual({ label: "Yes", className: "eligibility-answer yes" });
-    expect(eligibilityDecision({ answer: "no", noul: 0.7 })).toEqual({ label: "No", className: "eligibility-answer no" });
+  it("colors decisive answers by whether they are positive", () => {
+    expect(eligibilityDecision({ id: "sponsorship", question: "Sponsorship?", answer: "yes", noul: 0.99, positive: true })).toEqual({ label: "Yes", className: "eligibility-answer positive" });
+    expect(eligibilityDecision({ id: "eu-rights", question: "EU rights?", answer: "yes", noul: 0.99, positive: false })).toEqual({ label: "Yes", className: "eligibility-answer negative" });
+  });
+});
+
+describe("shouldCollapseEligibilityAnswer", () => {
+  const dependency = (id: string, answer: "yes" | "no", noul: number): JobEligibilityAnswer => ({ id, question: `${id}?`, answer, noul, positive: true });
+  const sponsorship: JobEligibilityAnswer = {
+    id: "sponsorship",
+    question: "Sponsorship?",
+    answer: "no",
+    noul: 0.1,
+    positive: false,
+    collapseWhen: {
+      operator: "or",
+      conditions: [
+        { questionId: "eu-rights", value: false },
+        { questionId: "residence", value: false },
+      ],
+    },
+  };
+
+  it("collapses when either dependency has a decisive no", () => {
+    const answers = [dependency("eu-rights", "yes", 0.9), dependency("residence", "no", 0.1), sponsorship];
+
+    expect(shouldCollapseEligibilityAnswer(sponsorship, answers)).toBe(true);
+  });
+
+  it("does not treat an indecisive dependency as no", () => {
+    const answers = [dependency("eu-rights", "no", 0.4), dependency("residence", "yes", 0.9), sponsorship];
+
+    expect(shouldCollapseEligibilityAnswer(sponsorship, answers)).toBe(false);
   });
 });
