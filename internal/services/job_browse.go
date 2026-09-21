@@ -49,6 +49,17 @@ func (browse *JobBrowse) Job(ctx context.Context, id int64) (*models.BrowseJob, 
 	return browse.repository.Job(ctx, id)
 }
 
+func (browse *JobBrowse) OpenJob(ctx context.Context, id int64) (*models.BrowseJob, error) {
+	if err := browse.repository.MarkJobViewed(ctx, id); err != nil {
+		return nil, err
+	}
+	return browse.repository.Job(ctx, id)
+}
+
+func (browse *JobBrowse) MarkJobViewed(ctx context.Context, id int64) error {
+	return browse.repository.MarkJobViewed(ctx, id)
+}
+
 func (browse *JobBrowse) CreateCustomJob(ctx context.Context, custom models.CustomJob) (models.BrowseJob, error) {
 	custom.SourceURL = strings.TrimSpace(custom.SourceURL)
 	parsed, err := url.ParseRequestURI(custom.SourceURL)

@@ -5,6 +5,8 @@ const emptyProfile: UserProfile = {
   id: 1,
   headline: "",
   workAuthorization: "",
+  githubURL: "",
+  linkedinURL: "",
   summary: "",
   skills: [],
   workHistory: [],
@@ -12,12 +14,15 @@ const emptyProfile: UserProfile = {
   updatedAt: "",
 };
 
+type ProfileURLField = "githubURL" | "linkedinURL";
+
 export default function ProfileView() {
   const [profile, setProfile] = useState<UserProfile>(emptyProfile);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState("");
+  const [copiedField, setCopiedField] = useState<ProfileURLField | "">("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -44,6 +49,21 @@ export default function ProfileView() {
 
   function updateField(field: keyof UserProfile, value: string) {
     setProfile((current) => ({ ...current, [field]: value }));
+  }
+
+  async function copyField(field: ProfileURLField) {
+    const value = profile[field].trim();
+    if (!value) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField(""), 1500);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not copy link");
+    }
   }
 
   function updateSkill(index: number, field: "name" | "level" | "notes", value: string) {
@@ -99,7 +119,9 @@ export default function ProfileView() {
               <div className="profile-fields">
                 <label>Professional headline<input value={profile.headline} onChange={(event) => updateField("headline", event.target.value)} placeholder="Senior backend engineer" /></label>
                 <label>Work authorization<input value={profile.workAuthorization} onChange={(event) => updateField("workAuthorization", event.target.value)} placeholder="Eligible to work in the EU" /></label>
-            </div>
+                <label>GitHub URL<div className="profile-copy-field"><input type="url" value={profile.githubURL} onChange={(event) => updateField("githubURL", event.target.value)} placeholder="https://github.com/username" /><button type="button" className="copy-field" onClick={() => void copyField("githubURL")} disabled={!profile.githubURL.trim()} aria-label="Copy GitHub URL" title={copiedField === "githubURL" ? "Copied" : "Copy GitHub URL"}>{copiedField === "githubURL" ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> : <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="1.5" /><path d="M16 8V6a1.5 1.5 0 0 0-1.5-1.5h-8A1.5 1.5 0 0 0 5 6v8a1.5 1.5 0 0 0 1.5 1.5H8" /></svg>}</button></div></label>
+                <label>LinkedIn URL<div className="profile-copy-field"><input type="url" value={profile.linkedinURL} onChange={(event) => updateField("linkedinURL", event.target.value)} placeholder="https://www.linkedin.com/in/username" /><button type="button" className="copy-field" onClick={() => void copyField("linkedinURL")} disabled={!profile.linkedinURL.trim()} aria-label="Copy LinkedIn URL" title={copiedField === "linkedinURL" ? "Copied" : "Copy LinkedIn URL"}>{copiedField === "linkedinURL" ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> : <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="1.5" /><path d="M16 8V6a1.5 1.5 0 0 0-1.5-1.5h-8A1.5 1.5 0 0 0 5 6v8a1.5 1.5 0 0 0 1.5 1.5H8" /></svg>}</button></div></label>
+              </div>
             <label className="profile-summary">Summary<textarea value={profile.summary} onChange={(event) => updateField("summary", event.target.value)} placeholder="The work, domains, and strengths you want a matcher to consider." rows={5} /></label>
           </section>
 

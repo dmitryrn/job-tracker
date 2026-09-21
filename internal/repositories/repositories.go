@@ -13,6 +13,7 @@ type JobRepository interface {
 	CreateCustomJob(context.Context, models.Job) (models.BrowseJob, error)
 	List(context.Context, models.JobSearch) (models.JobPage, error)
 	Job(context.Context, int64) (*models.BrowseJob, error)
+	MarkJobViewed(context.Context, int64) error
 	Delete(context.Context, int64) (bool, error)
 	Reject(context.Context, int64, string) (bool, error)
 	Providers(context.Context) ([]string, error)

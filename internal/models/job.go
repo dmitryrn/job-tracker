@@ -116,6 +116,7 @@ type BrowseJob struct {
 	SalaryMax         *int64 `json:"salaryMax"`
 	PostedAt          string `json:"postedAt"`
 	BodyText          string `json:"bodyText"`
+	LastViewedAt      string `json:"lastViewedAt"`
 	HasMatch          bool   `json:"hasMatch"`
 	ProfileMatchScore *int   `json:"profileMatchScore"`
 }
@@ -165,6 +166,7 @@ type JobMatchSummary struct {
 type JobMatchSearch struct {
 	MinimumScore *int
 	Sort         string
+	Viewed       string
 	Limit        int
 	Offset       int
 }

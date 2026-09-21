@@ -4,6 +4,8 @@ type UserProfile struct {
 	ID                int64                    `json:"id"`
 	Headline          string                   `json:"headline"`
 	WorkAuthorization string                   `json:"workAuthorization"`
+	GitHubURL         string                   `json:"githubURL"`
+	LinkedInURL       string                   `json:"linkedinURL"`
 	Summary           string                   `json:"summary"`
 	Skills            []UserProfileSkill       `json:"skills"`
 	WorkHistory       []UserProfileWorkHistory `json:"workHistory"`

@@ -44,7 +44,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("GET /api/jobs/{id}", jobHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/rejection", rejectJobHandler(browse, logger))
-	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, browse, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match/eligibility", jobEligibilityCheckHandler(jobs, typeSafe, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match/resume.pdf", jobApplicationResumePDFHandler(chat, resumePDF, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
@@ -534,7 +534,7 @@ func jobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
 			return
 		}
-		job, err := browse.Job(request.Context(), id)
+		job, err := browse.OpenJob(request.Context(), id)
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(writer, http.StatusNotFound, "job not found")
 			return
@@ -632,12 +632,21 @@ func rejectJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 	}
 }
 
-func jobMatchHandler(matches *services.JobMatches, logger *zap.Logger) http.HandlerFunc {
+func jobMatchHandler(matches *services.JobMatches, browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
 		if err != nil || id < 1 {
 			logger.Warn("invalid job ID", zap.String("id", request.PathValue("id")))
 			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+		if err := browse.MarkJobViewed(request.Context(), id); errors.Is(err, sql.ErrNoRows) {
+			logger.Warn("mark missing job viewed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusNotFound, "job not found")
+			return
+		} else if err != nil {
+			logger.Error("mark job viewed failed", zap.Int64("id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not mark job viewed")
 			return
 		}
 		match, err := matches.Match(request.Context(), id)
@@ -679,11 +688,17 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 		page, err := matches.List(request.Context(), models.JobMatchSearch{
 			MinimumScore: minimumScore,
 			Sort:         request.URL.Query().Get("sort"),
+			Viewed:       request.URL.Query().Get("viewed"),
 			Limit:        limit,
 			Offset:       offset,
 		})
 		if errors.Is(err, services.ErrInvalidJobMatchSort) {
 			logger.Warn("invalid job matches sort", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, services.ErrInvalidJobMatchViewed) {
+			logger.Warn("invalid job matches viewed filter", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}

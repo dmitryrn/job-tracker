@@ -116,3 +116,26 @@ func TestSaveJobProfileMatchScoreStoresAndListsScore(t *testing.T) {
 	require.NotNil(t, page.Jobs[0].ProfileMatchScore)
 	assert.Equal(t, 8, *page.Jobs[0].ProfileMatchScore)
 }
+
+func TestMarkJobViewedStoresLastViewedAt(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "example", SourceID: "viewed", SourceURL: "https://example.com/viewed", Title: "Engineer", Workplace: "remote", MetadataJSON: "{}",
+	}}))
+
+	var before sql.NullString
+	require.NoError(t, db.QueryRow(`SELECT last_viewed_at FROM jobs WHERE id = 1`).Scan(&before))
+	assert.False(t, before.Valid)
+
+	require.NoError(t, repository.MarkJobViewed(context.Background(), 1))
+	job, err := repository.Job(context.Background(), 1)
+	require.NoError(t, err)
+	assert.NotEmpty(t, job.LastViewedAt)
+	_, err = time.Parse(time.RFC3339Nano, job.LastViewedAt)
+	require.NoError(t, err)
+}

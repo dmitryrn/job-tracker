@@ -38,6 +38,37 @@ export function formatDate(value: string, now = new Date()) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
+export function formatRelativeTime(value: string, now = new Date()) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const seconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (seconds < 60) {
+    return "just now";
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 30) {
+    return `${days}d ago`;
+  }
+  const months = Math.floor(days / 30);
+  if (months < 12) {
+    return `${months}mo ago`;
+  }
+  return `${Math.floor(months / 12)}y ago`;
+}
+
 function formatSalary(job: BrowseJob) {
   if (job.salaryMin === null && job.salaryMax === null) {
     return "Compensation not listed";
@@ -65,12 +96,13 @@ export function jobsReadyToQueue(jobs: BrowseJob[], queuedJobIDs: ReadonlySet<nu
 }
 
 function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
+  const lastViewed = formatRelativeTime(job.lastViewedAt);
   return (
     <article className="job-card">
       <button className="job-card-button" onClick={onOpen}>
         <div className="job-card-topline">
            <span className="job-card-status"><span className="source-label">{job.source}</span><span className={job.hasMatch ? "match-status ready" : "match-status"}>{job.hasMatch ? "Match ready" : "No match yet"}</span><span className={profileScoreClassName(job.profileMatchScore)} style={profileScoreStyle(job.profileMatchScore)}>Profile fit {profileScoreLabel(job.profileMatchScore)}</span></span>
-          <span className="posted-label">{formatDate(job.postedAt)}</span>
+          <span className="job-card-times"><span className="posted-label">{formatDate(job.postedAt)}</span>{lastViewed ? <time dateTime={job.lastViewedAt} title={job.lastViewedAt}>Last seen {lastViewed}</time> : <span className="not-seen">Not seen</span>}</span>
         </div>
         <h2>{job.title || "Untitled job"}</h2>
         <p className="company-name">{job.company || "Company not listed"}</p>

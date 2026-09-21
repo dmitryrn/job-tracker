@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
+import { formatRelativeTime } from "./BrowseView";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
 type JobDetailViewProps = {
@@ -423,6 +424,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const rejectionDialogRef = useRef<HTMLDialogElement>(null);
   const postedAt = formatTimestamp(job.postedAt);
   const matchedAt = match ? formatTimestamp(match.createdAt) : "";
+  const lastViewed = formatRelativeTime(job.lastViewedAt);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -546,9 +548,10 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       <dl className="job-page-meta">
         <div><dt>Location</dt><dd>{job.location || "Location flexible"}</dd></div>
         <div><dt>Employment type</dt><dd>{job.employmentType || "Not listed"}</dd></div>
-       <div><dt>Compensation</dt><dd>{formatSalary(job)}</dd></div>
-       <div><dt>Profile fit</dt><dd><span className={profileScoreClassName(job.profileMatchScore)} style={profileScoreStyle(job.profileMatchScore)}>{profileScoreLabel(job.profileMatchScore)}</span></dd></div>
-      </dl>
+         <div><dt>Compensation</dt><dd>{formatSalary(job)}</dd></div>
+         <div><dt>Profile fit</dt><dd><span className={profileScoreClassName(job.profileMatchScore)} style={profileScoreStyle(job.profileMatchScore)}>{profileScoreLabel(job.profileMatchScore)}</span></dd></div>
+         {lastViewed && <div><dt>Last seen</dt><dd><time dateTime={job.lastViewedAt} title={job.lastViewedAt}>{lastViewed}</time></dd></div>}
+       </dl>
       <JobEligibilityPanel check={eligibility} running={eligibilityRunning} onRun={() => void runEligibilityCheck()} />
       <nav className="detail-tabs" aria-label="Job details">
         <button className={tab === "post" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("post")}>Job post</button>

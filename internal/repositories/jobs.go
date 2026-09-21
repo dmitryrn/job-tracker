@@ -159,7 +159,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 	query := sqlBuilder.Select(
 		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
 		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
-		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text",
+		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text", "COALESCE(jobs.last_viewed_at, '')",
 		"EXISTS (SELECT 1 FROM job_matches WHERE job_matches.job_id = jobs.id)", "jobs.profile_match_score",
 	).From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("jobs").LeftJoin("companies ON companies.id = jobs.company_id")
@@ -203,7 +203,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 		var job models.BrowseJob
 		if err := rows.Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company,
 			&job.Location, &job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax,
-			&job.PostedAt, &job.BodyText, &job.HasMatch, &job.ProfileMatchScore); err != nil {
+			&job.PostedAt, &job.BodyText, &job.LastViewedAt, &job.HasMatch, &job.ProfileMatchScore); err != nil {
 			return models.JobPage{}, fmt.Errorf("scan job: %w", err)
 		}
 		page.Jobs = append(page.Jobs, job)
@@ -223,6 +223,28 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 
 func (repository *SQLite) Job(ctx context.Context, id int64) (*models.BrowseJob, error) {
 	return repository.job(ctx, repository.db, id)
+}
+
+func (repository *SQLite) MarkJobViewed(ctx context.Context, id int64) error {
+	statement, args, err := sqlBuilder.Update("jobs").
+		Set("last_viewed_at", time.Now().UTC().Format(time.RFC3339Nano)).
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build mark job viewed query: %w", err)
+	}
+	result, err := repository.db.ExecContext(ctx, statement, args...)
+	if err != nil {
+		return fmt.Errorf("mark job viewed: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count marked job viewed: %w", err)
+	}
+	if updated == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (repository *SQLite) AnalysisJob(ctx context.Context, jobID int64) (*models.Job, error) {
@@ -401,7 +423,7 @@ func (repository *SQLite) UserProfile(ctx context.Context) (*models.UserProfile,
 	var profile models.UserProfile
 	var skills, workHistory, education string
 	statement, args, err := sqlBuilder.
-		Select("id", "headline", "work_authorization", "summary", "skills_json", "work_history_json", "education_json", "updated_at").
+		Select("id", "headline", "work_authorization", "github_url", "linkedin_url", "summary", "skills_json", "work_history_json", "education_json", "updated_at").
 		From("user_profiles").
 		Where(squirrel.Eq{"id": 1}).
 		ToSql()
@@ -409,7 +431,7 @@ func (repository *SQLite) UserProfile(ctx context.Context) (*models.UserProfile,
 		return nil, fmt.Errorf("build user profile query: %w", err)
 	}
 	err = repository.db.QueryRowContext(ctx, statement, args...).Scan(
-		&profile.ID, &profile.Headline, &profile.WorkAuthorization, &profile.Summary, &skills, &workHistory, &education, &profile.UpdatedAt,
+		&profile.ID, &profile.Headline, &profile.WorkAuthorization, &profile.GitHubURL, &profile.LinkedInURL, &profile.Summary, &skills, &workHistory, &education, &profile.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -446,11 +468,13 @@ func (repository *SQLite) SaveUserProfile(ctx context.Context, profile models.Us
 	profile.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	statement, args, err := sqlBuilder.
 		Insert("user_profiles").
-		Columns("id", "headline", "work_authorization", "summary", "skills_json", "work_history_json", "education_json", "updated_at").
-		Values(profile.ID, profile.Headline, profile.WorkAuthorization, profile.Summary, string(skills), string(workHistory), string(education), profile.UpdatedAt).
+		Columns("id", "headline", "work_authorization", "github_url", "linkedin_url", "summary", "skills_json", "work_history_json", "education_json", "updated_at").
+		Values(profile.ID, profile.Headline, profile.WorkAuthorization, profile.GitHubURL, profile.LinkedInURL, profile.Summary, string(skills), string(workHistory), string(education), profile.UpdatedAt).
 		Suffix(`ON CONFLICT(id) DO UPDATE SET
 			headline = excluded.headline,
 			work_authorization = excluded.work_authorization,
+			github_url = excluded.github_url,
+			linkedin_url = excluded.linkedin_url,
 			summary = excluded.summary,
 			skills_json = excluded.skills_json,
 			work_history_json = excluded.work_history_json,
@@ -558,12 +582,20 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 	query := sqlBuilder.Select(
 		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
 		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
-		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text", "job_matches.created_at", "job_matches.content",
+		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text", "COALESCE(jobs.last_viewed_at, '')", "job_matches.created_at", "job_matches.content",
 	).From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
 	query = query.Where(rejected)
 	countQuery = countQuery.Where(rejected)
+	switch search.Viewed {
+	case "seen":
+		query = query.Where(squirrel.Expr("jobs.last_viewed_at IS NOT NULL"))
+		countQuery = countQuery.Where(squirrel.Expr("jobs.last_viewed_at IS NOT NULL"))
+	case "unseen":
+		query = query.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
+		countQuery = countQuery.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
+	}
 	if search.MinimumScore != nil {
 		minimumScore := squirrel.Expr(assessmentScore+" >= ?", *search.MinimumScore)
 		query = query.Where(minimumScore)
@@ -595,7 +627,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		var content string
 		if err := rows.Scan(&match.Job.ID, &match.Job.Source, &match.Job.SourceURL, &match.Job.Title, &match.Job.Company,
 			&match.Job.Location, &match.Job.Workplace, &match.Job.EmploymentType, &match.Job.SalaryMin, &match.Job.SalaryMax,
-			&match.Job.PostedAt, &match.Job.BodyText, &match.CreatedAt, &content); err != nil {
+			&match.Job.PostedAt, &match.Job.BodyText, &match.Job.LastViewedAt, &match.CreatedAt, &content); err != nil {
 			return models.JobMatchPage{}, fmt.Errorf("scan job match: %w", err)
 		}
 		var assessment models.JobMatchAssessment
@@ -811,11 +843,11 @@ func (repository *SQLite) job(ctx context.Context, query queryRower, jobID int64
 	err := query.QueryRowContext(ctx, `
 		SELECT jobs.id, jobs.source, jobs.source_url, jobs.title, COALESCE(companies.name, ''),
 			COALESCE(jobs.location, ''), jobs.workplace, COALESCE(jobs.employment_type, ''),
-			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text,
+			jobs.salary_min, jobs.salary_max, COALESCE(jobs.posted_at, ''), jobs.body_text, COALESCE(jobs.last_viewed_at, ''),
 			jobs.profile_match_score
 		FROM jobs LEFT JOIN companies ON companies.id = jobs.company_id WHERE jobs.id = ?`, jobID,
 	).Scan(&job.ID, &job.Source, &job.SourceURL, &job.Title, &job.Company, &job.Location,
-		&job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax, &job.PostedAt, &job.BodyText, &job.ProfileMatchScore)
+		&job.Workplace, &job.EmploymentType, &job.SalaryMin, &job.SalaryMax, &job.PostedAt, &job.BodyText, &job.LastViewedAt, &job.ProfileMatchScore)
 	if err != nil {
 		return nil, fmt.Errorf("get queued job: %w", err)
 	}

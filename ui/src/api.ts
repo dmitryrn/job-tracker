@@ -11,6 +11,7 @@ export type BrowseJob = {
   salaryMax: number | null;
   postedAt: string;
   bodyText: string;
+  lastViewedAt: string;
   hasMatch: boolean;
   profileMatchScore: number | null;
 };
@@ -57,6 +58,8 @@ export type UserProfile = {
   id: number;
   headline: string;
   workAuthorization: string;
+  githubURL: string;
+  linkedinURL: string;
   summary: string;
   skills: UserProfileSkill[];
   workHistory: UserProfileWorkHistory[];
@@ -446,10 +449,13 @@ export async function stopJobMatchChat(id: number, requestId: string) {
 	}
 }
 
-export function fetchJobMatches(minimumScore: number | null, sort: string, limit: number, offset: number, signal: AbortSignal) {
+export function fetchJobMatches(minimumScore: number | null, sort: string, limit: number, offset: number, signal: AbortSignal, viewed = "all") {
 	const parameters = new URLSearchParams({ sort, limit: String(limit), offset: String(offset) });
 	if (minimumScore !== null) {
 		parameters.set("minimumScore", String(minimumScore));
+	}
+	if (viewed !== "all") {
+		parameters.set("viewed", viewed);
 	}
 	return request<JobMatchPage>(`matches?${parameters}`, { signal });
 }

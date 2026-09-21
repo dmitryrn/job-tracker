@@ -59,6 +59,20 @@ func TestJobAPI(t *testing.T) {
 	require.Len(t, jobs.Jobs, 1)
 	assert.True(t, jobs.Jobs[0].HasMatch)
 
+	response = request(handler, http.MethodGet, "/api/jobs/1")
+	require.Equal(t, http.StatusOK, response.Code)
+	var viewed struct {
+		Job models.BrowseJob `json:"job"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&viewed))
+	assert.NotEmpty(t, viewed.Job.LastViewedAt)
+
+	response = request(handler, http.MethodGet, "/api/jobs/1/match")
+	require.Equal(t, http.StatusOK, response.Code)
+	var lastViewedAt string
+	require.NoError(t, db.QueryRow(`SELECT last_viewed_at FROM jobs WHERE id = 1`).Scan(&lastViewedAt))
+	assert.NotEmpty(t, lastViewedAt)
+
 	response = request(handler, http.MethodGet, "/api/jobs?match=has")
 	require.Equal(t, http.StatusOK, response.Code)
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&jobs))
@@ -421,13 +435,15 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.JSONEq(t, `{"profile":null}`, response.Body.String())
 
-	response = requestWithBody(handler, http.MethodPut, "/api/profile", `{"headline":"Backend engineer","workAuthorization":"EU","summary":"APIs and systems","skills":[{"name":" Go ","level":"expert","notes":"Production services"},{"name":"","level":"","notes":""}],"workHistory":[{"company":" Acme ","title":"Engineer","startDate":"2020","endDate":"2022","body":"Built APIs"},{"company":"","title":"","startDate":"","endDate":"","body":""}],"education":[{"institution":" University ","degree":"BSc","startDate":"2016","endDate":"2020","body":"Computer science"},{"institution":"","degree":"","startDate":"","endDate":"","body":""}]}`)
+	response = requestWithBody(handler, http.MethodPut, "/api/profile", `{"headline":"Backend engineer","workAuthorization":"EU","githubURL":" https://github.com/example ","linkedinURL":" https://linkedin.com/in/example ","summary":"APIs and systems","skills":[{"name":" Go ","level":"expert","notes":"Production services"},{"name":"","level":"","notes":""}],"workHistory":[{"company":" Acme ","title":"Engineer","startDate":"2020","endDate":"2022","body":"Built APIs"},{"company":"","title":"","startDate":"","endDate":"","body":""}],"education":[{"institution":" University ","degree":"BSc","startDate":"2016","endDate":"2020","body":"Computer science"},{"institution":"","degree":"","startDate":"","endDate":"","body":""}]}`)
 	require.Equal(t, http.StatusOK, response.Code)
 	var profileResponse struct {
 		Profile models.UserProfile `json:"profile"`
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&profileResponse))
 	assert.Equal(t, "Backend engineer", profileResponse.Profile.Headline)
+	assert.Equal(t, "https://github.com/example", profileResponse.Profile.GitHubURL)
+	assert.Equal(t, "https://linkedin.com/in/example", profileResponse.Profile.LinkedInURL)
 	assert.NotContains(t, response.Body.String(), `"location"`)
 	require.Len(t, profileResponse.Profile.Skills, 1)
 	assert.Equal(t, "Go", profileResponse.Profile.Skills[0].Name)
@@ -486,6 +502,23 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, "Strong match", matchesResponse.Matches[1].Label)
 	assert.Equal(t, 91, matchesResponse.Matches[1].Score)
 	assert.Equal(t, 2, matchesResponse.Total)
+
+	response = request(handler, http.MethodGet, "/api/matches?viewed=seen")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	assert.Equal(t, 1, matchesResponse.Total)
+	require.Len(t, matchesResponse.Matches, 1)
+	assert.Equal(t, int64(1), matchesResponse.Matches[0].Job.ID)
+
+	response = request(handler, http.MethodGet, "/api/matches?viewed=unseen")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	assert.Equal(t, 1, matchesResponse.Total)
+	require.Len(t, matchesResponse.Matches, 1)
+	assert.Equal(t, int64(2), matchesResponse.Matches[0].Job.ID)
+
+	response = request(handler, http.MethodGet, "/api/matches?viewed=invalid")
+	assert.Equal(t, http.StatusBadRequest, response.Code)
 
 	response = request(handler, http.MethodGet, "/api/matches?minimumScore=60&sort=score-asc&limit=1&offset=1")
 	require.Equal(t, http.StatusOK, response.Code)

@@ -29,15 +29,15 @@ describe("fetchJobs", () => {
 });
 
 describe("fetchJobMatches", () => {
-  it("sends the minimum score, sort, and pagination values", async () => {
+    it("sends the minimum score, sort, viewed filter, and pagination values", async () => {
     vi.stubGlobal("window", { location: { origin: "http://10.8.0.4:4000" } });
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ matches: [], total: 0 }) });
     vi.stubGlobal("fetch", fetch);
 
-    await fetchJobMatches(75, "score-desc", 50, 100, new AbortController().signal);
+    await fetchJobMatches(75, "score-desc", 50, 100, new AbortController().signal, "seen");
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://10.8.0.4:4000/api/matches?sort=score-desc&limit=50&offset=100&minimumScore=75",
+      "http://10.8.0.4:4000/api/matches?sort=score-desc&limit=50&offset=100&minimumScore=75&viewed=seen",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });

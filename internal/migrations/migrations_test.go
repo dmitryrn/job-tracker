@@ -40,6 +40,10 @@ func TestApplyCreatesInitialSchema(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('user_profiles') WHERE name = 'location'`).Scan(&profileLocationColumns))
 	assert.Zero(t, profileLocationColumns)
 
+	var profileLinkColumns int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('user_profiles') WHERE name IN ('github_url', 'linkedin_url')`).Scan(&profileLinkColumns))
+	assert.Equal(t, 2, profileLinkColumns)
+
 	var resumeLocationColumns int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('resumes') WHERE name = 'location'`).Scan(&resumeLocationColumns))
 	assert.Zero(t, resumeLocationColumns)
