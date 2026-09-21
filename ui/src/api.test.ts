@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiURL, fetchJobMatches, fetchJobs, rejectJob } from "./api";
+import { apiURL, fetchJobMatches, fetchJobs, jobApplicationCoverLetterTXTURL, rejectJob } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -10,6 +10,12 @@ describe("apiURL", () => {
     vi.stubGlobal("window", { location: { origin: "http://10.8.0.4:4000" } });
 
     expect(apiURL("database")).toBe("http://10.8.0.4:4000/api/database");
+  });
+
+  it("creates an application cover-letter download URL", () => {
+    vi.stubGlobal("window", { location: { origin: "http://10.8.0.4:4000" } });
+
+    expect(jobApplicationCoverLetterTXTURL(42)).toBe("http://10.8.0.4:4000/api/jobs/42/match/cover-letter.txt");
   });
 });
 

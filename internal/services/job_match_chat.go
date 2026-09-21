@@ -25,9 +25,10 @@ var (
 	ErrJobMatchChatTurnActive          = errors.New("a chat turn is already active")
 	ErrJobMatchChatUnansweredMessage   = errors.New("remove the unanswered message before starting another turn")
 	ErrApplicationResumeNotFound       = errors.New("application resume not found")
+	ErrApplicationCoverLetterNotFound  = errors.New("application cover letter not found")
 )
 
-const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, and their application resume. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. The user sees a structured diff for each resume revision, so do not repeat what changed; briefly explain why the changes improve relevance instead. Ask clarifying questions when useful.`
+const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, application resume, and application cover letter. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. When the user asks to create a cover letter, call create_application_cover_letter; for an existing cover letter, call revise_application_cover_letter. Cover letters must be truthful and specific to this application. The user sees revisions directly, so do not repeat their full contents; briefly explain why the changes improve relevance instead. Ask clarifying questions when useful.`
 
 const (
 	resumePatchAttempts = 3
@@ -77,6 +78,39 @@ var resumePatchTool = openai.Tool{
 						}
 					}
 				}
+			}
+		}`),
+	},
+}
+
+var createCoverLetterTool = openai.Tool{
+	Type: "function",
+	Function: openai.ToolFunction{
+		Name:        "create_application_cover_letter",
+		Description: "Create the first truthful, application-specific cover letter. Use only supplied candidate context. The content must be a complete plain-text letter without a candidate address or signature.",
+		Parameters: json.RawMessage(`{
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["content"],
+			"properties": {
+				"content": { "type": "string", "minLength": 1 }
+			}
+		}`),
+	},
+}
+
+var reviseCoverLetterTool = openai.Tool{
+	Type: "function",
+	Function: openai.ToolFunction{
+		Name:        "revise_application_cover_letter",
+		Description: "Replace an existing application cover letter with a truthful, application-specific revision. Use the supplied current revision and content exactly as the base.",
+		Parameters: json.RawMessage(`{
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["baseRevision", "content"],
+			"properties": {
+				"baseRevision": { "type": "integer", "minimum": 1 },
+				"content": { "type": "string", "minLength": 1 }
 			}
 		}`),
 	},
@@ -214,6 +248,20 @@ func (service *JobMatchChat) LatestResume(ctx context.Context, jobID int64) (*mo
 
 	resume := applicationResumeForDownload(*base, latest.Resume)
 	return &resume, nil
+}
+
+func (service *JobMatchChat) LatestCoverLetter(ctx context.Context, jobID int64) (string, error) {
+	items, err := service.items.JobMatchChatItems(ctx, jobID, 0)
+	if err != nil {
+		return "", fmt.Errorf("load application cover letter revisions: %w", err)
+	}
+
+	latest, err := latestCoverLetterRevision(items)
+	if err != nil {
+		return "", fmt.Errorf("load latest application cover letter revision: %w", err)
+	}
+
+	return latest.Content, nil
 }
 
 func (service *JobMatchChat) Subscribe(jobID int64) (<-chan JobMatchChatUpdate, func()) {
@@ -393,7 +441,7 @@ func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64
 	for _, item := range []models.JobMatchChatItem{
 		{JobID: jobID, Type: "initial_instructions", Payload: payload(map[string]string{"content": jobMatchChatInstructions})},
 		{JobID: jobID, Type: "initial_context", Payload: payload(jobMatchChatInitialContext{Job: job, Match: match, Profile: profile})},
-		{JobID: jobID, Type: "tool_definition", Payload: payload(resumePatchTool)},
+		{JobID: jobID, Type: "tool_definition", Payload: payload([]openai.Tool{resumePatchTool, createCoverLetterTool, reviseCoverLetterTool})},
 		{JobID: jobID, Type: "resume_revision", Payload: payload(resumeRevisionPayload{Revision: 0, Resume: applicationResumeSnapshot(*resume)})},
 	} {
 		if _, err := service.append(ctx, item); err != nil {
@@ -443,6 +491,13 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 
 	if baseResume == nil {
 		return ErrResumeNotFound
+	}
+
+	coverLetter, err := latestCoverLetterRevision(history)
+	if errors.Is(err, ErrApplicationCoverLetterNotFound) {
+		coverLetter = coverLetterRevisionPayload{}
+	} else if err != nil {
+		return fmt.Errorf("load current application cover letter revision: %w", err)
 	}
 
 	sessionID := newLLMSessionID()
@@ -526,7 +581,62 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			zap.String("tool_name", toolCall.Function.Name),
 			zap.Int("arguments_bytes", len(toolCall.Function.Arguments)),
 		)
-		if toolCall.Type != "function" || toolCall.Function.Name != resumePatchTool.Function.Name {
+		if toolCall.Type != "function" {
+			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
+		}
+
+		if toolCall.Function.Name == createCoverLetterTool.Function.Name || toolCall.Function.Name == reviseCoverLetterTool.Function.Name {
+			updated, err := applyCoverLetterToolCall(toolCall.Function.Name, toolCall.Function.Arguments, coverLetter)
+			if err != nil {
+				service.logger.Warn("job match cover letter revision rejected",
+					zap.Int64("job_id", jobID),
+					zap.String("request_id", requestID),
+					zap.Int("attempt", patchAttempts),
+					zap.String("tool_call_id", toolCall.ID),
+					zap.String("tool_name", toolCall.Function.Name),
+					zap.Int("current_revision", coverLetter.Revision),
+					zap.Error(err),
+				)
+				result, resultErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "rejected", Error: err.Error()})})
+				if resultErr != nil {
+					return fmt.Errorf("record rejected cover letter tool result: %w", resultErr)
+				}
+
+				history = append(history, result)
+				if patchAttempts >= resumePatchAttempts {
+					service.recordTerminal(ctx, jobID, requestID, "retry_limit_reached", "no document changes were made after three rejected revisions")
+					service.recordTerminal(ctx, jobID, requestID, "turn_halted", "document revision retry limit reached")
+					return nil
+				}
+
+				retry, retryErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "patch_retrying", RequestID: requestID, Payload: payload(map[string]any{"attempt": patchAttempts, "detail": "cover letter revision rejected; request a corrected revision"})})
+				if retryErr != nil {
+					return fmt.Errorf("record cover letter revision retry: %w", retryErr)
+				}
+
+				history = append(history, retry)
+				continue
+			}
+
+			service.logger.Info("job match cover letter revision accepted",
+				zap.Int64("job_id", jobID),
+				zap.String("request_id", requestID),
+				zap.Int("attempt", patchAttempts),
+				zap.String("tool_call_id", toolCall.ID),
+				zap.String("tool_name", toolCall.Function.Name),
+				zap.Int("revision", updated.Revision),
+			)
+			result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: updated.Revision, CoverLetter: &updated})})
+			if err != nil {
+				return fmt.Errorf("record accepted cover letter tool result: %w", err)
+			}
+
+			history = append(history, result)
+			coverLetter = updated
+			continue
+		}
+
+		if toolCall.Function.Name != resumePatchTool.Function.Name {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
 		}
 
@@ -617,6 +727,16 @@ type resumeRevisionPayload struct {
 	Resume   models.Resume `json:"resume"`
 }
 
+type coverLetterRevisionPayload struct {
+	Revision int    `json:"revision"`
+	Content  string `json:"content"`
+}
+
+type coverLetterToolInput struct {
+	BaseRevision int    `json:"baseRevision"`
+	Content      string `json:"content"`
+}
+
 type jobMatchChatInitialContext struct {
 	Job     *models.BrowseJob      `json:"job"`
 	Match   *models.JobMatchRecord `json:"match"`
@@ -664,23 +784,25 @@ type chatResumeEducation struct {
 }
 
 type chatToolResultPayload struct {
-	ToolCallID string      `json:"toolCallId"`
-	Status     string      `json:"status"`
-	Error      string      `json:"error,omitempty"`
-	Revision   int         `json:"revision,omitempty"`
-	Resume     *chatResume `json:"resume,omitempty"`
+	ToolCallID  string                      `json:"toolCallId"`
+	Status      string                      `json:"status"`
+	Error       string                      `json:"error,omitempty"`
+	Revision    int                         `json:"revision,omitempty"`
+	Resume      *chatResume                 `json:"resume,omitempty"`
+	CoverLetter *coverLetterRevisionPayload `json:"coverLetter,omitempty"`
 }
 
 type toolResultPayload struct {
-	ToolCallID string         `json:"toolCallId"`
-	Status     string         `json:"status"`
-	Error      string         `json:"error,omitempty"`
-	Revision   int            `json:"revision,omitempty"`
-	Resume     *models.Resume `json:"resume,omitempty"`
+	ToolCallID  string                      `json:"toolCallId"`
+	Status      string                      `json:"status"`
+	Error       string                      `json:"error,omitempty"`
+	Revision    int                         `json:"revision,omitempty"`
+	Resume      *models.Resume              `json:"resume,omitempty"`
+	CoverLetter *coverLetterRevisionPayload `json:"coverLetter,omitempty"`
 }
 
 func providerRequest(items []models.JobMatchChatItem, reasoning, country string) (openai.ChatRequest, error) {
-	request := openai.ChatRequest{ReasoningEffort: reasoning, Tools: []openai.Tool{resumePatchTool}}
+	request := openai.ChatRequest{ReasoningEffort: reasoning, Tools: []openai.Tool{resumePatchTool, createCoverLetterTool, reviseCoverLetterTool}}
 	redactions, err := chatRedactionValues(items)
 	if err != nil {
 		return request, err
@@ -711,6 +833,25 @@ func providerRequest(items []models.JobMatchChatItem, reasoning, country string)
 			}
 
 			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Application resume revision 0:\n" + content})
+		case "tool_result":
+			var result toolResultPayload
+			if err := json.Unmarshal(item.Payload, &result); err != nil {
+				return request, err
+			}
+
+			content, err := redactedToolResult(item.Payload, country)
+			if err != nil {
+				return request, err
+			}
+
+			request.Messages = append(request.Messages, openai.Message{Role: "tool", ToolCallID: result.ToolCallID, Content: content})
+		case "cover_letter_revision":
+			var revision coverLetterRevisionPayload
+			if err := json.Unmarshal(item.Payload, &revision); err != nil {
+				return request, err
+			}
+
+			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: fmt.Sprintf("Application cover letter revision %d:\n%s", revision.Revision, revision.Content)})
 		case "user_message", "assistant_message":
 			var value struct {
 				Content string `json:"content"`
@@ -732,18 +873,6 @@ func providerRequest(items []models.JobMatchChatItem, reasoning, country string)
 			}
 
 			request.Messages = append(request.Messages, openai.Message{Role: "assistant", ToolCalls: []openai.ToolCall{call}})
-		case "tool_result":
-			var result toolResultPayload
-			if err := json.Unmarshal(item.Payload, &result); err != nil {
-				return request, err
-			}
-
-			content, err := redactedToolResult(item.Payload, country)
-			if err != nil {
-				return request, err
-			}
-
-			request.Messages = append(request.Messages, openai.Message{Role: "tool", ToolCallID: result.ToolCallID, Content: content})
 		}
 	}
 
@@ -856,10 +985,10 @@ func redactedToolResult(payload json.RawMessage, country string) (string, error)
 
 	if result.Resume != nil {
 		resume := chatResumeForLLM(*result.Resume, country)
-		return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision, Resume: &resume})
+		return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision, Resume: &resume, CoverLetter: result.CoverLetter})
 	}
 
-	return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision})
+	return marshalChatPayload(chatToolResultPayload{ToolCallID: result.ToolCallID, Status: result.Status, Error: result.Error, Revision: result.Revision, CoverLetter: result.CoverLetter})
 }
 
 func marshalChatPayload(value any) (string, error) {
@@ -943,6 +1072,63 @@ func latestResumeRevision(items []models.JobMatchChatItem) (resumeRevisionPayloa
 	}
 
 	return current, nil
+}
+
+func latestCoverLetterRevision(items []models.JobMatchChatItem) (coverLetterRevisionPayload, error) {
+	var current coverLetterRevisionPayload
+	for _, item := range items {
+		if item.Type != "tool_result" {
+			continue
+		}
+
+		var result toolResultPayload
+		if err := json.Unmarshal(item.Payload, &result); err != nil {
+			return current, err
+		}
+
+		if result.Status == "accepted" && result.CoverLetter != nil {
+			current = *result.CoverLetter
+		}
+	}
+
+	if current.Revision == 0 {
+		return current, ErrApplicationCoverLetterNotFound
+	}
+
+	return current, nil
+}
+
+func applyCoverLetterToolCall(name, arguments string, current coverLetterRevisionPayload) (coverLetterRevisionPayload, error) {
+	var input coverLetterToolInput
+	if err := json.Unmarshal([]byte(arguments), &input); err != nil {
+		return current, fmt.Errorf("parse cover letter revision: %w", err)
+	}
+
+	content := strings.TrimSpace(input.Content)
+	if content == "" {
+		return current, errors.New("cover letter content must not be empty")
+	}
+
+	switch name {
+	case createCoverLetterTool.Function.Name:
+		if current.Revision != 0 {
+			return current, errors.New("application cover letter already exists; use revise_application_cover_letter")
+		}
+
+		return coverLetterRevisionPayload{Revision: 1, Content: content}, nil
+	case reviseCoverLetterTool.Function.Name:
+		if current.Revision == 0 {
+			return current, errors.New("application cover letter does not exist; use create_application_cover_letter")
+		}
+
+		if input.BaseRevision != current.Revision {
+			return current, fmt.Errorf("cover letter revision was based on revision %d, but the current revision is %d", input.BaseRevision, current.Revision)
+		}
+
+		return coverLetterRevisionPayload{Revision: current.Revision + 1, Content: content}, nil
+	default:
+		return current, fmt.Errorf("unsupported cover letter tool %q", name)
+	}
 }
 
 func applicationResumeSnapshot(resume models.Resume) models.Resume {

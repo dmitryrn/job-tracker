@@ -314,6 +314,20 @@ button { cursor: pointer; }
 
 .application-resume-activity h3 { color: #304860; font-size: 14px; font-weight: 700; line-height: 1.3; margin: 0; }
 
+.application-document-prompts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.application-cover-letter-activity { border: 1px solid #dedcd5; margin: 4px 0; padding: 10px 12px; }
+
+.application-cover-letter-header { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+
+.application-cover-letter-header h3 { color: #304860; font-size: 14px; font-weight: 700; line-height: 1.3; margin: 0; }
+
+.application-cover-letter-previous { color: #687787; font-size: 13px; margin: 7px 0 0; }
+
+.application-cover-letter-activity pre { font-family: inherit; line-height: 1.5; margin: 10px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+.download-cover-letter { color: #304860; font-size: 13px; font-weight: 700; white-space: nowrap; }
+
 .application-resume-revision { border-top: 1px solid #e4e1d9; font-size: 14px; line-height: 1.6; margin-top: 7px; padding-top: 7px; }
 
 .resume-diff { border: 1px solid #dedcd5; margin-top: 9px; overflow: hidden; }

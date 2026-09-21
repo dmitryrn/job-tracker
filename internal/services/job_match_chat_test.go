@@ -38,6 +38,37 @@ func TestLatestResumeRevisionReturnsNotFoundWithoutSnapshot(t *testing.T) {
 	assert.ErrorIs(t, err, ErrApplicationResumeNotFound)
 }
 
+func TestLatestCoverLetterRevisionUsesLatestAcceptedRevision(t *testing.T) {
+	createdPayload, err := json.Marshal(toolResultPayload{Status: "accepted", Revision: 1, CoverLetter: &coverLetterRevisionPayload{Revision: 1, Content: "Dear hiring team,"}})
+	require.NoError(t, err)
+	updatedPayload, err := json.Marshal(toolResultPayload{Status: "accepted", Revision: 2, CoverLetter: &coverLetterRevisionPayload{Revision: 2, Content: "Dear Acme team,"}})
+	require.NoError(t, err)
+
+	latest, err := latestCoverLetterRevision([]models.JobMatchChatItem{
+		{Type: "tool_result", Payload: createdPayload},
+		{Type: "tool_result", Payload: updatedPayload},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, latest.Revision)
+	assert.Equal(t, "Dear Acme team,", latest.Content)
+}
+
+func TestApplyCoverLetterToolCallCreatesThenRevises(t *testing.T) {
+	created, err := applyCoverLetterToolCall(createCoverLetterTool.Function.Name, `{"content":" Dear hiring team, "}`, coverLetterRevisionPayload{})
+
+	require.NoError(t, err)
+	assert.Equal(t, coverLetterRevisionPayload{Revision: 1, Content: "Dear hiring team,"}, created)
+
+	revised, err := applyCoverLetterToolCall(reviseCoverLetterTool.Function.Name, `{"baseRevision":1,"content":"Dear Acme team,"}`, created)
+
+	require.NoError(t, err)
+	assert.Equal(t, coverLetterRevisionPayload{Revision: 2, Content: "Dear Acme team,"}, revised)
+
+	_, err = applyCoverLetterToolCall(reviseCoverLetterTool.Function.Name, `{"baseRevision":1,"content":"Dear Acme team,"}`, revised)
+	assert.ErrorContains(t, err, "current revision is 2")
+}
+
 func TestProviderRequestOmitsCandidateIdentityAndInstitutions(t *testing.T) {
 	resume := models.Resume{
 		FullName: "Avery Patel",

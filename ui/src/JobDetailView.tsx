@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
+import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationCoverLetterTXTURL, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
 import { formatRelativeTime, WorkplaceClassificationInfo, workplaceLabel } from "./BrowseView";
 import { copyText } from "./clipboard";
@@ -336,6 +336,7 @@ export function mergeChatItems(current: JobMatchChatItem[] | undefined, incoming
 }
 
 type ResumeRevision = { sequence: number; revision: number; resume: Resume };
+type CoverLetterRevision = { sequence: number; revision: number; content: string };
 type ResumeChange = { key: string; label: string; removed?: string; added?: string };
 
 function contentOf(item: JobMatchChatItem) {
@@ -350,6 +351,16 @@ function resumeRevisions(items: JobMatchChatItem[]): ResumeRevision[] {
   });
 }
 
+function coverLetterRevisions(items: JobMatchChatItem[]): CoverLetterRevision[] {
+  return items.flatMap((item) => {
+    const value = item.payload as { status?: string; revision?: number; coverLetter?: { revision?: number; content?: string } };
+    const revision = value.coverLetter?.revision ?? value.revision;
+    const content = value.coverLetter?.content;
+    if (item.type === "tool_result" && value.status === "accepted" && typeof revision === "number" && typeof content === "string") return [{ sequence: item.sequence, revision, content }];
+    return [];
+  });
+}
+
 function activeRequest(items: JobMatchChatItem[]) {
   const user = [...items].reverse().find((item) => item.type === "user_message");
   if (!user?.requestId) return undefined;
@@ -359,6 +370,7 @@ function activeRequest(items: JobMatchChatItem[]) {
 
 function ChatTimeline({ items, onRevert, reverting }: { items: JobMatchChatItem[]; onRevert: (item: JobMatchChatItem, content: string) => Promise<void>; reverting: boolean }) {
   const revisions = resumeRevisions(items);
+  const coverLetters = coverLetterRevisions(items);
   const visible = items.filter((item) => ["user_message", "assistant_message", "assistant_reasoning", "assistant_tool_call", "tool_result", "patch_retrying", "retry_limit_reached", "turn_error", "turn_stopped"].includes(item.type));
   return <div className="match-chat-messages" aria-live="polite">
     {visible.length === 0 && <p className="match-chat-empty">Ask about fit, gaps, interview preparation, or how to tailor your application.</p>}
@@ -374,6 +386,8 @@ function ChatTimeline({ items, onRevert, reverting }: { items: JobMatchChatItem[
       if (item.type === "tool_result") {
         const revisionIndex = revisions.findIndex((revision) => revision.sequence === item.sequence);
         if (revisionIndex >= 0) return <ApplicationResumeActivity key={item.sequence} revision={revisions[revisionIndex]} previous={revisions[revisionIndex - 1]} />;
+        const coverLetterIndex = coverLetters.findIndex((revision) => revision.sequence === item.sequence);
+        if (coverLetterIndex >= 0) return <ApplicationCoverLetterActivity key={item.sequence} jobID={items[0]?.jobId ?? item.jobId} revision={coverLetters[coverLetterIndex]} previous={coverLetters[coverLetterIndex - 1]} />;
       }
       const toolCall = item.type === "assistant_tool_call";
       const toolName = toolCallName(item);
@@ -396,7 +410,20 @@ function activityDetail(item: JobMatchChatItem) {
 function toolCallName(item: JobMatchChatItem) {
   const value = item.payload as { function?: { name?: string } };
   if (value.function?.name === "revise_application_resume") return "revised application resume";
+  if (value.function?.name === "create_application_cover_letter") return "created application cover letter";
+  if (value.function?.name === "revise_application_cover_letter") return "revised application cover letter";
   return value.function?.name ? humanize(value.function.name) : "Tool call";
+}
+
+function ApplicationCoverLetterActivity({ jobID, revision, previous }: { jobID: number; revision: CoverLetterRevision; previous?: CoverLetterRevision }) {
+  return <section className="application-cover-letter-activity">
+    <div className="application-cover-letter-header">
+      <h3>{revision.revision === 1 ? "Cover letter created" : `Cover letter revision ${revision.revision} applied`}</h3>
+      <a className="download-cover-letter" href={jobApplicationCoverLetterTXTURL(jobID)}>Download latest TXT</a>
+    </div>
+    {previous && <p className="application-cover-letter-previous">Replaces revision {previous.revision}.</p>}
+    <pre>{revision.content}</pre>
+  </section>;
 }
 
 function ApplicationResumeActivity({ revision, previous }: { revision: ResumeRevision; previous?: ResumeRevision }) {
@@ -600,6 +627,12 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     onTabChange("chat");
   }
 
+  function createCoverLetter() {
+    nextChatPromptID.current += 1;
+    setChatPromptRequest({ id: nextChatPromptID.current, content: "Create a cover letter for this application" });
+    onTabChange("chat");
+  }
+
   return (
     <section className={tab === "chat" ? "job-page chat-job-page" : "job-page"}>
       <button type="button" className="back-link" onClick={onBack}>Back to jobs</button>
@@ -641,7 +674,10 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
          <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>
          <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
        </nav>
-       <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={tailorResume}>Tailor my resume for this application</button>
+        <div className="application-document-prompts">
+          <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={tailorResume}>Tailor my resume for this application</button>
+          <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={createCoverLetter}>Create a cover letter for this application</button>
+        </div>
        {error && <p className="query-error">{error}</p>}
        {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} promptRequest={chatPromptRequest} onPromptHandled={(id) => setChatPromptRequest((current) => current?.id === id ? undefined : current)} /> : (
         <>

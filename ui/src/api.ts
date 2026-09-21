@@ -424,6 +424,10 @@ export function jobApplicationResumePDFURL(id: number) {
   return apiURL(`jobs/${id}/match/resume.pdf`);
 }
 
+export function jobApplicationCoverLetterTXTURL(id: number) {
+  return apiURL(`jobs/${id}/match/cover-letter.txt`);
+}
+
 export function resumePhotoURL() {
   return apiURL("resume/photo");
 }

@@ -789,6 +789,33 @@ func TestJobMatchChatCreatesApplicationResumeRevision(t *testing.T) {
 	assert.Equal(t, "Backend engineer", revision.Resume.Headline)
 }
 
+func TestJobMatchChatCreatesAndDownloadsApplicationCoverLetter(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	require.NoError(t, db.Ping())
+	require.NoError(t, migrations.Apply(db))
+	require.NoError(t, enableForeignKeys(db))
+
+	repository := repositories.NewSQLite(db)
+	_, err = repository.SaveResume(context.Background(), models.Resume{FullName: "Ada Lovelace", Headline: "Software engineer"})
+	require.NoError(t, err)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{Source: "remotive", SourceID: "cover-letter-job", SourceURL: "https://example.com/cover-letter-job", Title: "Engineer", BodyText: "Build reliable services.", Workplace: "remote", MetadataJSON: "{}"}}))
+	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "Strong match"))
+	handler := newTestServerWithJobCompletionClient(repository, coverLetterCompletionClient{}).http.Handler
+
+	response := requestWithBody(handler, http.MethodPost, "/api/jobs/1/match/chat", `{"content":"Create a cover letter.","requestId":"cover-letter-request"}`)
+	require.Equal(t, http.StatusAccepted, response.Code)
+	waitForChatTurn(t, repository, 1)
+
+	response = request(handler, http.MethodGet, "/api/jobs/1/match/cover-letter.txt")
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "text/plain; charset=utf-8", response.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="application-cover-letter.txt"`, response.Header().Get("Content-Disposition"))
+	assert.Equal(t, "Dear hiring team,\n\nI am excited to apply for the Engineer role.\n", response.Body.String())
+}
+
 func TestResumeAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -1052,6 +1079,18 @@ func (resumePatchCompletionClient) Complete(_ context.Context, _ string, _ strin
 	}
 
 	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "patch-call", Type: "function", Function: openai.ToolFunction{Name: "revise_application_resume", Arguments: `{"baseRevision":0,"operations":[{"op":"replace","section":"headline","id":0,"parentId":0,"expected":"Software engineer","value":"Backend engineer"}]}`}}}}, nil
+}
+
+type coverLetterCompletionClient struct{}
+
+func (coverLetterCompletionClient) Complete(_ context.Context, _ string, _ string, request openai.ChatRequest) (openai.ChatResponse, error) {
+	for _, message := range request.Messages {
+		if message.Role == "tool" {
+			return openai.ChatResponse{Model: "test-model", Content: "I created a focused cover letter."}, nil
+		}
+	}
+
+	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "cover-letter-call", Type: "function", Function: openai.ToolFunction{Name: "create_application_cover_letter", Arguments: `{"content":"Dear hiring team,\n\nI am excited to apply for the Engineer role."}`}}}}, nil
 }
 
 func request(handler http.Handler, method, target string) *httptest.ResponseRecorder {
