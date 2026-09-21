@@ -7,7 +7,7 @@ type JobMatchesViewProps = {
   onOpenMatch: (job: BrowseJob) => void;
 };
 
-type MatchSort = "created-desc" | "created-asc" | "score-desc" | "score-asc";
+type MatchSort = "created-desc" | "created-asc" | "score-desc" | "score-asc" | "profile-score-desc" | "profile-score-asc";
 type MatchViewed = "all" | "seen" | "unseen";
 
 type MatchSearch = {
@@ -23,6 +23,8 @@ const matchSortDescriptions: Record<MatchSort, string> = {
   "created-asc": "Oldest assessments first.",
   "score-desc": "Highest scores first.",
   "score-asc": "Lowest scores first.",
+  "profile-score-desc": "Highest profile fit first.",
+  "profile-score-asc": "Lowest profile fit first.",
 };
 
 const matchStatusLegend = [
@@ -32,6 +34,10 @@ const matchStatusLegend = [
   { label: "Possible fit", score: 40 },
   { label: "Skip", score: 0 },
 ];
+
+export function matchLabelScore(label: string, score: number) {
+  return matchStatusLegend.find((status) => status.label === label)?.score ?? score;
+}
 
 const pageSizeOptions = [25, 50];
 
@@ -44,7 +50,7 @@ const defaultMatchSearch: MatchSearch = {
 };
 
 function isMatchSort(value: string | null): value is MatchSort {
-  return value === "created-desc" || value === "created-asc" || value === "score-desc" || value === "score-asc";
+  return value === "created-desc" || value === "created-asc" || value === "score-desc" || value === "score-asc" || value === "profile-score-desc" || value === "profile-score-asc";
 }
 
 function isMatchViewed(value: string | null): value is MatchViewed {
@@ -166,6 +172,8 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
               <option value="created-asc">Created at: oldest</option>
               <option value="score-desc">Match score: highest</option>
               <option value="score-asc">Match score: lowest</option>
+              <option value="profile-score-desc">Profile fit: highest</option>
+              <option value="profile-score-asc">Profile fit: lowest</option>
             </select>
           </label>
           <label className="matches-sort">Last seen
@@ -201,7 +209,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
                     <span className="match-topline-labels">
                       <span
                         className={match.label ? "match-label" : "match-label unlabeled"}
-                        style={{ "--match-score": match.score } as CSSProperties}
+                        style={{ "--match-score": matchLabelScore(match.label, match.score) } as CSSProperties}
                       >
                         {match.label || "Unlabeled"}
                       </span>

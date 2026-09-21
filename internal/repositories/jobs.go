@@ -621,6 +621,10 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		query = query.OrderBy(score+" DESC", "job_matches.created_at DESC", "job_matches.job_id DESC")
 	case "score-asc":
 		query = query.OrderBy(score+" ASC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	case "profile-score-desc":
+		query = query.OrderBy("jobs.profile_match_score IS NULL ASC", "jobs.profile_match_score DESC", "job_matches.created_at DESC", "job_matches.job_id DESC")
+	case "profile-score-asc":
+		query = query.OrderBy("jobs.profile_match_score IS NULL ASC", "jobs.profile_match_score ASC", "job_matches.created_at DESC", "job_matches.job_id DESC")
 	default:
 		query = query.OrderBy("job_matches.created_at DESC", "job_matches.job_id DESC")
 	}

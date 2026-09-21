@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatJobPostedDate, formatMatchDate, matchSearchFromParams, matchSearchPath } from "./JobMatchesView";
+import { formatJobPostedDate, formatMatchDate, matchLabelScore, matchSearchFromParams, matchSearchPath } from "./JobMatchesView";
 import { formatRelativeTime } from "./BrowseView";
 
 describe("match search URL", () => {
@@ -23,6 +23,10 @@ describe("match search URL", () => {
     });
   });
 
+  it("accepts profile fit sorting", () => {
+    expect(matchSearchFromParams(new URLSearchParams("sort=profile-score-desc")).sort).toBe("profile-score-desc");
+  });
+
   it("omits default values from the matches URL", () => {
     expect(matchSearchPath({ minimumScore: null, sort: "created-desc", viewed: "all", pageSize: 25, offset: 0 }, "/matches")).toBe("/matches");
     expect(matchSearchPath({ minimumScore: 90, sort: "score-desc", viewed: "unseen", pageSize: 50, offset: 100 }, "/matches")).toBe("/matches?minimumScore=90&sort=score-desc&viewed=unseen&limit=50&offset=100");
@@ -43,6 +47,17 @@ describe("formatMatchDate", () => {
     const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(date);
 
     expect(formatMatchDate("2026-08-26T12:00:00Z", new Date("2026-08-27T12:00:00Z"))).toBe(`Matched ${day} at ${time}`);
+  });
+});
+
+describe("match label colors", () => {
+  it("uses the shared legend score for known labels", () => {
+    expect(matchLabelScore("Possible fit", 55)).toBe(40);
+    expect(matchLabelScore("Worth applying", 62)).toBe(60);
+  });
+
+  it("uses the match score for unknown labels", () => {
+    expect(matchLabelScore("Custom label", 55)).toBe(55);
   });
 });
 

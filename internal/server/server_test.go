@@ -497,6 +497,7 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.Len(t, profileResponse.Profile.Education, 1)
 	assert.Equal(t, "University", profileResponse.Profile.Education[0].Institution)
 	require.NoError(t, repository.SaveJobProfileMatchScore(context.Background(), 1, 3))
+	require.NoError(t, repository.SaveJobProfileMatchScore(context.Background(), 2, 8))
 
 	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "No-op match"))
 	require.NoError(t, repository.SaveJobAnalysis(context.Background(), models.JobAnalysisRecord{
@@ -575,6 +576,20 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, 2, matchesResponse.Total)
 	assert.Equal(t, int64(1), matchesResponse.Matches[0].Job.ID)
 	assert.Equal(t, 91, matchesResponse.Matches[0].Score)
+
+	response = request(handler, http.MethodGet, "/api/matches?sort=profile-score-desc")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	require.Len(t, matchesResponse.Matches, 2)
+	assert.Equal(t, int64(2), matchesResponse.Matches[0].Job.ID)
+	assert.Equal(t, int64(1), matchesResponse.Matches[1].Job.ID)
+
+	response = request(handler, http.MethodGet, "/api/matches?sort=profile-score-asc")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	require.Len(t, matchesResponse.Matches, 2)
+	assert.Equal(t, int64(1), matchesResponse.Matches[0].Job.ID)
+	assert.Equal(t, int64(2), matchesResponse.Matches[1].Job.ID)
 
 	response = request(handler, http.MethodGet, "/api/jobs/1")
 	require.Equal(t, http.StatusOK, response.Code)

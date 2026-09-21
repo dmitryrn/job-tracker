@@ -1,0 +1,116 @@
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+  modules-download-mode: readonly
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - staticcheck
+    - revive
+    - errcheck
+    - errchkjson
+    - errorlint
+    - exhaustive
+    - funcorder
+    - bodyclose
+    - contextcheck
+    - cyclop
+    - gosec
+    - loggercheck
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - decorder
+    - misspell
+    - nolintlint
+    - rowserrcheck
+    - sqlclosecheck
+    - testifylint
+    - thelper
+    - unconvert
+    - usestdlibvars
+    - wastedassign
+    - wsl_v5
+
+  exclusions:
+    generated: strict
+    warn-unused: true
+    presets:
+      - comments
+      - common-false-positives
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+      - path: ^test/
+        linters:
+          - gosec
+
+  settings:
+    cyclop:
+      max-complexity: 15
+      package-average: 10.0
+
+    wsl_v5:
+      default: none
+      enable:
+        - after-block
+
+    funcorder:
+      constructor: true
+      struct-method: true
+      function: true
+
+    decorder:
+      dec-order:
+        - const
+        - var
+        - type
+        - func
+      disable-dec-order-check: false
+      disable-dec-num-check: true
+      disable-init-func-first-check: true
+
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1020
+        - -ST1021
+        - -ST1022
+
+    revive:
+      severity: warning
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
