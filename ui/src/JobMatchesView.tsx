@@ -10,11 +10,13 @@ type JobMatchesViewProps = {
 
 type MatchSort = "created-desc" | "created-asc" | "score-desc" | "score-asc" | "profile-score-desc" | "profile-score-asc";
 type MatchViewed = "all" | "seen" | "unseen";
+type MatchApplied = "all" | "applied" | "not-applied";
 
 type MatchSearch = {
   minimumScore: number | null;
   sort: MatchSort;
   viewed: MatchViewed;
+  applied: MatchApplied;
   pageSize: number;
   offset: number;
 };
@@ -34,6 +36,7 @@ const defaultMatchSearch: MatchSearch = {
   minimumScore: null,
   sort: "created-desc",
   viewed: "all",
+  applied: "all",
   pageSize: 25,
   offset: 0,
 };
@@ -46,17 +49,23 @@ function isMatchViewed(value: string | null): value is MatchViewed {
   return value === "all" || value === "seen" || value === "unseen";
 }
 
+function isMatchApplied(value: string | null): value is MatchApplied {
+  return value === "all" || value === "applied" || value === "not-applied";
+}
+
 export function matchSearchFromParams(parameters: URLSearchParams): MatchSearch {
   const minimumScoreValue = parameters.get("minimumScore");
   const minimumScore = Number(minimumScoreValue);
   const sort = parameters.get("sort");
   const viewed = parameters.get("viewed");
+  const applied = parameters.get("applied");
   const pageSize = Number(parameters.get("limit"));
   const offset = Number(parameters.get("offset"));
   return {
     minimumScore: minimumScoreValue !== null && minimumScoreValue !== "" && Number.isInteger(minimumScore) && minimumScore >= 0 && minimumScore <= 100 ? minimumScore : null,
     sort: isMatchSort(sort) ? sort : defaultMatchSearch.sort,
     viewed: isMatchViewed(viewed) ? viewed : defaultMatchSearch.viewed,
+    applied: isMatchApplied(applied) ? applied : defaultMatchSearch.applied,
     pageSize: pageSizeOptions.includes(pageSize) ? pageSize : defaultMatchSearch.pageSize,
     offset: Number.isInteger(offset) && offset >= 0 ? offset : defaultMatchSearch.offset,
   };
@@ -72,6 +81,9 @@ export function matchSearchPath(search: MatchSearch, pathname = window.location.
   }
   if (search.viewed !== defaultMatchSearch.viewed) {
     parameters.set("viewed", search.viewed);
+  }
+  if (search.applied !== defaultMatchSearch.applied) {
+    parameters.set("applied", search.applied);
   }
   if (search.pageSize !== defaultMatchSearch.pageSize) {
     parameters.set("limit", String(search.pageSize));
@@ -109,7 +121,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
   const [search, setSearch] = useState<MatchSearch>(() => matchSearchFromParams(new URLSearchParams(window.location.search)));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { minimumScore, sort, viewed, pageSize, offset } = search;
+  const { minimumScore, sort, viewed, applied, pageSize, offset } = search;
 
   function updateSearch(next: Partial<MatchSearch>) {
     const updated = { ...search, ...next };
@@ -130,7 +142,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
     async function load() {
       setLoading(true);
       try {
-        const result = await fetchJobMatches(minimumScore, sort, pageSize, offset, controller.signal, viewed);
+        const result = await fetchJobMatches(minimumScore, sort, pageSize, offset, controller.signal, viewed, applied);
         if (!controller.signal.aborted) {
           setMatches(result.matches);
           setTotalMatches(result.total);
@@ -148,7 +160,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
     }
     void load();
     return () => controller.abort();
-  }, [minimumScore, offset, pageSize, sort, viewed]);
+  }, [applied, minimumScore, offset, pageSize, sort, viewed]);
 
   return (
     <section className="matches-page">
@@ -172,6 +184,13 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
               <option value="seen">Seen</option>
             </select>
           </label>
+          <label className="matches-sort">Application status
+            <select value={applied} onChange={(event) => updateSearch({ applied: event.target.value as MatchApplied, offset: 0 })}>
+              <option value="all">All</option>
+              <option value="not-applied">Not applied</option>
+              <option value="applied">Applied</option>
+            </select>
+          </label>
         </div>
       </header>
       <aside className="match-legend" aria-label="Filter matches by minimum fit">
@@ -180,7 +199,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
       </aside>
       {error && <p className="query-error">{error}</p>}
       {loading && <p className="browse-loading">Loading matches...</p>}
-      {!loading && !error && matches.length === 0 && <p className="empty browse-empty">{totalMatches === 0 && minimumScore === null && viewed === "all" ? "No completed matches yet." : "No matches meet these filters."}</p>}
+       {!loading && !error && matches.length === 0 && <p className="empty browse-empty">{totalMatches === 0 && minimumScore === null && viewed === "all" && applied === "all" ? "No completed matches yet." : "No matches meet these filters."}</p>}
       {matches.length > 0 && (
         <ol className="matches-list">
           {matches.map((match) => {
@@ -202,6 +221,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
                       >
                         {match.label || "Unlabeled"}
                       </span>
+                      {match.applied && <span className="match-applied">Applied</span>}
                       <span
                         className={profileScoreClassName(match.job.profileMatchScore)}
                         style={profileScoreStyle(match.job.profileMatchScore)}

@@ -5,10 +5,11 @@ import { formatRelativeTime } from "./BrowseView";
 
 describe("match search URL", () => {
   it("reads the selected fit, sort, page size, and offset", () => {
-    expect(matchSearchFromParams(new URLSearchParams("minimumScore=75&sort=score-desc&viewed=seen&limit=50&offset=100"))).toEqual({
+    expect(matchSearchFromParams(new URLSearchParams("minimumScore=75&sort=score-desc&viewed=seen&applied=applied&limit=50&offset=100"))).toEqual({
       minimumScore: 75,
       sort: "score-desc",
       viewed: "seen",
+      applied: "applied",
       pageSize: 50,
       offset: 100,
     });
@@ -19,6 +20,7 @@ describe("match search URL", () => {
       minimumScore: null,
       sort: "created-desc",
       viewed: "all",
+      applied: "all",
       pageSize: 25,
       offset: 0,
     });
@@ -29,8 +31,8 @@ describe("match search URL", () => {
   });
 
   it("omits default values from the matches URL", () => {
-    expect(matchSearchPath({ minimumScore: null, sort: "created-desc", viewed: "all", pageSize: 25, offset: 0 }, "/matches")).toBe("/matches");
-    expect(matchSearchPath({ minimumScore: 90, sort: "score-desc", viewed: "unseen", pageSize: 50, offset: 100 }, "/matches")).toBe("/matches?minimumScore=90&sort=score-desc&viewed=unseen&limit=50&offset=100");
+    expect(matchSearchPath({ minimumScore: null, sort: "created-desc", viewed: "all", applied: "all", pageSize: 25, offset: 0 }, "/matches")).toBe("/matches");
+    expect(matchSearchPath({ minimumScore: 90, sort: "score-desc", viewed: "unseen", applied: "not-applied", pageSize: 50, offset: 100 }, "/matches")).toBe("/matches?minimumScore=90&sort=score-desc&viewed=unseen&applied=not-applied&limit=50&offset=100");
   });
 });
 

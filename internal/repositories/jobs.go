@@ -596,6 +596,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		"jobs.profile_match_score",
 		"job_matches.created_at",
 		"job_matches.content",
+		"EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)",
 	).From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
@@ -608,6 +609,16 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 	case "unseen":
 		query = query.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
 		countQuery = countQuery.Where(squirrel.Expr("jobs.last_viewed_at IS NULL"))
+	}
+	applied := squirrel.Expr("EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)")
+	switch search.Applied {
+	case "applied":
+		query = query.Where(applied)
+		countQuery = countQuery.Where(applied)
+	case "not-applied":
+		notApplied := squirrel.Expr("NOT EXISTS (SELECT 1 FROM applications WHERE applications.job_id = jobs.id)")
+		query = query.Where(notApplied)
+		countQuery = countQuery.Where(notApplied)
 	}
 	if search.MinimumScore != nil {
 		minimumScore := squirrel.Expr(assessmentScore+" >= ?", *search.MinimumScore)
@@ -659,6 +670,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 			&match.Job.ProfileMatchScore,
 			&match.CreatedAt,
 			&content,
+			&match.Applied,
 		); err != nil {
 			return models.JobMatchPage{}, fmt.Errorf("scan job match: %w", err)
 		}

@@ -526,6 +526,8 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	require.NotNil(t, matchResponse.Analysis)
 	assert.Equal(t, "backend_engineering", matchResponse.Analysis.Analysis.Role.Family)
 	require.NoError(t, repository.CreateJobMatch(context.Background(), 2, "Second match"))
+	_, err = repository.CreateApplication(context.Background(), 1)
+	require.NoError(t, err)
 	assessmentContent, err := json.Marshal(models.JobMatchAssessment{MatcherVersion: "test", Score: 91, Label: "Strong match"})
 	require.NoError(t, err)
 	secondAssessmentContent, err := json.Marshal(models.JobMatchAssessment{MatcherVersion: "test", Score: 60, Label: "Worth applying"})
@@ -548,6 +550,8 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, "2026-08-28T12:00:00Z", matchesResponse.Matches[0].CreatedAt)
 	assert.Equal(t, "Strong match", matchesResponse.Matches[1].Label)
 	assert.Equal(t, 91, matchesResponse.Matches[1].Score)
+	assert.True(t, matchesResponse.Matches[1].Applied)
+	assert.False(t, matchesResponse.Matches[0].Applied)
 	require.NotNil(t, matchesResponse.Matches[1].Job.ProfileMatchScore)
 	assert.Equal(t, 3, *matchesResponse.Matches[1].Job.ProfileMatchScore)
 	assert.Equal(t, 2, matchesResponse.Total)
@@ -567,6 +571,21 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, int64(2), matchesResponse.Matches[0].Job.ID)
 
 	response = request(handler, http.MethodGet, "/api/matches?viewed=invalid")
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+
+	response = request(handler, http.MethodGet, "/api/matches?applied=applied")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	assert.Equal(t, 1, matchesResponse.Total)
+	assert.Equal(t, int64(1), matchesResponse.Matches[0].Job.ID)
+
+	response = request(handler, http.MethodGet, "/api/matches?applied=not-applied")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchesResponse))
+	assert.Equal(t, 1, matchesResponse.Total)
+	assert.Equal(t, int64(2), matchesResponse.Matches[0].Job.ID)
+
+	response = request(handler, http.MethodGet, "/api/matches?applied=invalid")
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 
 	response = request(handler, http.MethodGet, "/api/matches?minimumScore=60&sort=score-asc&limit=1&offset=1")

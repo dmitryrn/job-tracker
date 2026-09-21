@@ -345,8 +345,9 @@ func (matches *JobMatches) Analysis(ctx context.Context, jobID int64) (*models.J
 }
 
 var (
-	ErrInvalidJobMatchSort   = errors.New("sort must be created-desc, created-asc, score-desc, score-asc, profile-score-desc, or profile-score-asc")
-	ErrInvalidJobMatchViewed = errors.New("viewed must be all, seen, or unseen")
+	ErrInvalidJobMatchSort    = errors.New("sort must be created-desc, created-asc, score-desc, score-asc, profile-score-desc, or profile-score-asc")
+	ErrInvalidJobMatchViewed  = errors.New("viewed must be all, seen, or unseen")
+	ErrInvalidJobMatchApplied = errors.New("applied must be all, applied, or not-applied")
 )
 
 func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearch) (models.JobMatchPage, error) {
@@ -363,6 +364,13 @@ func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearc
 	}
 	if search.Viewed != "all" && search.Viewed != "seen" && search.Viewed != "unseen" {
 		return models.JobMatchPage{}, ErrInvalidJobMatchViewed
+	}
+	search.Applied = strings.TrimSpace(strings.ToLower(search.Applied))
+	if search.Applied == "" {
+		search.Applied = "all"
+	}
+	if search.Applied != "all" && search.Applied != "applied" && search.Applied != "not-applied" {
+		return models.JobMatchPage{}, ErrInvalidJobMatchApplied
 	}
 	return matches.matches.JobMatches(ctx, search)
 }

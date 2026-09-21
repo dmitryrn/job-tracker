@@ -414,6 +414,7 @@ button { cursor: pointer; }
 .match-job .match-created { color: #a26d20; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .match-label { background: hsl(calc(var(--match-score) * 1.2) 90% 72%); border-radius: 999px; color: hsl(calc(var(--match-score) * 1.2) 75% 20%); font-size: 11px; font-weight: 700; padding: 4px 7px; }
 .match-label.unlabeled { background: #e9edf0; color: #4b6075; }
+.match-applied { background: #d9f2c2; border: 1px solid #9bc970; border-radius: 999px; color: #2f6b2f !important; font-size: 11px !important; font-weight: 700; padding: 4px 7px; }
 .match-filter { border: 0; cursor: pointer; font: inherit; }
 .match-filter[aria-pressed="true"] { box-shadow: 0 0 0 2px #1a2638; }
 .match-filter:focus-visible { outline: 2px solid #1a2638; outline-offset: 2px; }

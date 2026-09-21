@@ -226,6 +226,7 @@ export type JobMatchSummary = {
 	createdAt: string;
 	score: number;
 	label: string;
+	applied: boolean;
 };
 
 export type JobMatchPage = {
@@ -480,13 +481,16 @@ export async function stopJobMatchChat(id: number, requestId: string) {
 	}
 }
 
-export function fetchJobMatches(minimumScore: number | null, sort: string, limit: number, offset: number, signal: AbortSignal, viewed = "all") {
+export function fetchJobMatches(minimumScore: number | null, sort: string, limit: number, offset: number, signal: AbortSignal, viewed = "all", applied = "all") {
 	const parameters = new URLSearchParams({ sort, limit: String(limit), offset: String(offset) });
 	if (minimumScore !== null) {
 		parameters.set("minimumScore", String(minimumScore));
 	}
 	if (viewed !== "all") {
 		parameters.set("viewed", viewed);
+	}
+	if (applied !== "all") {
+		parameters.set("applied", applied);
 	}
 	return request<JobMatchPage>(`matches?${parameters}`, { signal });
 }

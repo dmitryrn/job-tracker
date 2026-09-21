@@ -790,6 +790,7 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 			MinimumScore: minimumScore,
 			Sort:         request.URL.Query().Get("sort"),
 			Viewed:       request.URL.Query().Get("viewed"),
+			Applied:      request.URL.Query().Get("applied"),
 			Limit:        limit,
 			Offset:       offset,
 		})
@@ -800,6 +801,11 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 		}
 		if errors.Is(err, services.ErrInvalidJobMatchViewed) {
 			logger.Warn("invalid job matches viewed filter", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, services.ErrInvalidJobMatchApplied) {
+			logger.Warn("invalid job matches applied filter", zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}

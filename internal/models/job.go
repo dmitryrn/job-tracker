@@ -161,12 +161,14 @@ type JobMatchSummary struct {
 	CreatedAt string    `json:"createdAt"`
 	Score     int       `json:"score"`
 	Label     string    `json:"label"`
+	Applied   bool      `json:"applied"`
 }
 
 type JobMatchSearch struct {
 	MinimumScore *int
 	Sort         string
 	Viewed       string
+	Applied      string
 	Limit        int
 	Offset       int
 }
