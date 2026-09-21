@@ -16,6 +16,15 @@ import (
 	"nice/internal/repositories"
 )
 
+const linkedInWorkplaceQuestionID = "workplace"
+
+var linkedInWorkplaceOptions = map[string]string{
+	"remote":  "The role is fully remote or does not require regular in-person work.",
+	"hybrid":  "The role intentionally combines remote work with regular in-person work.",
+	"onsite":  "The role is primarily or obligatorily performed at a physical workplace.",
+	"unknown": "The available job context does not provide enough reliable evidence to determine the work arrangement.",
+}
+
 type linkedInClient interface {
 	Search(context.Context, linkedin.SearchFilter) ([]linkedin.SearchResult, error)
 	Job(context.Context, string) (linkedin.Job, error)
@@ -56,6 +65,16 @@ type linkedInClientError struct {
 	cause error
 }
 
+type linkedInWorkplaceState struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+type linkedInWorkplaceClassification struct {
+	Confidence    float64            `json:"confidence"`
+	Probabilities map[string]float64 `json:"probabilities"`
+}
+
 func (err *linkedInClientError) Error() string {
 	return err.cause.Error()
 }
@@ -89,6 +108,14 @@ func (service *LinkedInJobs) PreviewStream(ctx context.Context, settings models.
 	return service.previewResult(fetch, err)
 }
 
+func (service *LinkedInJobs) Sync(ctx context.Context, settings models.LinkedInSearchSettings, runID string, requestInterval time.Duration) (LinkedInFetchResult, error) {
+	return service.fetch(ctx, settings, linkedInFetchOptions{
+		runID:           runID,
+		requestInterval: requestInterval,
+		save:            true,
+	})
+}
+
 func (service *LinkedInJobs) previewResult(fetch LinkedInFetchResult, err error) (LinkedInFetchResult, error) {
 	var clientErr *linkedInClientError
 	if len(fetch.Jobs) > 0 && errors.As(err, &clientErr) {
@@ -100,14 +127,6 @@ func (service *LinkedInJobs) previewResult(fetch LinkedInFetchResult, err error)
 	}
 
 	return fetch, err
-}
-
-func (service *LinkedInJobs) Sync(ctx context.Context, settings models.LinkedInSearchSettings, runID string, requestInterval time.Duration) (LinkedInFetchResult, error) {
-	return service.fetch(ctx, settings, linkedInFetchOptions{
-		runID:           runID,
-		requestInterval: requestInterval,
-		save:            true,
-	})
 }
 
 func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedInSearchSettings, options linkedInFetchOptions) (LinkedInFetchResult, error) {
@@ -215,7 +234,11 @@ func (service *LinkedInJobs) fetch(ctx context.Context, settings models.LinkedIn
 				continue
 			}
 
-			job := toLinkedInJob(candidate, details)
+			job, err := toLinkedInJob(candidate, details)
+			if err != nil {
+				return fetch, fmt.Errorf("encode LinkedIn job metadata: %w", err)
+			}
+
 			if !validLinkedInResult(job) {
 				fetch.InvalidJobs++
 				service.recordEvent(ctx, runID, "linkedin.job_fetch.succeeded", "info", "LinkedIn job fetch succeeded but listing was incomplete", map[string]any{
@@ -373,8 +396,12 @@ func validLinkedInResult(job models.Job) bool {
 	return strings.TrimSpace(job.PostedAt) != "" && strings.TrimSpace(job.EmploymentType) != ""
 }
 
-func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) models.Job {
-	metadata, _ := json.Marshal(map[string]string{"posted_text": result.PostedAt})
+func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) (models.Job, error) {
+	metadata, err := json.Marshal(map[string]string{"posted_text": result.PostedAt})
+	if err != nil {
+		return models.Job{}, err
+	}
+
 	workplace := strings.ToLower(strings.TrimSpace(details.WorkplaceType))
 	workplace = strings.ReplaceAll(workplace, "-", "")
 	workplace = strings.ReplaceAll(workplace, " ", "")
@@ -394,26 +421,7 @@ func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) models.Jo
 		EmploymentType: details.EmploymentType,
 		PostedAt:       linkedInPostedAt(result.PostedAt),
 		MetadataJSON:   string(metadata),
-	}
-}
-
-const linkedInWorkplaceQuestionID = "workplace"
-
-var linkedInWorkplaceOptions = map[string]string{
-	"remote":  "The role is fully remote or does not require regular in-person work.",
-	"hybrid":  "The role intentionally combines remote work with regular in-person work.",
-	"onsite":  "The role is primarily or obligatorily performed at a physical workplace.",
-	"unknown": "The available job context does not provide enough reliable evidence to determine the work arrangement.",
-}
-
-type linkedInWorkplaceState struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-}
-
-type linkedInWorkplaceClassification struct {
-	Confidence    float64            `json:"confidence"`
-	Probabilities map[string]float64 `json:"probabilities"`
+	}, nil
 }
 
 func (service *LinkedInJobs) classifyWorkplace(ctx context.Context, title, description string) (string, *string, error) {

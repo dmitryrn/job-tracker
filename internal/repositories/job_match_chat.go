@@ -69,7 +69,7 @@ func (repository *SQLite) JobMatchChatItemByRequestID(ctx context.Context, jobID
 	}
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional chat item.
 	}
 
 	return nil, fmt.Errorf("get job match chat item by request ID: %w", err)
@@ -80,7 +80,8 @@ func (repository *SQLite) CreateJobMatchChatItem(ctx context.Context, item model
 	if err != nil {
 		return models.JobMatchChatItem{}, fmt.Errorf("begin create job match chat item: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	sequenceQuery, sequenceArguments, err := sqlBuilder.
 		Select("COALESCE(MAX(sequence), 0) + 1").

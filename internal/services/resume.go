@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"image"
-	_ "image/jpeg"
+	_ "image/jpeg" // Register JPEG decoding support.
 	_ "image/png"
 	"strings"
 
@@ -61,7 +61,7 @@ func (service *ResumeService) SavePhoto(ctx context.Context, data []byte) (*mode
 		return nil, ErrInvalidResumePhoto
 	}
 
-	contentType := ""
+	var contentType string
 	switch format {
 	case "jpeg":
 		contentType = "image/jpeg"

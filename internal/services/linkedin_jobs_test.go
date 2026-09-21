@@ -15,6 +15,33 @@ import (
 	"nice/internal/models"
 )
 
+type linkedInClientStub struct {
+	results   map[int][]linkedin.SearchResult
+	details   map[string]linkedin.Job
+	jobErrors map[string]error
+	jobIDs    []string
+	starts    []int
+	searchAt  time.Time
+	jobAt     time.Time
+}
+
+type linkedInTypeSafeStub struct {
+	state     any
+	questions map[string]typesafe.Question
+	response  typesafe.Response
+}
+
+type linkedInEventRecorder struct {
+	events []models.Event
+	err    error
+}
+
+type linkedInJobRepositoryStub struct {
+	existing map[string]bool
+	checked  []string
+	upserted []models.Job
+}
+
 func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	const firstPageSize = 10
 
@@ -52,9 +79,17 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 func TestLinkedInWorkplaceUsesStructuredValueWhenPresent(t *testing.T) {
 	result := linkedin.SearchResult{ID: "1", PostedAt: "2026-09-02"}
 
-	assert.Equal(t, "unknown", toLinkedInJob(result, linkedin.Job{Description: "Hybrid work with remote days"}).Workplace)
-	assert.Equal(t, "hybrid", toLinkedInJob(result, linkedin.Job{WorkplaceType: "Hybrid"}).Workplace)
-	assert.Equal(t, "onsite", toLinkedInJob(result, linkedin.Job{WorkplaceType: "On-site"}).Workplace)
+	job, err := toLinkedInJob(result, linkedin.Job{Description: "Hybrid work with remote days"})
+	require.NoError(t, err)
+	assert.Equal(t, "unknown", job.Workplace)
+
+	job, err = toLinkedInJob(result, linkedin.Job{WorkplaceType: "Hybrid"})
+	require.NoError(t, err)
+	assert.Equal(t, "hybrid", job.Workplace)
+
+	job, err = toLinkedInJob(result, linkedin.Job{WorkplaceType: "On-site"})
+	require.NoError(t, err)
+	assert.Equal(t, "onsite", job.Workplace)
 }
 
 func TestLinkedInWorkplaceClassificationUsesChoiceAndStoresRawOutput(t *testing.T) {
@@ -287,22 +322,6 @@ func TestLinkedInJobsSyncSkipsExistingJobs(t *testing.T) {
 	assert.Equal(t, 1, fetch.SkippedJobs)
 }
 
-type linkedInClientStub struct {
-	results   map[int][]linkedin.SearchResult
-	details   map[string]linkedin.Job
-	jobErrors map[string]error
-	jobIDs    []string
-	starts    []int
-	searchAt  time.Time
-	jobAt     time.Time
-}
-
-type linkedInTypeSafeStub struct {
-	state     any
-	questions map[string]typesafe.Question
-	response  typesafe.Response
-}
-
 func (stub *linkedInTypeSafeStub) SystemOne(_ context.Context, state any, questions map[string]typesafe.Question) (typesafe.Response, error) {
 	stub.state = state
 	stub.questions = questions
@@ -321,17 +340,6 @@ func (stub *linkedInClientStub) Job(_ context.Context, id string) (linkedin.Job,
 	return stub.details[id], stub.jobErrors[id]
 }
 
-type linkedInEventRecorder struct {
-	events []models.Event
-	err    error
-}
-
-type linkedInJobRepositoryStub struct {
-	existing map[string]bool
-	checked  []string
-	upserted []models.Job
-}
-
 func (stub *linkedInJobRepositoryStub) JobExists(_ context.Context, source, sourceID string) (bool, error) {
 	if source != "linkedin" {
 		return false, errors.New("unexpected source")
@@ -342,7 +350,7 @@ func (stub *linkedInJobRepositoryStub) JobExists(_ context.Context, source, sour
 }
 
 func (*linkedInJobRepositoryStub) JobBySourceID(context.Context, string, string) (*models.Job, error) {
-	return nil, nil
+	return nil, nil //nolint:nilnil // nil represents an absent optional test fixture.
 }
 
 func (stub *linkedInJobRepositoryStub) Upsert(_ context.Context, jobs []models.Job) error {

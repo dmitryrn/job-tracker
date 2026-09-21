@@ -12,6 +12,17 @@ import (
 	"nice/internal/models"
 )
 
+type recordingMatchCompletionClient struct {
+	response  openai.ChatResponse
+	responses []openai.ChatResponse
+	err       error
+	model     string
+	session   string
+	request   openai.ChatRequest
+	sessions  []string
+	requests  []openai.ChatRequest
+}
+
 func TestLLMProfileJobMatcherReturnsValidatedAssessment(t *testing.T) {
 	client := &recordingMatchCompletionClient{response: openai.ChatResponse{
 		Model: "test-model",
@@ -145,17 +156,6 @@ func TestMatchScoreLabel(t *testing.T) {
 	assert.Equal(t, "Worth applying", matchScoreLabel(60))
 	assert.Equal(t, "Strong fit", matchScoreLabel(75))
 	assert.Equal(t, "Exceptional fit", matchScoreLabel(90))
-}
-
-type recordingMatchCompletionClient struct {
-	response  openai.ChatResponse
-	responses []openai.ChatResponse
-	err       error
-	model     string
-	session   string
-	request   openai.ChatRequest
-	sessions  []string
-	requests  []openai.ChatRequest
 }
 
 func (client *recordingMatchCompletionClient) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {

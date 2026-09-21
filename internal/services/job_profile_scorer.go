@@ -10,6 +10,8 @@ import (
 	"nice/internal/models"
 )
 
+const typeSafeScoreLevels = 10
+
 type TypeSafeSystemOneClient interface {
 	SystemOne(context.Context, any, map[string]typesafe.Question) (typesafe.Response, error)
 }
@@ -17,8 +19,6 @@ type TypeSafeSystemOneClient interface {
 type JobProfileScorer struct {
 	client TypeSafeSystemOneClient
 }
-
-const typeSafeScoreLevels = 10
 
 func NewJobProfileScorer(client TypeSafeSystemOneClient) *JobProfileScorer {
 	return &JobProfileScorer{client: client}

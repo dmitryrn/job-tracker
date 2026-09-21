@@ -28,6 +28,46 @@ import (
 	"nice/internal/services"
 )
 
+type discoveryPreviewStub struct{}
+
+type discoveryPreviewStreamStub struct{}
+
+type resumePDFStub struct {
+	content []byte
+	err     error
+}
+
+type applicationResumeStub struct {
+	resume *models.Resume
+	err    error
+}
+
+type applicationResumePDFStub struct {
+	content []byte
+	err     error
+	resume  models.Resume
+}
+
+type syncTriggerStub struct {
+	started  bool
+	called   bool
+	provider string
+}
+
+type noOpJobAnalysisService struct{}
+
+type noOpProfileJobMatcher struct{}
+
+type noOpJobCompletionClient struct{}
+
+type customJobImportStub struct{}
+
+type failingJobCompletionClient struct{}
+
+type resumePatchCompletionClient struct{}
+
+type coverLetterCompletionClient struct{}
+
 func TestJobAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -391,8 +431,6 @@ func TestDiscoveryPreviewAPIStreamsJobs(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "event: complete\ndata: {\"jobCount\":1}")
 }
 
-type discoveryPreviewStub struct{}
-
 func (discoveryPreviewStub) Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error) {
 	return nil, nil
 }
@@ -400,8 +438,6 @@ func (discoveryPreviewStub) Preview(context.Context, string, models.DiscoverySet
 func (discoveryPreviewStub) StreamPreview(context.Context, string, models.DiscoverySettings, func(models.Job) error) error {
 	return nil
 }
-
-type discoveryPreviewStreamStub struct{}
 
 func (discoveryPreviewStreamStub) Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error) {
 	return nil, nil
@@ -939,28 +975,12 @@ func TestJobApplicationResumePDFHandler(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, response.Code)
 }
 
-type resumePDFStub struct {
-	content []byte
-	err     error
-}
-
 func (stub resumePDFStub) Generate(context.Context) ([]byte, error) {
 	return stub.content, stub.err
 }
 
-type applicationResumeStub struct {
-	resume *models.Resume
-	err    error
-}
-
 func (stub applicationResumeStub) LatestResume(context.Context, int64) (*models.Resume, error) {
 	return stub.resume, stub.err
-}
-
-type applicationResumePDFStub struct {
-	content []byte
-	err     error
-	resume  models.Resume
 }
 
 func (stub *applicationResumePDFStub) GenerateResume(_ context.Context, resume models.Resume) ([]byte, error) {
@@ -999,12 +1019,6 @@ func newTestServerWithDependencies(repository *repositories.SQLite, client servi
 	)
 }
 
-type syncTriggerStub struct {
-	started  bool
-	called   bool
-	provider string
-}
-
 func (stub *syncTriggerStub) Trigger(provider string) bool {
 	stub.called = true
 	stub.provider = provider
@@ -1035,25 +1049,17 @@ func enableForeignKeys(db *sql.DB) error {
 	return err
 }
 
-type noOpJobAnalysisService struct{}
-
 func (noOpJobAnalysisService) Analyze(context.Context, models.Job) (services.JobAnalysis, error) {
 	return services.JobAnalysis{}, nil
 }
-
-type noOpProfileJobMatcher struct{}
 
 func (noOpProfileJobMatcher) Match(context.Context, models.BrowseJob, models.JobAnalysisRecord, models.UserProfile) (services.ProfileJobMatch, error) {
 	return services.ProfileJobMatch{}, nil
 }
 
-type noOpJobCompletionClient struct{}
-
 func (noOpJobCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
 	return openai.ChatResponse{Model: "test-model", Content: "Test chat reply."}, nil
 }
-
-type customJobImportStub struct{}
 
 func (customJobImportStub) Import(_ context.Context, sourceURL string) (models.Job, error) {
 	return models.Job{
@@ -1063,13 +1069,9 @@ func (customJobImportStub) Import(_ context.Context, sourceURL string) (models.J
 	}, nil
 }
 
-type failingJobCompletionClient struct{}
-
 func (failingJobCompletionClient) Complete(context.Context, string, string, openai.ChatRequest) (openai.ChatResponse, error) {
 	return openai.ChatResponse{}, errors.New("LLM unavailable")
 }
-
-type resumePatchCompletionClient struct{}
 
 func (resumePatchCompletionClient) Complete(_ context.Context, _ string, _ string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	for _, message := range request.Messages {
@@ -1080,8 +1082,6 @@ func (resumePatchCompletionClient) Complete(_ context.Context, _ string, _ strin
 
 	return openai.ChatResponse{Model: "test-model", ToolCalls: []openai.ToolCall{{ID: "patch-call", Type: "function", Function: openai.ToolFunction{Name: "revise_application_resume", Arguments: `{"baseRevision":0,"operations":[{"op":"replace","section":"headline","id":0,"parentId":0,"expected":"Software engineer","value":"Backend engineer"}]}`}}}}, nil
 }
-
-type coverLetterCompletionClient struct{}
 
 func (coverLetterCompletionClient) Complete(_ context.Context, _ string, _ string, request openai.ChatRequest) (openai.ChatResponse, error) {
 	for _, message := range request.Messages {

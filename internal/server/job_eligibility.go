@@ -14,50 +14,10 @@ import (
 	"nice/internal/repositories"
 )
 
-type typeSafeSystemOneClient interface {
-	SystemOne(context.Context, any, map[string]typesafe.Question) (typesafe.Response, error)
-}
-
-type jobEligibilityQuestion struct {
-	ID           string
-	Text         string
-	Positive     bool
-	Criteria     map[string]string
-	CollapseWhen *jobEligibilityConditionGroup
-}
-
-type jobEligibilityCondition struct {
-	QuestionID string `json:"questionId"`
-	Value      bool   `json:"value"`
-}
-
-type jobEligibilityConditionOperator string
-
 const (
 	OperatorOr  jobEligibilityConditionOperator = "or"
 	OperatorAnd jobEligibilityConditionOperator = "and"
 )
-
-type jobEligibilityConditionGroup struct {
-	Operator   jobEligibilityConditionOperator `json:"operator"`
-	Conditions []jobEligibilityCondition       `json:"conditions"`
-}
-
-type jobEligibilityAnswerResult struct {
-	ID           string                        `json:"id"`
-	Question     string                        `json:"question"`
-	Answer       string                        `json:"answer"`
-	Noul         float64                       `json:"noul"`
-	Positive     bool                          `json:"positive"`
-	CollapseWhen *jobEligibilityConditionGroup `json:"collapseWhen,omitempty"`
-}
-
-type jobEligibilityCheck struct {
-	JobID     int64                        `json:"jobId"`
-	Model     string                       `json:"model"`
-	CheckedAt string                       `json:"checkedAt"`
-	Answers   []jobEligibilityAnswerResult `json:"answers"`
-}
 
 var jobEligibilityQuestions = []jobEligibilityQuestion{
 	{
@@ -94,6 +54,46 @@ var jobEligibilityQuestions = []jobEligibilityQuestion{
 			},
 		},
 	},
+}
+
+type typeSafeSystemOneClient interface {
+	SystemOne(context.Context, any, map[string]typesafe.Question) (typesafe.Response, error)
+}
+
+type jobEligibilityQuestion struct {
+	ID           string
+	Text         string
+	Positive     bool
+	Criteria     map[string]string
+	CollapseWhen *jobEligibilityConditionGroup
+}
+
+type jobEligibilityCondition struct {
+	QuestionID string `json:"questionId"`
+	Value      bool   `json:"value"`
+}
+
+type jobEligibilityConditionOperator string
+
+type jobEligibilityConditionGroup struct {
+	Operator   jobEligibilityConditionOperator `json:"operator"`
+	Conditions []jobEligibilityCondition       `json:"conditions"`
+}
+
+type jobEligibilityAnswerResult struct {
+	ID           string                        `json:"id"`
+	Question     string                        `json:"question"`
+	Answer       string                        `json:"answer"`
+	Noul         float64                       `json:"noul"`
+	Positive     bool                          `json:"positive"`
+	CollapseWhen *jobEligibilityConditionGroup `json:"collapseWhen,omitempty"`
+}
+
+type jobEligibilityCheck struct {
+	JobID     int64                        `json:"jobId"`
+	Model     string                       `json:"model"`
+	CheckedAt string                       `json:"checkedAt"`
+	Answers   []jobEligibilityAnswerResult `json:"answers"`
 }
 
 func jobEligibilityCheckHandler(jobs repositories.JobRepository, client typeSafeSystemOneClient, logger *zap.Logger) http.HandlerFunc {

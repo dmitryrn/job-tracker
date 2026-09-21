@@ -24,6 +24,11 @@ import (
 	"nice/internal/services"
 )
 
+type completionClients struct {
+	openCode *openai.Client
+	openAI   *openai.Client
+}
+
 func main() {
 	fx.New(
 		fx.Provide(
@@ -89,11 +94,6 @@ func newOpenAIClient(cfg config.Config) *openai.Client {
 
 func newTypeSafeClient(cfg config.Config) (*typesafe.Client, error) {
 	return typesafe.NewClient(cfg.TypeSafe.APIKey, cfg.TypeSafe.BaseURL, cfg.TypeSafe.Model)
-}
-
-type completionClients struct {
-	openCode *openai.Client
-	openAI   *openai.Client
 }
 
 func newCompletionClients(openCode, openAI *openai.Client) completionClients {
@@ -170,7 +170,7 @@ func registerLifecycle(
 	chat *services.JobMatchChat,
 ) {
 	lifecycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			err := db.Close()
 			_ = logger.Sync()
 			return err
@@ -212,12 +212,12 @@ func openDatabase(cfg config.Config, logger *zap.Logger) (*sql.DB, error) {
 
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
 	if err := migrations.Apply(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
 

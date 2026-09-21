@@ -90,7 +90,12 @@ func (c *Client) Fetch(ctx context.Context, settings models.RemotiveSearchSettin
 			continue
 		}
 
-		jobs = append(jobs, toModel(item))
+		model, err := toModel(item)
+		if err != nil {
+			return nil, fmt.Errorf("encode Remotive job metadata: %w", err)
+		}
+
+		jobs = append(jobs, model)
 	}
 
 	return jobs, nil
@@ -100,13 +105,17 @@ func matchesCategory(category, filter string) bool {
 	return strings.EqualFold(category, filter) || strings.EqualFold(category, strings.ReplaceAll(filter, "-", " "))
 }
 
-func toModel(job job) models.Job {
-	metadata, _ := json.Marshal(map[string]any{
+func toModel(job job) (models.Job, error) {
+	metadata, err := json.Marshal(map[string]any{
 		"category":         job.Category,
 		"tags":             job.Tags,
 		"salary":           job.Salary,
 		"company_logo_url": job.CompanyLogoURL,
 	})
+	if err != nil {
+		return models.Job{}, err
+	}
+
 	return models.Job{
 		Source:         "remotive",
 		SourceID:       strconv.FormatInt(job.ID, 10),
@@ -119,7 +128,7 @@ func toModel(job job) models.Job {
 		EmploymentType: job.JobType,
 		PostedAt:       parseTime(job.PublicationDate),
 		MetadataJSON:   string(metadata),
-	}
+	}, nil
 }
 
 func parseTime(value string) string {

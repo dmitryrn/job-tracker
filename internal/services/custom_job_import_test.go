@@ -12,6 +12,18 @@ import (
 	"nice/internal/clients/openai"
 )
 
+type customJobPageFetcherStub struct {
+	page CustomJobPage
+	err  error
+}
+
+type customJobImportCompletionStub struct {
+	response openai.ChatResponse
+	model    string
+	session  string
+	request  openai.ChatRequest
+}
+
 func TestCustomJobImporterStoresPageMarkdownAndExtractedFields(t *testing.T) {
 	client := &customJobImportCompletionStub{response: openai.ChatResponse{Model: "import-model", Content: `{
 		"title":"Senior Platform Engineer",
@@ -74,20 +86,8 @@ func TestIsPublicAddressRejectsPrivateNetworks(t *testing.T) {
 	assert.True(t, isPublicAddress(netip.MustParseAddr("1.1.1.1")))
 }
 
-type customJobPageFetcherStub struct {
-	page CustomJobPage
-	err  error
-}
-
 func (stub customJobPageFetcherStub) Fetch(context.Context, string) (CustomJobPage, error) {
 	return stub.page, stub.err
-}
-
-type customJobImportCompletionStub struct {
-	response openai.ChatResponse
-	model    string
-	session  string
-	request  openai.ChatRequest
 }
 
 func (stub *customJobImportCompletionStub) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {

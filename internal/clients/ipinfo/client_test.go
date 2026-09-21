@@ -28,7 +28,7 @@ func TestLookupReturnsIPInfo(t *testing.T) {
 }
 
 func TestLookupRejectsResponseWithoutCountry(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = writer.Write([]byte(`{"ip":"194.126.177.60"}`))
 	}))
 	defer server.Close()

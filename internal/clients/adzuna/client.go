@@ -66,7 +66,12 @@ func (c *Client) Fetch(ctx context.Context, settings models.AdzunaSearchSettings
 
 		for _, item := range result {
 			if matchesWorkplace(item, settings.Workplace) {
-				jobs = append(jobs, toModel(item))
+				model, err := toModel(item)
+				if err != nil {
+					return nil, fmt.Errorf("encode Adzuna job metadata: %w", err)
+				}
+
+				jobs = append(jobs, model)
 			}
 		}
 
@@ -135,13 +140,17 @@ func matchesWorkplace(job job, workplace string) bool {
 	return strings.Contains(text, "remote") || strings.Contains(text, "hybrid")
 }
 
-func toModel(job job) models.Job {
-	metadata, _ := json.Marshal(map[string]any{
+func toModel(job job) (models.Job, error) {
+	metadata, err := json.Marshal(map[string]any{
 		"category":            job.Category,
 		"location_area":       job.Location.Area,
 		"salary_is_predicted": salaryIsPredicted(job.SalaryIsPredicted),
 		"contract_type":       job.ContractType,
 	})
+	if err != nil {
+		return models.Job{}, err
+	}
+
 	return models.Job{
 		Source:         "adzuna",
 		SourceID:       job.ID,
@@ -156,7 +165,7 @@ func toModel(job job) models.Job {
 		SalaryMax:      job.SalaryMax,
 		PostedAt:       parseTime(job.Created),
 		MetadataJSON:   string(metadata),
-	}
+	}, nil
 }
 
 func salaryIsPredicted(value any) bool {

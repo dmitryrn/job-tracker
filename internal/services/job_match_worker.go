@@ -21,6 +21,9 @@ const jobMatchRetryInterval = 30 * time.Second
 var (
 	ErrMatchJobNotFound       = errors.New("job not found")
 	ErrJobDescriptionRequired = errors.New("a job description is required before creating a match")
+	ErrInvalidJobMatchSort    = errors.New("sort must be created-desc, created-asc, score-desc, score-asc, profile-score-desc, or profile-score-asc")
+	ErrInvalidJobMatchViewed  = errors.New("viewed must be all, seen, or unseen")
+	ErrInvalidJobMatchApplied = errors.New("applied must be all, applied, or not-applied")
 )
 
 type ProfileJobMatcher interface {
@@ -33,6 +36,17 @@ type JobAnalysisService interface {
 
 type JobProfileScoreService interface {
 	Score(context.Context, models.Job, models.UserProfile) (int, error)
+}
+
+type JobMatches struct {
+	analyses repositories.JobAnalysisRepository
+	matches  repositories.JobMatchRepository
+}
+
+type JobMatchRequests struct {
+	jobs   repositories.JobRepository
+	queue  repositories.MatchQueueRepository
+	worker *JobMatchWorker
 }
 
 // JobMatchWorker schedules queued matching work; repositories only persist its state.
@@ -65,10 +79,10 @@ func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.Jo
 
 func (worker *JobMatchWorker) Register(lifecycle fx.Lifecycle) {
 	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
+		OnStart: func(startContext context.Context) error {
 			worker.mutex.Lock()
 			defer worker.mutex.Unlock()
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(context.WithoutCancel(startContext))
 			worker.cancel = cancel
 			worker.done = make(chan struct{})
 			worker.logger.Info("job match worker started", zap.Duration("idle_retry_interval", jobMatchRetryInterval))
@@ -94,6 +108,13 @@ func (worker *JobMatchWorker) Register(lifecycle fx.Lifecycle) {
 			}
 		},
 	})
+}
+
+func (worker *JobMatchWorker) Wake() {
+	select {
+	case worker.wake <- struct{}{}:
+	default:
+	}
 }
 
 func (worker *JobMatchWorker) run(ctx context.Context) {
@@ -124,21 +145,6 @@ func (worker *JobMatchWorker) run(ctx context.Context) {
 			timer.Stop()
 		case <-timer.C:
 		}
-	}
-}
-
-func jobMatchRunInterval(worked bool, err error, runInterval time.Duration) (time.Duration, bool) {
-	if worked || err != nil {
-		return runInterval, true
-	}
-
-	return jobMatchRetryInterval, false
-}
-
-func (worker *JobMatchWorker) Wake() {
-	select {
-	case worker.wake <- struct{}{}:
-	default:
 	}
 }
 
@@ -350,18 +356,6 @@ func (worker *JobMatchWorker) recordRetryEvents(ctx context.Context, runID strin
 	})
 }
 
-func jobAnalysisCurrent(analysis *models.JobAnalysisRecord, job models.Job) bool {
-	return analysis != nil &&
-		analysis.AnalyzerVersion == JobAnalyzerVersion &&
-		analysis.PromptVersion == JobPromptVersion &&
-		analysis.InputSHA256 == jobAnalysisInputSHA256(job)
-}
-
-type JobMatches struct {
-	analyses repositories.JobAnalysisRepository
-	matches  repositories.JobMatchRepository
-}
-
 func NewJobMatches(analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository) *JobMatches {
 	return &JobMatches{analyses: analyses, matches: matches}
 }
@@ -373,12 +367,6 @@ func (matches *JobMatches) Match(ctx context.Context, jobID int64) (*models.JobM
 func (matches *JobMatches) Analysis(ctx context.Context, jobID int64) (*models.JobAnalysisRecord, error) {
 	return matches.analyses.JobAnalysis(ctx, jobID)
 }
-
-var (
-	ErrInvalidJobMatchSort    = errors.New("sort must be created-desc, created-asc, score-desc, score-asc, profile-score-desc, or profile-score-asc")
-	ErrInvalidJobMatchViewed  = errors.New("viewed must be all, seen, or unseen")
-	ErrInvalidJobMatchApplied = errors.New("applied must be all, applied, or not-applied")
-)
 
 func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearch) (models.JobMatchPage, error) {
 	search.Sort = strings.TrimSpace(strings.ToLower(search.Sort))
@@ -411,14 +399,23 @@ func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearc
 	return matches.matches.JobMatches(ctx, search)
 }
 
-type JobMatchRequests struct {
-	jobs   repositories.JobRepository
-	queue  repositories.MatchQueueRepository
-	worker *JobMatchWorker
-}
-
 func NewJobMatchRequests(jobs repositories.JobRepository, queue repositories.MatchQueueRepository, worker *JobMatchWorker) *JobMatchRequests {
 	return &JobMatchRequests{jobs: jobs, queue: queue, worker: worker}
+}
+
+func jobMatchRunInterval(worked bool, err error, runInterval time.Duration) (time.Duration, bool) {
+	if worked || err != nil {
+		return runInterval, true
+	}
+
+	return jobMatchRetryInterval, false
+}
+
+func jobAnalysisCurrent(analysis *models.JobAnalysisRecord, job models.Job) bool {
+	return analysis != nil &&
+		analysis.AnalyzerVersion == JobAnalyzerVersion &&
+		analysis.PromptVersion == JobPromptVersion &&
+		analysis.InputSHA256 == jobAnalysisInputSHA256(job)
 }
 
 func (requests *JobMatchRequests) Queue(ctx context.Context, jobID int64, redo bool) error {

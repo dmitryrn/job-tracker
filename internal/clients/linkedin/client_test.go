@@ -48,7 +48,7 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 }
 
 func TestSearchOmitsUnsetFilters(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
 		assert.Empty(t, request.URL.Query().Get("f_TPR"))
 		assert.Empty(t, request.URL.Query().Get("f_WT"))
 		assert.Empty(t, request.URL.Query().Get("f_E"))

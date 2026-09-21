@@ -15,6 +15,54 @@ import (
 	"nice/internal/models"
 )
 
+type discoverySettingsStub struct {
+	settings models.DiscoverySettings
+}
+
+type providerRunRecorder struct {
+	mutex   sync.Mutex
+	started int
+}
+
+type adzunaBlockingFetcher struct {
+	starts  chan<- string
+	release <-chan struct{}
+}
+
+type jobicyBlockingFetcher struct {
+	starts  chan<- string
+	release <-chan struct{}
+}
+
+type linkedInBlockingFetcher struct {
+	starts  chan<- string
+	release <-chan struct{}
+}
+
+type remotiveBlockingFetcher struct {
+	starts  chan<- string
+	release <-chan struct{}
+}
+
+type linkedInFetcherStub struct {
+	jobs []models.Job
+	err  error
+}
+
+type ipInfoLookupStub struct {
+	info ipinfo.Info
+	err  error
+}
+
+type linkedInFetcherRecorder struct {
+	calls int
+}
+
+type eventRepositoryRecorder struct {
+	events          []models.Event
+	contextCanceled []bool
+}
+
 func TestJobSyncSkipsDisabledProviders(t *testing.T) {
 	runs := &providerRunRecorder{}
 	syncer := JobSync{
@@ -164,21 +212,12 @@ func TestJobSyncBlocksLinkedInWhenIPInfoLookupFails(t *testing.T) {
 	assert.Equal(t, "linkedin.ip_info.failed", events.events[0].Type)
 }
 
-type discoverySettingsStub struct {
-	settings models.DiscoverySettings
-}
-
 func (stub discoverySettingsStub) DiscoverySettings(context.Context) (models.DiscoverySettings, error) {
 	return stub.settings, nil
 }
 
 func (discoverySettingsStub) SaveDiscoverySettings(context.Context, models.DiscoverySettings) (models.DiscoverySettings, error) {
 	return models.DiscoverySettings{}, nil
-}
-
-type providerRunRecorder struct {
-	mutex   sync.Mutex
-	started int
 }
 
 func (recorder *providerRunRecorder) StartProviderRun(context.Context, string, time.Duration, time.Time) (bool, error) {
@@ -188,20 +227,10 @@ func (recorder *providerRunRecorder) StartProviderRun(context.Context, string, t
 	return true, nil
 }
 
-type adzunaBlockingFetcher struct {
-	starts  chan<- string
-	release <-chan struct{}
-}
-
 func (fetcher adzunaBlockingFetcher) Fetch(context.Context, models.AdzunaSearchSettings) ([]models.Job, error) {
 	fetcher.starts <- "adzuna"
 	<-fetcher.release
 	return nil, errors.New("failed")
-}
-
-type jobicyBlockingFetcher struct {
-	starts  chan<- string
-	release <-chan struct{}
 }
 
 func (fetcher jobicyBlockingFetcher) Fetch(context.Context, models.JobicySearchSettings) ([]models.Job, error) {
@@ -210,20 +239,10 @@ func (fetcher jobicyBlockingFetcher) Fetch(context.Context, models.JobicySearchS
 	return nil, errors.New("failed")
 }
 
-type linkedInBlockingFetcher struct {
-	starts  chan<- string
-	release <-chan struct{}
-}
-
 func (fetcher linkedInBlockingFetcher) Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error) {
 	fetcher.starts <- "linkedin"
 	<-fetcher.release
 	return LinkedInFetchResult{}, errors.New("failed")
-}
-
-type remotiveBlockingFetcher struct {
-	starts  chan<- string
-	release <-chan struct{}
 }
 
 func (fetcher remotiveBlockingFetcher) Fetch(context.Context, models.RemotiveSearchSettings) ([]models.Job, error) {
@@ -232,22 +251,8 @@ func (fetcher remotiveBlockingFetcher) Fetch(context.Context, models.RemotiveSea
 	return nil, errors.New("failed")
 }
 
-type linkedInFetcherStub struct {
-	jobs []models.Job
-	err  error
-}
-
-type ipInfoLookupStub struct {
-	info ipinfo.Info
-	err  error
-}
-
 func (stub ipInfoLookupStub) Lookup(context.Context) (ipinfo.Info, error) {
 	return stub.info, stub.err
-}
-
-type linkedInFetcherRecorder struct {
-	calls int
 }
 
 func (fetcher *linkedInFetcherRecorder) Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error) {
@@ -257,11 +262,6 @@ func (fetcher *linkedInFetcherRecorder) Sync(context.Context, models.LinkedInSea
 
 func (stub linkedInFetcherStub) Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error) {
 	return LinkedInFetchResult{Jobs: stub.jobs, FetchedJobs: len(stub.jobs), SavedJobs: len(stub.jobs)}, stub.err
-}
-
-type eventRepositoryRecorder struct {
-	events          []models.Event
-	contextCanceled []bool
 }
 
 func (recorder *eventRepositoryRecorder) RecordEvent(ctx context.Context, event models.Event) error {

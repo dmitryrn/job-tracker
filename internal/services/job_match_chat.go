@@ -17,6 +17,11 @@ import (
 	"nice/internal/repositories"
 )
 
+const (
+	jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, application resume, and application cover letter. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. When the user asks to create a cover letter, call create_application_cover_letter; for an existing cover letter, call revise_application_cover_letter. Cover letters must be truthful and specific to this application. The user sees revisions directly, so do not repeat their full contents; briefly explain why the changes improve relevance instead. Ask clarifying questions when useful.`
+	resumePatchAttempts      = 3
+)
+
 var (
 	ErrJobMatchChatUnavailable         = errors.New("a current match is required to start a chat")
 	ErrEmptyJobMatchChatMessage        = errors.New("message must not be empty")
@@ -26,12 +31,6 @@ var (
 	ErrJobMatchChatUnansweredMessage   = errors.New("remove the unanswered message before starting another turn")
 	ErrApplicationResumeNotFound       = errors.New("application resume not found")
 	ErrApplicationCoverLetterNotFound  = errors.New("application cover letter not found")
-)
-
-const jobMatchChatInstructions = `You are a thoughtful job-search assistant. Help the candidate discuss this specific job, its current match assessment, their profile, application resume, and application cover letter. Be candid, practical, and concise. Do not claim the candidate has experience or qualifications that are not in the supplied context. When the user asks to edit or tailor the resume, call revise_application_resume with narrow, factual changes instead of describing hypothetical edits. When the user asks to create a cover letter, call create_application_cover_letter; for an existing cover letter, call revise_application_cover_letter. Cover letters must be truthful and specific to this application. The user sees revisions directly, so do not repeat their full contents; briefly explain why the changes improve relevance instead. Ask clarifying questions when useful.`
-
-const (
-	resumePatchAttempts = 3
 )
 
 var resumePatchTool = openai.Tool{
@@ -116,6 +115,85 @@ var reviseCoverLetterTool = openai.Tool{
 	},
 }
 
+type resumeRevisionPayload struct {
+	Revision int           `json:"revision"`
+	Resume   models.Resume `json:"resume"`
+}
+
+type coverLetterRevisionPayload struct {
+	Revision int    `json:"revision"`
+	Content  string `json:"content"`
+}
+
+type coverLetterToolInput struct {
+	BaseRevision int    `json:"baseRevision"`
+	Content      string `json:"content"`
+}
+
+type jobMatchChatInitialContext struct {
+	Job     *models.BrowseJob      `json:"job"`
+	Match   *models.JobMatchRecord `json:"match"`
+	Profile *models.UserProfile    `json:"profile"`
+}
+
+type chatInitialContext struct {
+	Job     *models.BrowseJob      `json:"job"`
+	Match   *models.JobMatchRecord `json:"match"`
+	Profile *llmUserProfile        `json:"profile,omitempty"`
+}
+
+type chatResumeRevisionPayload struct {
+	Revision int        `json:"revision"`
+	Resume   chatResume `json:"resume"`
+}
+
+type chatResume struct {
+	Headline          string                 `json:"headline"`
+	Country           string                 `json:"country"`
+	SummaryParagraphs []models.ResumeText    `json:"summaryParagraphs"`
+	Skills            []models.ResumeSkill   `json:"skills"`
+	Experience        []chatResumeExperience `json:"experience"`
+	Education         []chatResumeEducation  `json:"education"`
+}
+
+type chatResumeExperience struct {
+	ID        int64               `json:"id"`
+	Company   string              `json:"company"`
+	Title     string              `json:"title"`
+	StartDate string              `json:"startDate"`
+	EndDate   string              `json:"endDate"`
+	IsCurrent bool                `json:"isCurrent"`
+	Stack     string              `json:"stack"`
+	Bullets   []models.ResumeText `json:"bullets"`
+}
+
+type chatResumeEducation struct {
+	ID           int64  `json:"id"`
+	Degree       string `json:"degree"`
+	FieldOfStudy string `json:"fieldOfStudy"`
+	StartDate    string `json:"startDate"`
+	EndDate      string `json:"endDate"`
+	Details      string `json:"details"`
+}
+
+type chatToolResultPayload struct {
+	ToolCallID  string                      `json:"toolCallId"`
+	Status      string                      `json:"status"`
+	Error       string                      `json:"error,omitempty"`
+	Revision    int                         `json:"revision,omitempty"`
+	Resume      *chatResume                 `json:"resume,omitempty"`
+	CoverLetter *coverLetterRevisionPayload `json:"coverLetter,omitempty"`
+}
+
+type toolResultPayload struct {
+	ToolCallID  string                      `json:"toolCallId"`
+	Status      string                      `json:"status"`
+	Error       string                      `json:"error,omitempty"`
+	Revision    int                         `json:"revision,omitempty"`
+	Resume      *models.Resume              `json:"resume,omitempty"`
+	CoverLetter *coverLetterRevisionPayload `json:"coverLetter,omitempty"`
+}
+
 type resumePatch struct {
 	BaseRevision int                    `json:"baseRevision"`
 	Operations   []resumePatchOperation `json:"operations"`
@@ -128,6 +206,41 @@ type resumePatchOperation struct {
 	ParentID int64  `json:"parentId"`
 	Expected string `json:"expected"`
 	Value    string `json:"value"`
+}
+
+type JobMatchChat struct {
+	jobs        repositories.JobRepository
+	matches     repositories.JobMatchRepository
+	items       repositories.JobMatchChatRepository
+	profiles    repositories.UserProfileRepository
+	resumes     repositories.ResumeRepository
+	client      JobCompletionClient
+	model       string
+	reasoning   string
+	jobLocks    sync.Map
+	activeMu    sync.Mutex
+	active      map[int64]*jobMatchChatTurn
+	subscribers map[int64]map[chan JobMatchChatUpdate]struct{}
+	rootContext context.Context
+	cancel      context.CancelFunc
+	logger      *zap.Logger
+}
+
+type jobMatchChatTurn struct {
+	requestID string
+	ctx       context.Context
+	cancel    context.CancelFunc
+	done      chan struct{}
+}
+
+type JobMatchChatUpdate struct {
+	Item  *models.JobMatchChatItem
+	Reset bool
+}
+
+func NewJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, items repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, client JobCompletionClient, model, reasoning string, logger *zap.Logger) *JobMatchChat {
+	rootContext, cancel := context.WithCancel(context.Background())
+	return &JobMatchChat{jobs: jobs, matches: matches, items: items, profiles: profiles, resumes: resumes, client: client, model: model, reasoning: reasoning, active: make(map[int64]*jobMatchChatTurn), subscribers: make(map[int64]map[chan JobMatchChatUpdate]struct{}), rootContext: rootContext, cancel: cancel, logger: logger}
 }
 
 func resumePatchOperationSummaries(operations []resumePatchOperation) []string {
@@ -162,40 +275,6 @@ func resumePatchAvailableIDs(resume models.Resume) (summary, skills, experiences
 	}
 
 	return summary, skills, experiences, education
-}
-
-type JobMatchChat struct {
-	jobs        repositories.JobRepository
-	matches     repositories.JobMatchRepository
-	items       repositories.JobMatchChatRepository
-	profiles    repositories.UserProfileRepository
-	resumes     repositories.ResumeRepository
-	client      JobCompletionClient
-	model       string
-	reasoning   string
-	jobLocks    sync.Map
-	activeMu    sync.Mutex
-	active      map[int64]*jobMatchChatTurn
-	subscribers map[int64]map[chan JobMatchChatUpdate]struct{}
-	rootContext context.Context
-	cancel      context.CancelFunc
-	logger      *zap.Logger
-}
-
-type jobMatchChatTurn struct {
-	requestID string
-	cancel    context.CancelFunc
-	done      chan struct{}
-}
-
-type JobMatchChatUpdate struct {
-	Item  *models.JobMatchChatItem
-	Reset bool
-}
-
-func NewJobMatchChat(jobs repositories.JobRepository, matches repositories.JobMatchRepository, items repositories.JobMatchChatRepository, profiles repositories.UserProfileRepository, resumes repositories.ResumeRepository, client JobCompletionClient, model, reasoning string, logger *zap.Logger) *JobMatchChat {
-	rootContext, cancel := context.WithCancel(context.Background())
-	return &JobMatchChat{jobs: jobs, matches: matches, items: items, profiles: profiles, resumes: resumes, client: client, model: model, reasoning: reasoning, active: make(map[int64]*jobMatchChatTurn), subscribers: make(map[int64]map[chan JobMatchChatUpdate]struct{}), rootContext: rootContext, cancel: cancel, logger: logger}
 }
 
 func (service *JobMatchChat) Register(lifecycle fx.Lifecycle) {
@@ -330,11 +409,13 @@ func (service *JobMatchChat) Send(ctx context.Context, jobID int64, content, req
 	}
 
 	turnContext, cancel := context.WithCancel(service.rootContext)
-	turn := &jobMatchChatTurn{requestID: requestID, cancel: cancel, done: make(chan struct{})}
+	turn := &jobMatchChatTurn{requestID: requestID, ctx: turnContext, cancel: cancel, done: make(chan struct{})}
 	service.activeMu.Lock()
 	service.active[jobID] = turn
 	service.activeMu.Unlock()
-	go service.runTurn(turnContext, jobID, requestID, turn)
+	go func() {
+		service.runTurn(jobID, requestID, turn)
+	}()
 	return user, nil
 }
 
@@ -348,13 +429,6 @@ func (service *JobMatchChat) Stop(jobID int64, requestID string) bool {
 
 	turn.cancel()
 	return true
-}
-
-func (service *JobMatchChat) lockJob(jobID int64) func() {
-	value, _ := service.jobLocks.LoadOrStore(jobID, &sync.Mutex{})
-	lock := value.(*sync.Mutex)
-	lock.Lock()
-	return lock.Unlock
 }
 
 func (service *JobMatchChat) Revert(ctx context.Context, jobID, sequence int64) error {
@@ -394,6 +468,13 @@ func (service *JobMatchChat) Revert(ctx context.Context, jobID, sequence int64) 
 		service.publish(jobID, JobMatchChatUpdate{Reset: true})
 		return nil
 	}
+}
+
+func (service *JobMatchChat) lockJob(jobID int64) func() {
+	value, _ := service.jobLocks.LoadOrStore(jobID, &sync.Mutex{})
+	lock := value.(*sync.Mutex)
+	lock.Lock()
+	return lock.Unlock
 }
 
 func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64) error {
@@ -452,7 +533,8 @@ func (service *JobMatchChat) ensureInitialItems(ctx context.Context, jobID int64
 	return nil
 }
 
-func (service *JobMatchChat) runTurn(ctx context.Context, jobID int64, requestID string, turn *jobMatchChatTurn) {
+func (service *JobMatchChat) runTurn(jobID int64, requestID string, turn *jobMatchChatTurn) {
+	ctx := turn.ctx
 	defer close(turn.done)
 	defer func() {
 		service.activeMu.Lock()
@@ -506,7 +588,7 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 		if err := ctx.Err(); err != nil {
 			service.recordTerminal(ctx, jobID, requestID, "turn_stopped", "turn stopped by cancellation")
 			service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
-			return nil
+			return nil //nolint:nilerr // cancellation is a successful terminal chat state.
 		}
 
 		request, err := providerRequest(history, service.reasoning, baseResume.Country)
@@ -523,7 +605,7 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 			if ctx.Err() != nil {
 				service.recordTerminal(ctx, jobID, requestID, "turn_stopped", "turn stopped by cancellation")
 				service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
-				return nil
+				return nil //nolint:nilerr // cancellation is a successful terminal chat state.
 			}
 
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("complete job match chat: %w", err))
@@ -550,12 +632,11 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 				return service.recordFailure(ctx, jobID, requestID, errors.New("provider returned no assistant message"))
 			}
 
-			assistant, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_message", RequestID: requestID, Payload: payload(map[string]string{"content": content})})
+			_, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_message", RequestID: requestID, Payload: payload(map[string]string{"content": content})})
 			if err != nil {
 				return fmt.Errorf("record assistant message: %w", err)
 			}
 
-			history = append(history, assistant)
 			service.recordTerminal(ctx, jobID, requestID, "turn_completed", "assistant reply completed")
 			return nil
 		}
@@ -720,85 +801,6 @@ func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, reque
 		history = append(history, result)
 		current = resumeRevisionPayload{Revision: current.Revision + 1, Resume: updated}
 	}
-}
-
-type resumeRevisionPayload struct {
-	Revision int           `json:"revision"`
-	Resume   models.Resume `json:"resume"`
-}
-
-type coverLetterRevisionPayload struct {
-	Revision int    `json:"revision"`
-	Content  string `json:"content"`
-}
-
-type coverLetterToolInput struct {
-	BaseRevision int    `json:"baseRevision"`
-	Content      string `json:"content"`
-}
-
-type jobMatchChatInitialContext struct {
-	Job     *models.BrowseJob      `json:"job"`
-	Match   *models.JobMatchRecord `json:"match"`
-	Profile *models.UserProfile    `json:"profile"`
-}
-
-type chatInitialContext struct {
-	Job     *models.BrowseJob      `json:"job"`
-	Match   *models.JobMatchRecord `json:"match"`
-	Profile *llmUserProfile        `json:"profile,omitempty"`
-}
-
-type chatResumeRevisionPayload struct {
-	Revision int        `json:"revision"`
-	Resume   chatResume `json:"resume"`
-}
-
-type chatResume struct {
-	Headline          string                 `json:"headline"`
-	Country           string                 `json:"country"`
-	SummaryParagraphs []models.ResumeText    `json:"summaryParagraphs"`
-	Skills            []models.ResumeSkill   `json:"skills"`
-	Experience        []chatResumeExperience `json:"experience"`
-	Education         []chatResumeEducation  `json:"education"`
-}
-
-type chatResumeExperience struct {
-	ID        int64               `json:"id"`
-	Company   string              `json:"company"`
-	Title     string              `json:"title"`
-	StartDate string              `json:"startDate"`
-	EndDate   string              `json:"endDate"`
-	IsCurrent bool                `json:"isCurrent"`
-	Stack     string              `json:"stack"`
-	Bullets   []models.ResumeText `json:"bullets"`
-}
-
-type chatResumeEducation struct {
-	ID           int64  `json:"id"`
-	Degree       string `json:"degree"`
-	FieldOfStudy string `json:"fieldOfStudy"`
-	StartDate    string `json:"startDate"`
-	EndDate      string `json:"endDate"`
-	Details      string `json:"details"`
-}
-
-type chatToolResultPayload struct {
-	ToolCallID  string                      `json:"toolCallId"`
-	Status      string                      `json:"status"`
-	Error       string                      `json:"error,omitempty"`
-	Revision    int                         `json:"revision,omitempty"`
-	Resume      *chatResume                 `json:"resume,omitempty"`
-	CoverLetter *coverLetterRevisionPayload `json:"coverLetter,omitempty"`
-}
-
-type toolResultPayload struct {
-	ToolCallID  string                      `json:"toolCallId"`
-	Status      string                      `json:"status"`
-	Error       string                      `json:"error,omitempty"`
-	Revision    int                         `json:"revision,omitempty"`
-	Resume      *models.Resume              `json:"resume,omitempty"`
-	CoverLetter *coverLetterRevisionPayload `json:"coverLetter,omitempty"`
 }
 
 func providerRequest(items []models.JobMatchChatItem, reasoning, country string) (openai.ChatRequest, error) {
@@ -1216,13 +1218,20 @@ func unansweredUserMessage(items []models.JobMatchChatItem) bool {
 	return last == "user_message"
 }
 
-func payload(value any) json.RawMessage { encoded, _ := json.Marshal(value); return encoded }
+func payload(value any) json.RawMessage {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+
+	return encoded
+}
 func rawJSON(value json.RawMessage) any {
 	if len(value) == 0 {
 		return nil
 	}
 
-	return json.RawMessage(value)
+	return value
 }
 
 func (service *JobMatchChat) append(ctx context.Context, item models.JobMatchChatItem) (models.JobMatchChatItem, error) {

@@ -13,7 +13,7 @@ import (
 
 const (
 	configFile    = "config.toml"
-	tokensEnvFile = ".env.tokens"
+	tokensEnvFile = ".env.tokens" // #nosec G101 -- this is the configured local credentials file name.
 )
 
 type Config struct {

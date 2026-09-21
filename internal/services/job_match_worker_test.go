@@ -17,6 +17,30 @@ import (
 	"nice/internal/repositories"
 )
 
+type recordingProfileJobMatcher struct {
+	calls      int
+	analyses   []models.JobAnalysisRecord
+	assessment models.JobMatchAssessment
+	retries    LLMRetryMetadata
+	err        error
+}
+
+type recordingJobAnalyzer struct {
+	calls    int
+	jobs     []models.Job
+	analysis JobAnalysis
+	err      error
+}
+
+type recordingJobProfileScorer struct {
+	score int
+	calls int
+}
+
+type jobMatchEventRecorder struct {
+	events []models.Event
+}
+
 func TestJobMatchWorkerCreatesOnlyOneMatchPerJob(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -283,14 +307,6 @@ func TestJobMatchRunInterval(t *testing.T) {
 	assert.False(t, cooldown)
 }
 
-type recordingProfileJobMatcher struct {
-	calls      int
-	analyses   []models.JobAnalysisRecord
-	assessment models.JobMatchAssessment
-	retries    LLMRetryMetadata
-	err        error
-}
-
 func (matcher *recordingProfileJobMatcher) Match(_ context.Context, _ models.BrowseJob, analysis models.JobAnalysisRecord, _ models.UserProfile) (ProfileJobMatch, error) {
 	matcher.calls++
 	matcher.analyses = append(matcher.analyses, analysis)
@@ -329,18 +345,6 @@ func TestJobMatchWorkerReusesCurrentJobAnalysis(t *testing.T) {
 	assert.Equal(t, []string{"job_match.started", "job_match.analysis.completed", "job_match.completed", "job_match.started", "job_match.analysis.reused", "job_match.completed"}, events.types())
 }
 
-type recordingJobAnalyzer struct {
-	calls    int
-	jobs     []models.Job
-	analysis JobAnalysis
-	err      error
-}
-
-type recordingJobProfileScorer struct {
-	score int
-	calls int
-}
-
 func (scorer *recordingJobProfileScorer) Score(context.Context, models.Job, models.UserProfile) (int, error) {
 	scorer.calls++
 	return scorer.score, nil
@@ -369,10 +373,6 @@ func testJobAnalysis() JobAnalysis {
 			Unknowns: []string{"The posting does not state requirements."},
 		},
 	}
-}
-
-type jobMatchEventRecorder struct {
-	events []models.Event
 }
 
 func (recorder *jobMatchEventRecorder) RecordEvent(_ context.Context, event models.Event) error {

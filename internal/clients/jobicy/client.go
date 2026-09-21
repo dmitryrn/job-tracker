@@ -119,7 +119,12 @@ func (c *Client) Fetch(ctx context.Context, settings models.JobicySearchSettings
 			continue
 		}
 
-		jobs = append(jobs, toModel(item))
+		model, err := toModel(item)
+		if err != nil {
+			return nil, fmt.Errorf("encode Jobicy job metadata: %w", err)
+		}
+
+		jobs = append(jobs, model)
 	}
 
 	return jobs, nil
@@ -183,8 +188,8 @@ func matchesIndustry(job job, industry string) bool {
 	return false
 }
 
-func toModel(job job) models.Job {
-	metadata, _ := json.Marshal(map[string]any{
+func toModel(job job) (models.Job, error) {
+	metadata, err := json.Marshal(map[string]any{
 		"company_logo_url": job.CompanyLogo,
 		"industry":         job.Industry,
 		"level":            job.Level,
@@ -192,6 +197,10 @@ func toModel(job job) models.Job {
 		"salary_currency":  job.SalaryCurrency,
 		"salary_period":    job.SalaryPeriod,
 	})
+	if err != nil {
+		return models.Job{}, err
+	}
+
 	return models.Job{
 		Source:         "jobicy",
 		SourceID:       strconv.FormatInt(job.ID, 10),
@@ -206,7 +215,7 @@ func toModel(job job) models.Job {
 		SalaryMax:      job.SalaryMax,
 		PostedAt:       parseTime(job.PublicationDate),
 		MetadataJSON:   string(metadata),
-	}
+	}, nil
 }
 
 func parseTime(value string) string {

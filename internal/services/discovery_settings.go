@@ -10,9 +10,9 @@ import (
 	"nice/internal/repositories"
 )
 
-var ErrInvalidDiscoverySettings = errors.New("invalid discovery settings")
-
 const maxLinkedInResults = 1000
+
+var ErrInvalidDiscoverySettings = errors.New("invalid discovery settings")
 
 type DiscoverySettingsService struct {
 	repository repositories.DiscoverySettingsRepository

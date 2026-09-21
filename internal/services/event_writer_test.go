@@ -15,10 +15,21 @@ import (
 	"nice/internal/repositories"
 )
 
+type eventBatchRecorder struct {
+	batches chan []models.Event
+}
+
+type blockingEventBatchRecorder struct {
+	eventBatchRecorder
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
 func TestEventWriterFlushesAtBatchSize(t *testing.T) {
 	repository := &eventBatchRecorder{batches: make(chan []models.Event, 1)}
 	writer := newTestEventWriter(repository, 10, 2, time.Hour)
-	writer.start()
+	writer.start(context.Background())
 	t.Cleanup(func() { require.NoError(t, writer.stop(context.Background())) })
 
 	require.NoError(t, writer.RecordEvent(context.Background(), models.Event{Type: "first"}))
@@ -32,7 +43,7 @@ func TestEventWriterFlushesAtBatchSize(t *testing.T) {
 func TestEventWriterFlushesAfterInterval(t *testing.T) {
 	repository := &eventBatchRecorder{batches: make(chan []models.Event, 1)}
 	writer := newTestEventWriter(repository, 10, 10, 10*time.Millisecond)
-	writer.start()
+	writer.start(context.Background())
 	t.Cleanup(func() { require.NoError(t, writer.stop(context.Background())) })
 
 	require.NoError(t, writer.RecordEvent(context.Background(), models.Event{Type: "scheduled"}))
@@ -45,7 +56,7 @@ func TestEventWriterFlushesAfterInterval(t *testing.T) {
 func TestEventWriterBlocksWhenQueueIsFull(t *testing.T) {
 	repository := &blockingEventBatchRecorder{started: make(chan struct{}), release: make(chan struct{})}
 	writer := newTestEventWriter(repository, 1, 1, time.Hour)
-	writer.start()
+	writer.start(context.Background())
 	t.Cleanup(func() { require.NoError(t, writer.stop(context.Background())) })
 
 	require.NoError(t, writer.RecordEvent(context.Background(), models.Event{Type: "first"}))
@@ -69,7 +80,7 @@ func TestEventWriterBlocksWhenQueueIsFull(t *testing.T) {
 func TestEventWriterFlushesQueuedEventsDuringShutdown(t *testing.T) {
 	repository := &eventBatchRecorder{batches: make(chan []models.Event, 1)}
 	writer := newTestEventWriter(repository, 10, 10, time.Hour)
-	writer.start()
+	writer.start(context.Background())
 
 	require.NoError(t, writer.RecordEvent(context.Background(), models.Event{Type: "pending"}))
 	require.NoError(t, writer.stop(context.Background()))
@@ -94,10 +105,6 @@ func receiveEventBatch(t *testing.T, batches <-chan []models.Event) []models.Eve
 	}
 }
 
-type eventBatchRecorder struct {
-	batches chan []models.Event
-}
-
 func (recorder *eventBatchRecorder) RecordEvent(context.Context, models.Event) error {
 	return nil
 }
@@ -112,14 +119,7 @@ func (*eventBatchRecorder) Events(context.Context, models.EventSearch) (models.E
 	return models.EventPage{}, nil
 }
 
-type blockingEventBatchRecorder struct {
-	eventBatchRecorder
-	started chan struct{}
-	release chan struct{}
-	once    sync.Once
-}
-
-func (recorder *blockingEventBatchRecorder) RecordEvents(ctx context.Context, events []models.Event) error {
+func (recorder *blockingEventBatchRecorder) RecordEvents(_ context.Context, _ []models.Event) error {
 	recorder.once.Do(func() {
 		close(recorder.started)
 		<-recorder.release

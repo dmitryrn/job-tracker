@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
 func TestCompleteOmitsProviderPreferencesForNonOpenRouterEndpoint(t *testing.T) {
 	const model = "test-model"
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -69,7 +71,7 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusTooManyRequests)
 		_, _ = writer.Write([]byte(`{"error":{"code":429,"message":"Daily free model quota exhausted"}}`))
@@ -83,7 +85,7 @@ func TestCompleteRejectsUnsuccessfulResponse(t *testing.T) {
 }
 
 func TestCompleteIdentifiesModelWhenCompletionHasNoContent(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"model":"provider/model","choices":[{"finish_reason":"length","message":{"content":null}}]}`))
 	}))
@@ -148,8 +150,6 @@ func TestIsOpenCodeURL(t *testing.T) {
 	assert.False(t, isOpenCodeURL("https://openrouter.ai/api/v1/chat/completions"))
 	assert.False(t, isOpenCodeURL("https://llm.example.com/v1/chat/completions"))
 }
-
-type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (roundTrip roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return roundTrip(request)

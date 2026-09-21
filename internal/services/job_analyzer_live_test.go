@@ -23,6 +23,11 @@ import (
 var updateJobResults = flag.Bool("update-job-results", false, "refresh job analyzer snapshots with OpenRouter")
 var jobAnalyzerModelList = flag.String("job-analyzer-models", "", "comma-separated LLM models for job analyzer snapshots")
 
+type fixedModelCompletionClient struct {
+	client JobCompletionClient
+	model  string
+}
+
 type jobFixtureResult struct {
 	Fixture        string      `json:"fixture"`
 	RequestedModel string      `json:"requestedModel"`
@@ -41,7 +46,7 @@ func TestAnalyzeJobFixtures(t *testing.T) {
 	require.NoError(t, err)
 	fixtures := jobFixtures(t, root)
 	resultsDirectory := filepath.Join(root, "jobs", "results")
-	require.NoError(t, os.MkdirAll(resultsDirectory, 0o755))
+	require.NoError(t, os.MkdirAll(resultsDirectory, 0o750))
 
 	for _, model := range configuredJobAnalyzerModels(t, configuration.JobAnalysis.Model) {
 		analyzer := NewJobAnalyzer(fixedModelCompletionClient{client: openai.NewClient(configuration.OpenCode.APIKey, configuration.OpenCode.BaseURL), model: model}, model, configuration.JobAnalysis.ReasoningEffort)
@@ -141,11 +146,6 @@ func configuredJobAnalyzerModels(t *testing.T, defaultModel string) []string {
 
 	require.NotEmpty(t, models)
 	return models
-}
-
-type fixedModelCompletionClient struct {
-	client JobCompletionClient
-	model  string
 }
 
 func (client fixedModelCompletionClient) Complete(ctx context.Context, _ string, session string, request openai.ChatRequest) (openai.ChatResponse, error) {

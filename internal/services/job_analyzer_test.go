@@ -14,6 +14,17 @@ import (
 	"nice/internal/models"
 )
 
+type fakeJobCompletionClient struct {
+	response  openai.ChatResponse
+	responses []openai.ChatResponse
+	err       error
+	model     string
+	session   string
+	request   openai.ChatRequest
+	sessions  []string
+	requests  []openai.ChatRequest
+}
+
 func TestJobAnalyzerReturnsVersionedEvidenceBackedAnalysis(t *testing.T) {
 	client := &fakeJobCompletionClient{response: openai.ChatResponse{
 		Model: "test-model",
@@ -204,17 +215,6 @@ func TestNormalizeJobDescriptionPreservesHeadingsAndListItems(t *testing.T) {
 	assert.Contains(t, normalized, "ABOUT THE TEAM\nThe AI Foundations Team")
 	assert.Contains(t, normalized, "WHAT YOU'LL DO\nBuild the core backend systems")
 	assert.NotContains(t, normalized, "<h3>")
-}
-
-type fakeJobCompletionClient struct {
-	response  openai.ChatResponse
-	responses []openai.ChatResponse
-	err       error
-	model     string
-	session   string
-	request   openai.ChatRequest
-	sessions  []string
-	requests  []openai.ChatRequest
 }
 
 func (client *fakeJobCompletionClient) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {

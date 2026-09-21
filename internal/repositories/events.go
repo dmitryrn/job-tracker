@@ -24,7 +24,8 @@ func (repository *SQLite) RecordEvents(ctx context.Context, events []models.Even
 	if err != nil {
 		return fmt.Errorf("begin event transaction: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	for _, event := range events {
 		data := event.Data
@@ -61,8 +62,8 @@ func (repository *SQLite) Events(ctx context.Context, search models.EventSearch)
 	query := sqlBuilder.Select("id", "occurred_at", "provider", "run_id", "type", "level", "message", "data_json").
 		From("app_events").
 		OrderBy("occurred_at DESC", "id DESC").
-		Limit(uint64(search.Limit)).
-		Offset(uint64(search.Offset))
+		Limit(paginationValue(search.Limit)).
+		Offset(paginationValue(search.Offset))
 	countQuery := sqlBuilder.Select("COUNT(*)").From("app_events")
 	if search.Provider != "" {
 		query = query.Where(squirrel.Eq{"provider": search.Provider})

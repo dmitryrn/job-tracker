@@ -22,6 +22,15 @@ type jobQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+type queryRower interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+type matchQueueQuerier interface {
+	queryRower
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
 func NewSQLite(db *sql.DB) *SQLite {
 	return &SQLite{db: db}
 }
@@ -109,7 +118,7 @@ func (repository *SQLite) JobBySourceID(ctx context.Context, source, sourceID st
 		&job.MetadataJSON,
 		&job.ProfileMatchScore,
 	); err == sql.ErrNoRows {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional job.
 	} else if err != nil {
 		return nil, fmt.Errorf("get source job: %w", err)
 	}
@@ -122,7 +131,8 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 	if err != nil {
 		return err
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, job := range jobs {
@@ -209,7 +219,8 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("begin custom job transaction: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	companyID, err := upsertCompany(ctx, transaction, job.Company, now)
@@ -304,7 +315,8 @@ func (repository *SQLite) StartProviderRun(ctx context.Context, provider string,
 	if err != nil {
 		return false, err
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	var lastRun string
 	err = transaction.QueryRowContext(ctx, `SELECT last_run_at FROM provider_runs WHERE provider = ?`, provider).Scan(&lastRun)
@@ -382,7 +394,7 @@ func (repository *SQLite) List(ctx context.Context, search models.JobSearch) (mo
 		countQuery = countQuery.Where(match)
 	}
 
-	statement, args, err := query.OrderBy("jobs.posted_at DESC", "jobs.id DESC").Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
+	statement, args, err := query.OrderBy("jobs.posted_at DESC", "jobs.id DESC").Limit(paginationValue(search.Limit)).Offset(paginationValue(search.Offset)).ToSql()
 	if err != nil {
 		return models.JobPage{}, fmt.Errorf("build jobs query: %w", err)
 	}
@@ -488,7 +500,7 @@ func (repository *SQLite) AnalysisJob(ctx context.Context, jobID int64) (*models
 		&job.ProfileMatchScore,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional job.
 	}
 
 	if err != nil {
@@ -533,7 +545,8 @@ func (repository *SQLite) Delete(ctx context.Context, id int64) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("begin delete job transaction: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	queue, err := readMatchQueue(ctx, transaction)
 	if err != nil {
@@ -569,7 +582,8 @@ func (repository *SQLite) Reject(ctx context.Context, id int64, reason string) (
 	if err != nil {
 		return false, fmt.Errorf("begin reject job transaction: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	if _, err := repository.job(ctx, transaction, id); errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -689,7 +703,7 @@ func (repository *SQLite) UserProfile(ctx context.Context) (*models.UserProfile,
 		&profile.ID, &profile.Headline, &profile.WorkAuthorization, &profile.GitHubURL, &profile.LinkedInURL, &profile.Summary, &skills, &workHistory, &education, &profile.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional job.
 	}
 
 	if err != nil {
@@ -775,7 +789,7 @@ func (repository *SQLite) JobAnalysis(ctx context.Context, jobID int64) (*models
 	).Scan(&analysis.JobID, &analysis.AnalyzerVersion, &analysis.PromptVersion, &analysis.InputSHA256,
 		&analysis.Model, &analysis.AnalyzedAt, &analysis.NormalizedDescription, &raw)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional job.
 	}
 
 	if err != nil {
@@ -836,7 +850,7 @@ func (repository *SQLite) JobMatch(ctx context.Context, jobID int64) (*models.Jo
 		SELECT job_id, content, created_at FROM job_matches WHERE job_id = ?`, jobID,
 	).Scan(&match.JobID, &match.Content, &match.CreatedAt)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional job.
 	}
 
 	if err != nil {
@@ -919,7 +933,7 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 		query = query.OrderBy("job_matches.created_at DESC", "job_matches.job_id DESC")
 	}
 
-	statement, arguments, err := query.Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
+	statement, arguments, err := query.Limit(paginationValue(search.Limit)).Offset(paginationValue(search.Offset)).ToSql()
 	if err != nil {
 		return models.JobMatchPage{}, fmt.Errorf("build job matches query: %w", err)
 	}
@@ -1010,7 +1024,8 @@ func (repository *SQLite) QueueJobMatch(ctx context.Context, jobID int64, redo b
 	if err != nil {
 		return false, fmt.Errorf("begin queue match request: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	if _, err := repository.job(ctx, transaction, jobID); errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -1046,7 +1061,8 @@ func (repository *SQLite) QueueJobsWithoutMatches(ctx context.Context, jobIDs []
 	if err != nil {
 		return 0, fmt.Errorf("begin queue unmatched job matches: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	queue, err := readMatchQueue(ctx, transaction)
 	if err != nil {
@@ -1109,7 +1125,8 @@ func (repository *SQLite) ReplaceMatchQueue(ctx context.Context, jobIDs []int64)
 	if err != nil {
 		return false, fmt.Errorf("begin replace match queue: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 	for _, jobID := range jobIDs {
 		if _, err := repository.job(ctx, transaction, jobID); errors.Is(err, sql.ErrNoRows) {
 			return false, nil
@@ -1134,7 +1151,8 @@ func (repository *SQLite) RemoveMatchRequest(ctx context.Context, jobID int64) e
 	if err != nil {
 		return fmt.Errorf("begin remove match request: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 	queue, err := readMatchQueue(ctx, transaction)
 	if err != nil {
 		return err
@@ -1159,7 +1177,8 @@ func (repository *SQLite) CompleteMatchRequest(ctx context.Context, jobID int64,
 	if err != nil {
 		return fmt.Errorf("begin complete match request: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 	queue, err := readMatchQueue(ctx, transaction)
 	if err != nil {
 		return err
@@ -1187,15 +1206,6 @@ func (repository *SQLite) CompleteMatchRequest(ctx context.Context, jobID int64,
 	}
 
 	return nil
-}
-
-type queryRower interface {
-	QueryRowContext(context.Context, string, ...any) *sql.Row
-}
-
-type matchQueueQuerier interface {
-	queryRower
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
 func (repository *SQLite) job(ctx context.Context, query queryRower, jobID int64) (*models.BrowseJob, error) {
@@ -1312,7 +1322,7 @@ func removeAllMatchRequests(queue []int64, jobID int64) ([]int64, bool) {
 func upsertCompany(ctx context.Context, transaction *sql.Tx, name, now string) (any, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional job.
 	}
 
 	normalized := strings.Join(strings.Fields(strings.ToLower(name)), " ")

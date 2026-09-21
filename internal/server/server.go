@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -23,6 +24,27 @@ import (
 	"nice/internal/repositories"
 	"nice/internal/services"
 )
+
+type resumePDFGenerator interface {
+	Generate(context.Context) ([]byte, error)
+}
+
+type applicationResumePDFGenerator interface {
+	GenerateResume(context.Context, models.Resume) ([]byte, error)
+}
+
+type applicationResumeProvider interface {
+	LatestResume(context.Context, int64) (*models.Resume, error)
+}
+
+type applicationCoverLetterProvider interface {
+	LatestCoverLetter(context.Context, int64) (string, error)
+}
+
+type discoveryPreviewer interface {
+	Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error)
+	StreamPreview(context.Context, string, models.DiscoverySettings, func(models.Job) error) error
+}
 
 type Server struct {
 	http              *http.Server
@@ -82,31 +104,17 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 
 	return &Server{
 		http: &http.Server{
-			Addr:    cfg.HTTPAddress,
-			Handler: cors(mux),
+			Addr:              cfg.HTTPAddress,
+			Handler:           cors(mux),
+			ReadHeaderTimeout: 10 * time.Second,
 		},
 		logger: logger,
 		metrics: &http.Server{
-			Handler: metrics.Handler(),
+			Handler:           metrics.Handler(),
+			ReadHeaderTimeout: 10 * time.Second,
 		},
 		metricsSocketPath: cfg.MetricsSocketPath,
 	}
-}
-
-type resumePDFGenerator interface {
-	Generate(context.Context) ([]byte, error)
-}
-
-type applicationResumePDFGenerator interface {
-	GenerateResume(context.Context, models.Resume) ([]byte, error)
-}
-
-type applicationResumeProvider interface {
-	LatestResume(context.Context, int64) (*models.Resume, error)
-}
-
-type applicationCoverLetterProvider interface {
-	LatestCoverLetter(context.Context, int64) (string, error)
 }
 
 func resumePDFHandler(pdf resumePDFGenerator, logger *zap.Logger) http.HandlerFunc {
@@ -334,11 +342,6 @@ func paginationQueryInt(request *http.Request, name string, fallback int) (int, 
 	}
 
 	return parsed, nil
-}
-
-type discoveryPreviewer interface {
-	Preview(context.Context, string, models.DiscoverySettings) ([]models.Job, error)
-	StreamPreview(context.Context, string, models.DiscoverySettings, func(models.Job) error) error
 }
 
 func discoveryPreviewHandler(previews discoveryPreviewer, logger *zap.Logger) http.HandlerFunc {
@@ -938,7 +941,7 @@ func jobMatchesHandler(matches *services.JobMatches, logger *zap.Logger) http.Ha
 func minimumMatchScore(request *http.Request) (*int, error) {
 	value := strings.TrimSpace(request.URL.Query().Get("minimumScore"))
 	if value == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional application document.
 	}
 
 	score, err := strconv.Atoi(value)
@@ -1018,32 +1021,30 @@ func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 		writer.Header().Set("Content-Type", "text/event-stream")
 		updates, unsubscribe := chat.Subscribe(id)
 		defer unsubscribe()
-		writeChatItems := func() bool {
-			items, err := chat.Items(request.Context(), id, after)
+		writeChatItems := func(ctx context.Context) error {
+			items, err := chat.Items(ctx, id, after)
 			if err != nil {
-				logger.Error("load match chat SSE items failed", zap.Int64("id", id), zap.Error(err))
-				return false
+				return fmt.Errorf("load match chat SSE items: %w", err)
 			}
 
 			for _, item := range items {
 				data, err := json.Marshal(item)
 				if err != nil {
-					logger.Error("encode match chat SSE item failed", zap.Int64("id", id), zap.Error(err))
-					return false
+					return fmt.Errorf("encode match chat SSE item: %w", err)
 				}
 
 				if _, err := writer.Write([]byte("event: item\ndata: " + string(data) + "\n\n")); err != nil {
-					logger.Error("write match chat SSE item failed", zap.Int64("id", id), zap.Error(err))
-					return false
+					return fmt.Errorf("write match chat SSE item: %w", err)
 				}
 
 				after = item.Sequence
 			}
 
 			flusher.Flush()
-			return true
+			return nil
 		}
-		if !writeChatItems() {
+		if err := writeChatItems(request.Context()); err != nil {
+			logger.Error("write match chat SSE items failed", zap.Int64("id", id), zap.Error(err))
 			return
 		}
 
@@ -1062,7 +1063,8 @@ func jobMatchChatEventsHandler(chat *services.JobMatchChat, logger *zap.Logger) 
 					continue
 				}
 
-				if !writeChatItems() {
+				if err := writeChatItems(request.Context()); err != nil {
+					logger.Error("write match chat SSE items failed", zap.Int64("id", id), zap.Error(err))
 					return
 				}
 			}
@@ -1343,7 +1345,9 @@ func optionsHandler(writer http.ResponseWriter, _ *http.Request) {
 func writeJSON(writer http.ResponseWriter, status int, value any) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(value)
+	if err := json.NewEncoder(writer).Encode(value); err != nil {
+		return
+	}
 }
 
 func writeError(writer http.ResponseWriter, status int, message string) {
@@ -1419,8 +1423,8 @@ func listenMetrics(path string) (net.Listener, error) {
 		return nil, fmt.Errorf("listen on metrics socket: %w", err)
 	}
 
-	if err := os.Chmod(path, 0o660); err != nil {
-		listener.Close()
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = listener.Close()
 		return nil, fmt.Errorf("set metrics socket permissions: %w", err)
 	}
 

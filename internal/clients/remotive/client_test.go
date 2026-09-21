@@ -34,7 +34,7 @@ func TestFetchMapsFullDescription(t *testing.T) {
 }
 
 func TestFetchFiltersOtherCategories(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"jobs":[{"id":1,"category":"Software Development"},{"id":2,"category":"Marketing"}]}`))
 	}))

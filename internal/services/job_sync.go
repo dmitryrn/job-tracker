@@ -52,6 +52,10 @@ type linkedInSyncer interface {
 	Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error)
 }
 
+type ipInfoLookup interface {
+	Lookup(context.Context) (ipinfo.Info, error)
+}
+
 func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, ipInfoClient *ipinfo.Client, jobicyClient *jobicy.Client, linkedInJobs *LinkedInJobs, remotiveClient *remotive.Client, jobs repositories.JobRepository, providerRuns repositories.ProviderRunRepository, events repositories.EventRecorder, settings repositories.DiscoverySettingsRepository, metrics *LinkedInMetrics, logger *zap.Logger) *JobSync {
 	return &JobSync{
 		adzuna:                  adzunaClient,
@@ -75,10 +79,10 @@ func NewJobSync(cfg config.Config, adzunaClient *adzuna.Client, ipInfoClient *ip
 
 func (syncer *JobSync) Register(lifecycle fx.Lifecycle) {
 	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
+		OnStart: func(startContext context.Context) error {
 			syncer.mutex.Lock()
 			defer syncer.mutex.Unlock()
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(context.WithoutCancel(startContext))
 			syncer.cancel = cancel
 			syncer.done = make(chan struct{})
 			syncer.trigger = make(chan string, 1)
@@ -282,10 +286,6 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 
 	syncer.logger.Info("stored LinkedIn jobs", zap.String("run_id", runID), zap.Int("count", fetch.SavedJobs))
 	syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, nil)
-}
-
-type ipInfoLookup interface {
-	Lookup(context.Context) (ipinfo.Info, error)
 }
 
 func (syncer *JobSync) allowLinkedInSync(ctx context.Context, runID string) bool {

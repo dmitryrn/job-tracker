@@ -18,7 +18,7 @@ func (repository *SQLite) Resume(ctx context.Context) (*models.Resume, error) {
 		FROM resumes WHERE base_resume = 1`,
 	).Scan(&resume.ID, &resume.FullName, &resume.Headline, &resume.Town, &resume.Country, &resume.Email, &resume.Phone, &resume.HasPhoto, &resume.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an absent optional resume.
 	}
 
 	if err != nil {
@@ -90,7 +90,8 @@ func (repository *SQLite) SaveResume(ctx context.Context, resume models.Resume) 
 	if err != nil {
 		return models.Resume{}, fmt.Errorf("begin save base resume transaction: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	resume.ID = 1
 	resume.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -430,7 +431,7 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 	for rows.Next() {
 		var row experienceRow
 		if err := rows.Scan(&row.id, &row.entry.Company, &row.entry.Title, &row.entry.Location, &row.entry.StartDate, &row.entry.EndDate, &row.entry.IsCurrent, &row.entry.Stack); err != nil {
-			rows.Close()
+			closeRows(rows)
 			return nil, fmt.Errorf("scan base resume experience: %w", err)
 		}
 
@@ -438,11 +439,11 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 	}
 
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		closeRows(rows)
 		return nil, fmt.Errorf("iterate base resume experience: %w", err)
 	}
 
-	rows.Close()
+	closeRows(rows)
 
 	experience := make([]models.ResumeExperience, 0, len(stored))
 	for _, row := range stored {
@@ -457,7 +458,7 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 		for bulletRows.Next() {
 			var bullet models.ResumeText
 			if err := bulletRows.Scan(&bullet.ID, &bullet.Content); err != nil {
-				bulletRows.Close()
+				closeRows(bulletRows)
 				return nil, fmt.Errorf("scan base resume experience bullet: %w", err)
 			}
 
@@ -465,15 +466,20 @@ func readResumeExperience(ctx context.Context, database *sql.DB, resumeID int64)
 		}
 
 		if err := bulletRows.Err(); err != nil {
-			bulletRows.Close()
+			closeRows(bulletRows)
 			return nil, fmt.Errorf("iterate base resume experience bullets: %w", err)
 		}
 
-		bulletRows.Close()
+		closeRows(bulletRows)
+
 		experience = append(experience, entry)
 	}
 
 	return experience, nil
+}
+
+func closeRows(rows *sql.Rows) {
+	defer func() { _ = rows.Close() }()
 }
 
 func readResumeEducation(ctx context.Context, database *sql.DB, resumeID int64) ([]models.ResumeEducation, error) {

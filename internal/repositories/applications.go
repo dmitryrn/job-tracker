@@ -16,7 +16,8 @@ func (repository *SQLite) CreateApplication(ctx context.Context, jobID int64) (*
 	if err != nil {
 		return nil, fmt.Errorf("begin create application transaction: %w", err)
 	}
-	defer transaction.Rollback()
+
+	defer func() { _ = transaction.Rollback() }()
 
 	jobStatement, jobArguments, err := sqlBuilder.Select("id").From("jobs").Where(squirrel.Eq{"id": jobID}).ToSql()
 	if err != nil {
@@ -87,7 +88,7 @@ func application(ctx context.Context, query queryRower, jobID int64) (*models.Ap
 
 	var result models.Application
 	if err := query.QueryRowContext(ctx, statement, arguments...).Scan(&result.JobID, &result.AppliedAt); err == sql.ErrNoRows {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil represents an application that has not been created.
 	} else if err != nil {
 		return nil, fmt.Errorf("get application: %w", err)
 	}
@@ -116,7 +117,7 @@ func (repository *SQLite) Applications(ctx context.Context, search models.Applic
 		"applications.applied_at",
 	}
 	query := sqlBuilder.Select(columns...).From("applications").Join("jobs ON jobs.id = applications.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
-	statement, arguments, err := query.OrderBy("applications.applied_at DESC", "applications.job_id DESC").Limit(uint64(search.Limit)).Offset(uint64(search.Offset)).ToSql()
+	statement, arguments, err := query.OrderBy("applications.applied_at DESC", "applications.job_id DESC").Limit(paginationValue(search.Limit)).Offset(paginationValue(search.Offset)).ToSql()
 	if err != nil {
 		return models.ApplicationPage{}, fmt.Errorf("build applications query: %w", err)
 	}

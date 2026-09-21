@@ -11,6 +11,17 @@ import (
 	"nice/internal/models"
 )
 
+type adzunaPreviewStub struct {
+	jobs     []models.Job
+	settings models.AdzunaSearchSettings
+}
+
+type linkedInPreviewStub struct {
+	jobs            []models.Job
+	settings        models.LinkedInSearchSettings
+	requestInterval time.Duration
+}
+
 func TestProviderPreviewUsesSelectedProviderSettings(t *testing.T) {
 	adzuna := &adzunaPreviewStub{jobs: []models.Job{{Title: "Platform engineer"}}}
 	service := ProviderPreviewService{adzuna: adzuna}
@@ -71,20 +82,9 @@ func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 	assert.Equal(t, 5*time.Second, linkedIn.requestInterval)
 }
 
-type adzunaPreviewStub struct {
-	jobs     []models.Job
-	settings models.AdzunaSearchSettings
-}
-
 func (stub *adzunaPreviewStub) Fetch(_ context.Context, settings models.AdzunaSearchSettings) ([]models.Job, error) {
 	stub.settings = settings
 	return stub.jobs, nil
-}
-
-type linkedInPreviewStub struct {
-	jobs            []models.Job
-	settings        models.LinkedInSearchSettings
-	requestInterval time.Duration
 }
 
 func (stub *linkedInPreviewStub) Preview(_ context.Context, settings models.LinkedInSearchSettings, requestInterval time.Duration) (LinkedInFetchResult, error) {

@@ -47,8 +47,8 @@ func NewEventRecorder(writer *EventWriter) repositories.EventRecorder {
 
 func (writer *EventWriter) Register(lifecycle fx.Lifecycle) {
 	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			writer.start()
+		OnStart: func(ctx context.Context) error {
+			writer.start(ctx)
 			return nil
 		},
 		OnStop: writer.stop,
@@ -67,14 +67,14 @@ func (writer *EventWriter) RecordEvent(_ context.Context, event models.Event) er
 	return nil
 }
 
-func (writer *EventWriter) start() {
+func (writer *EventWriter) start(startContext context.Context) {
 	writer.mutex.Lock()
 	defer writer.mutex.Unlock()
 	if writer.running {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.WithoutCancel(startContext))
 	writer.cancel = cancel
 	writer.done = make(chan struct{})
 	writer.running = true
@@ -114,19 +114,20 @@ func (writer *EventWriter) run(ctx context.Context) {
 
 	defer timer.Stop()
 
-	flush := func() {
+	flush := func(flushContext context.Context) {
 		if len(batch) == 0 {
 			return
 		}
 
 		for {
-			if err := writer.repository.RecordEvents(context.Background(), batch); err == nil {
+			err := writer.repository.RecordEvents(flushContext, batch)
+			if err == nil {
 				writer.logger.Info("event batch recorded", zap.Int("count", len(batch)))
 				batch = batch[:0]
 				return
-			} else {
-				writer.logger.Error("record event batch failed", zap.Int("count", len(batch)), zap.Error(err))
 			}
+
+			writer.logger.Error("record event batch failed", zap.Int("count", len(batch)), zap.Error(err))
 
 			time.Sleep(eventWriteRetryInterval)
 		}
@@ -153,17 +154,17 @@ func (writer *EventWriter) run(ctx context.Context) {
 					}
 				}
 
-				flush()
+				flush(context.WithoutCancel(ctx))
 			}
 		case <-timerChannel:
-			flush()
+			flush(context.WithoutCancel(ctx))
 		case <-ctx.Done():
 			for {
 				select {
 				case event := <-writer.queue:
 					batch = append(batch, event)
 				default:
-					flush()
+					flush(context.WithoutCancel(ctx))
 					writer.logger.Info("event writer stopped")
 					return
 				}
