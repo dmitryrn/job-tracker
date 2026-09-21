@@ -654,7 +654,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
                 <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")}>{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</button>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")}>{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</button>
-                  <JobRejectionAction jobID={job.id} className="reject-action" onOpen={() => setActionsOpen(false)} onRejected={onDeleted} onError={setError}>Won't apply</JobRejectionAction>
+                  <JobRejectionAction jobID={job.id} className="reject-action" onClose={() => setActionsOpen(false)} onRejected={onDeleted} onError={setError}>Won't apply</JobRejectionAction>
                <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
              </div>
           </details>

@@ -9,10 +9,11 @@ type JobRejectionActionProps = {
   title?: string;
   onRejected: () => void;
   onOpen?: () => void;
+  onClose?: () => void;
   onError?: (message: string) => void;
 };
 
-export default function JobRejectionAction({ jobID, children, className, ariaLabel, title, onRejected, onOpen, onError }: JobRejectionActionProps) {
+export default function JobRejectionAction({ jobID, children, className, ariaLabel, title, onRejected, onOpen, onClose, onError }: JobRejectionActionProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
@@ -54,7 +55,7 @@ export default function JobRejectionAction({ jobID, children, className, ariaLab
       <button type="button" className={className} aria-label={ariaLabel} title={title} onClick={openRejection}>
         {children}
       </button>
-      <dialog className="job-rejection-dialog" ref={dialogRef} onClose={() => setOpen(false)}>
+      <dialog className="job-rejection-dialog" ref={dialogRef} onClose={() => { setOpen(false); onClose?.(); }}>
         <form onSubmit={(event) => void submitRejection(event)}>
           <header>
             <p className="eyebrow">Won't apply</p>
