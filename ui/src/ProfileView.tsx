@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { fetchProfile, saveProfile, type UserProfile } from "./api";
+import { copyText } from "./clipboard";
 
 const emptyProfile: UserProfile = {
   id: 1,
@@ -57,7 +58,7 @@ export default function ProfileView() {
       return;
     }
     try {
-      await navigator.clipboard.writeText(value);
+      await copyText(value);
       setCopiedField(field);
       window.setTimeout(() => setCopiedField(""), 1500);
       setError("");

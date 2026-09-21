@@ -1,9 +1,10 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
+import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
 import { formatRelativeTime } from "./BrowseView";
+import { copyText } from "./clipboard";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
 type JobDetailViewProps = {
@@ -13,6 +14,8 @@ type JobDetailViewProps = {
   onBack: () => void;
   onDeleted: () => void;
 };
+
+type ProfileURLField = "githubURL" | "linkedinURL";
 
 function plainText(value: string) {
   if (!/<[a-z][\s\S]*>/i.test(value)) {
@@ -422,6 +425,8 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [queued, setQueued] = useState(false);
   const [applicationUpdating, setApplicationUpdating] = useState(false);
   const [eligibilityRunning, setEligibilityRunning] = useState(false);
+  const [profileLinks, setProfileLinks] = useState<Record<ProfileURLField, string>>({ githubURL: "", linkedinURL: "" });
+  const [copiedProfileLink, setCopiedProfileLink] = useState<ProfileURLField | "">("");
   const actionsMenuRef = useRef<HTMLDetailsElement>(null);
   const rejectionDialogRef = useRef<HTMLDialogElement>(null);
   const postedAt = formatTimestamp(job.postedAt);
@@ -452,6 +457,27 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     void loadMatch();
     return () => controller.abort();
   }, [job.id]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadProfileLinks() {
+      try {
+        const result = await fetchProfile(controller.signal);
+        if (!controller.signal.aborted) {
+          setProfileLinks({
+            githubURL: result.profile?.githubURL ?? "",
+            linkedinURL: result.profile?.linkedinURL ?? "",
+          });
+        }
+      } catch (reason) {
+        if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+          setError(reason instanceof Error ? reason.message : "Could not load profile links");
+        }
+      }
+    }
+    void loadProfileLinks();
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!actionsOpen) return;
@@ -528,6 +554,19 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     }
   }
 
+  async function copyProfileLink(field: ProfileURLField) {
+    const value = profileLinks[field].trim();
+    if (!value) return;
+    try {
+      await copyText(value);
+      setCopiedProfileLink(field);
+      window.setTimeout(() => setCopiedProfileLink(""), 1500);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not copy profile link");
+    }
+  }
+
   async function toggleApplication() {
     if (application === undefined || applicationUpdating) return;
     setApplicationUpdating(true);
@@ -563,9 +602,11 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
            </div>
            <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
             <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
-            <div className="job-overflow-menu">
-              <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
-              <button type="button" className="reject-action" onClick={() => { setActionsOpen(false); setRejectionReason(""); setRejectionOpen(true); }}>Won't apply</button>
+             <div className="job-overflow-menu">
+               <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
+               <button type="button" className="copy-profile-link" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")}>{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</button>
+               <button type="button" className="copy-profile-link" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")}>{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</button>
+               <button type="button" className="reject-action" onClick={() => { setActionsOpen(false); setRejectionReason(""); setRejectionOpen(true); }}>Won't apply</button>
               <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
             </div>
           </details>
