@@ -39,7 +39,7 @@ describe("shouldCollapseEligibilityAnswer", () => {
     noul: 0.1,
     positive: false,
     collapseWhen: {
-      operator: "or",
+      operator: "and",
       conditions: [
         { questionId: "eu-rights", value: false },
         { questionId: "residence", value: false },
@@ -47,10 +47,16 @@ describe("shouldCollapseEligibilityAnswer", () => {
     },
   };
 
-  it("collapses when either dependency has a decisive no", () => {
-    const answers = [dependency("eu-rights", "yes", 0.9), dependency("residence", "no", 0.1), sponsorship];
+  it("collapses when both dependencies have a decisive no", () => {
+    const answers = [dependency("eu-rights", "no", 0.1), dependency("residence", "no", 0.1), sponsorship];
 
     expect(shouldCollapseEligibilityAnswer(sponsorship, answers)).toBe(true);
+  });
+
+  it("does not collapse when only one dependency has a decisive no", () => {
+    const answers = [dependency("eu-rights", "yes", 0.9), dependency("residence", "no", 0.1), sponsorship];
+
+    expect(shouldCollapseEligibilityAnswer(sponsorship, answers)).toBe(false);
   });
 
   it("does not treat an indecisive dependency as no", () => {

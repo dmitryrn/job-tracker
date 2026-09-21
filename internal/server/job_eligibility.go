@@ -87,7 +87,7 @@ var jobEligibilityQuestions = []jobEligibilityQuestion{
 			"false": "The job does not offer visa or work-permit sponsorship, or no such sponsorship is stated.",
 		},
 		CollapseWhen: &jobEligibilityConditionGroup{
-			Operator: OperatorOr,
+			Operator: OperatorAnd,
 			Conditions: []jobEligibilityCondition{
 				{QuestionID: "european_union_job_rights", Value: false},
 				{QuestionID: "specific_country_residence", Value: false},

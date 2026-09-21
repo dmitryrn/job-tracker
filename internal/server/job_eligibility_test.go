@@ -63,7 +63,7 @@ func TestVisaSponsorshipReturnsBackendDisplayRule(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, &jobEligibilityConditionGroup{
-		Operator: OperatorOr,
+		Operator: OperatorAnd,
 		Conditions: []jobEligibilityCondition{
 			{QuestionID: "european_union_job_rights", Value: false},
 			{QuestionID: "specific_country_residence", Value: false},

@@ -580,9 +580,22 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 	assessmentScore := "CASE WHEN json_valid(job_matches.content) AND json_type(job_matches.content, '$.score') IN ('integer', 'real') THEN CAST(json_extract(job_matches.content, '$.score') AS INTEGER) END"
 	score := "COALESCE(" + assessmentScore + ", 0)"
 	query := sqlBuilder.Select(
-		"jobs.id", "jobs.source", "jobs.source_url", "jobs.title", "COALESCE(companies.name, '')",
-		"COALESCE(jobs.location, '')", "jobs.workplace", "COALESCE(jobs.employment_type, '')",
-		"jobs.salary_min", "jobs.salary_max", "COALESCE(jobs.posted_at, '')", "jobs.body_text", "COALESCE(jobs.last_viewed_at, '')", "job_matches.created_at", "job_matches.content",
+		"jobs.id",
+		"jobs.source",
+		"jobs.source_url",
+		"jobs.title",
+		"COALESCE(companies.name, '')",
+		"COALESCE(jobs.location, '')",
+		"jobs.workplace",
+		"COALESCE(jobs.employment_type, '')",
+		"jobs.salary_min",
+		"jobs.salary_max",
+		"COALESCE(jobs.posted_at, '')",
+		"jobs.body_text",
+		"COALESCE(jobs.last_viewed_at, '')",
+		"jobs.profile_match_score",
+		"job_matches.created_at",
+		"job_matches.content",
 	).From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	countQuery := sqlBuilder.Select("COUNT(*)").From("job_matches").Join("jobs ON jobs.id = job_matches.job_id").LeftJoin("companies ON companies.id = jobs.company_id")
 	rejected := squirrel.Expr("NOT EXISTS (SELECT 1 FROM job_rejections WHERE job_rejections.job_id = jobs.id)")
@@ -625,9 +638,24 @@ func (repository *SQLite) JobMatches(ctx context.Context, search models.JobMatch
 	for rows.Next() {
 		var match models.JobMatchSummary
 		var content string
-		if err := rows.Scan(&match.Job.ID, &match.Job.Source, &match.Job.SourceURL, &match.Job.Title, &match.Job.Company,
-			&match.Job.Location, &match.Job.Workplace, &match.Job.EmploymentType, &match.Job.SalaryMin, &match.Job.SalaryMax,
-			&match.Job.PostedAt, &match.Job.BodyText, &match.Job.LastViewedAt, &match.CreatedAt, &content); err != nil {
+		if err := rows.Scan(
+			&match.Job.ID,
+			&match.Job.Source,
+			&match.Job.SourceURL,
+			&match.Job.Title,
+			&match.Job.Company,
+			&match.Job.Location,
+			&match.Job.Workplace,
+			&match.Job.EmploymentType,
+			&match.Job.SalaryMin,
+			&match.Job.SalaryMax,
+			&match.Job.PostedAt,
+			&match.Job.BodyText,
+			&match.Job.LastViewedAt,
+			&match.Job.ProfileMatchScore,
+			&match.CreatedAt,
+			&content,
+		); err != nil {
 			return models.JobMatchPage{}, fmt.Errorf("scan job match: %w", err)
 		}
 		var assessment models.JobMatchAssessment

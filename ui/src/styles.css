@@ -410,6 +410,7 @@ button { cursor: pointer; }
 .match-job .match-posted { color: #8996a5; font-size: 11px; }
 .match-job .match-viewed { color: #a26d20; font-size: 11px; }
 .match-topline { align-items: center; display: flex; gap: 9px; justify-content: space-between; }
+.match-topline-labels { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .match-job .match-created { color: #a26d20; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .match-label { background: hsl(calc(var(--match-score) * 1.2) 90% 72%); border-radius: 999px; color: hsl(calc(var(--match-score) * 1.2) 75% 20%); font-size: 11px; font-weight: 700; padding: 4px 7px; }
 .match-label.unlabeled { background: #e9edf0; color: #4b6075; }
@@ -495,4 +496,9 @@ tr:hover td { background: #fffbed; }
   .match-chat-message.user { padding: 10px 12px; }
   .value-dialog-header { padding: 15px 16px; }
   .value-dialog pre { font-size: 13px; padding: 16px; }
+}
+
+@media (min-width: 701px) {
+  .chat-job-page .match-chat { margin-left: auto; margin-right: auto; max-width: 960px; }
+  .chat-job-page .match-chat-compose { left: 50%; right: auto; transform: translateX(-50%); width: min(960px, calc(100vw - var(--workspace-inline-padding) - var(--workspace-inline-padding))); }
 }

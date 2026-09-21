@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { fetchJobMatches, type BrowseJob, type JobMatchSummary } from "./api";
 import { formatDate, formatRelativeTime } from "./BrowseView";
+import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
 type JobMatchesViewProps = {
   onOpenMatch: (job: BrowseJob) => void;
@@ -190,10 +191,40 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
             const lastViewed = formatRelativeTime(match.job.lastViewedAt);
             return (
               <li key={match.job.id}>
-                <button type="button" className="match-job" onClick={() => onOpenMatch(match.job)}>
-                  <span className="match-topline"><span className="match-created">{formatMatchDate(match.createdAt)}</span><span className={match.label ? "match-label" : "match-label unlabeled"} style={{ "--match-score": match.score } as CSSProperties}>{match.label || "Unlabeled"}</span></span>
+                <button
+                  type="button"
+                  className="match-job"
+                  onClick={() => onOpenMatch(match.job)}
+                >
+                  <span className="match-topline">
+                    <span className="match-created">{formatMatchDate(match.createdAt)}</span>
+                    <span className="match-topline-labels">
+                      <span
+                        className={match.label ? "match-label" : "match-label unlabeled"}
+                        style={{ "--match-score": match.score } as CSSProperties}
+                      >
+                        {match.label || "Unlabeled"}
+                      </span>
+                      <span
+                        className={profileScoreClassName(match.job.profileMatchScore)}
+                        style={profileScoreStyle(match.job.profileMatchScore)}
+                      >
+                        Profile fit {profileScoreLabel(match.job.profileMatchScore)}
+                      </span>
+                    </span>
+                  </span>
                   <strong>{match.job.title}</strong>
-                   <span className="match-job-meta"><span>{match.job.company || "Company not listed"}</span>{postedDate && <span className="match-posted">{postedDate}</span>}{lastViewed ? <time className="match-viewed" dateTime={match.job.lastViewedAt} title={match.job.lastViewedAt}>Last seen {lastViewed}</time> : <span className="match-viewed not-seen">Not seen</span>}</span>
+                  <span className="match-job-meta">
+                    <span>{match.job.company || "Company not listed"}</span>
+                    {postedDate && <span className="match-posted">{postedDate}</span>}
+                    {lastViewed ? (
+                      <time className="match-viewed" dateTime={match.job.lastViewedAt} title={match.job.lastViewedAt}>
+                        Last seen {lastViewed}
+                      </time>
+                    ) : (
+                      <span className="match-viewed not-seen">Not seen</span>
+                    )}
+                  </span>
                 </button>
               </li>
             );

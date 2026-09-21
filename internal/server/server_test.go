@@ -496,6 +496,7 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, "Acme", profileResponse.Profile.WorkHistory[0].Company)
 	require.Len(t, profileResponse.Profile.Education, 1)
 	assert.Equal(t, "University", profileResponse.Profile.Education[0].Institution)
+	require.NoError(t, repository.SaveJobProfileMatchScore(context.Background(), 1, 3))
 
 	require.NoError(t, repository.CreateJobMatch(context.Background(), 1, "No-op match"))
 	require.NoError(t, repository.SaveJobAnalysis(context.Background(), models.JobAnalysisRecord{
@@ -546,6 +547,8 @@ func TestProfileAndJobMatchAPI(t *testing.T) {
 	assert.Equal(t, "2026-08-28T12:00:00Z", matchesResponse.Matches[0].CreatedAt)
 	assert.Equal(t, "Strong match", matchesResponse.Matches[1].Label)
 	assert.Equal(t, 91, matchesResponse.Matches[1].Score)
+	require.NotNil(t, matchesResponse.Matches[1].Job.ProfileMatchScore)
+	assert.Equal(t, 3, *matchesResponse.Matches[1].Job.ProfileMatchScore)
 	assert.Equal(t, 2, matchesResponse.Total)
 
 	response = request(handler, http.MethodGet, "/api/matches?viewed=seen")
