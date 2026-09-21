@@ -171,6 +171,7 @@ export type JobEligibilityCheck = {
   checkedAt: string;
   europeanUnionJobRights: JobEligibilityAnswer;
   specificCountryResidence: JobEligibilityAnswer;
+  visaSponsorship: JobEligibilityAnswer;
 };
 
 export type JobMatchChatItem = {

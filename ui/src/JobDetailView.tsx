@@ -131,8 +131,10 @@ function JobEligibilityPanel({ check, running, onRun }: { check: JobEligibilityC
   const questions = check ? [
     ["Does this job require European Union job rights?", check.europeanUnionJobRights],
     ["Does this job require to reside in a specific country?", check.specificCountryResidence],
+    ["Does this job provide visa sponsorship?", check.visaSponsorship],
   ] as const : [];
   return <section className="eligibility-panel">
+    <p className="eyebrow">Jev check</p>
     <div className="eligibility-panel-header">
       <button type="button" className="secondary-action" disabled={running} onClick={onRun}>Run</button>
     </div>
