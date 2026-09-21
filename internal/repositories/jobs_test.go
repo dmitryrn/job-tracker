@@ -62,6 +62,41 @@ func TestJobExistsFindsJobBySourceAndSourceID(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func TestUpsertSkipsExactBodyDuplicatesWithinProvider(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
+		{Source: "linkedin", SourceID: "first", SourceURL: "https://www.linkedin.com/jobs/view/first", Title: "First title", Company: "First Co", Workplace: "remote", BodyText: "Identical raw job description.", MetadataJSON: "{}"},
+		{Source: "linkedin", SourceID: "duplicate", SourceURL: "https://www.linkedin.com/jobs/view/duplicate", Title: "Different title", Company: "Different Co", Workplace: "remote", BodyText: "Identical raw job description.", MetadataJSON: "{}"},
+		{Source: "remotive", SourceID: "same-body", SourceURL: "https://remotive.com/jobs/same-body", Title: "Different provider", Company: "Remotive Co", Workplace: "remote", BodyText: "Identical raw job description.", MetadataJSON: "{}"},
+	}))
+
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "linkedin", SourceID: "first", SourceURL: "https://www.linkedin.com/jobs/view/first", Title: "Updated title", Company: "First Co", Workplace: "remote", BodyText: "Identical raw job description.", MetadataJSON: "{}",
+	}}))
+
+	var jobCount int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM jobs`).Scan(&jobCount))
+	assert.Equal(t, 2, jobCount)
+
+	job, err := repository.JobBySourceID(context.Background(), "linkedin", "first")
+	require.NoError(t, err)
+	require.NotNil(t, job)
+	assert.Equal(t, "Updated title", job.Title)
+
+	duplicate, err := repository.JobBySourceID(context.Background(), "linkedin", "duplicate")
+	require.NoError(t, err)
+	assert.Nil(t, duplicate)
+
+	otherProvider, err := repository.JobBySourceID(context.Background(), "remotive", "same-body")
+	require.NoError(t, err)
+	assert.NotNil(t, otherProvider)
+}
+
 func TestLinkedInWorkplaceClassificationRoundTrips(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)

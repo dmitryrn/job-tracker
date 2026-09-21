@@ -18,11 +18,19 @@ type SQLite struct {
 	db *sql.DB
 }
 
+type jobQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 func NewSQLite(db *sql.DB) *SQLite {
 	return &SQLite{db: db}
 }
 
 func (repository *SQLite) JobExists(ctx context.Context, source, sourceID string) (bool, error) {
+	return jobExists(ctx, repository.db, source, sourceID)
+}
+
+func jobExists(ctx context.Context, database jobQueryer, source, sourceID string) (bool, error) {
 	statement, args, err := squirrel.Select("id").From("jobs").Where(squirrel.Eq{
 		"source":        source,
 		"source_job_id": sourceID,
@@ -32,7 +40,25 @@ func (repository *SQLite) JobExists(ctx context.Context, source, sourceID string
 	}
 
 	var id int64
-	err = repository.db.QueryRowContext(ctx, statement, args...).Scan(&id)
+	err = database.QueryRowContext(ctx, statement, args...).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+
+	return err == nil, err
+}
+
+func jobBodyExists(ctx context.Context, database jobQueryer, source, bodyText string) (bool, error) {
+	statement, args, err := squirrel.Select("id").From("jobs").Where(squirrel.Eq{
+		"source":    source,
+		"body_text": bodyText,
+	}).Limit(1).ToSql()
+	if err != nil {
+		return false, err
+	}
+
+	var id int64
+	err = database.QueryRowContext(ctx, statement, args...).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -100,6 +126,22 @@ func (repository *SQLite) Upsert(ctx context.Context, jobs []models.Job) error {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, job := range jobs {
+		exists, err := jobExists(ctx, transaction, job.Source, job.SourceID)
+		if err != nil {
+			return fmt.Errorf("check source job existence: %w", err)
+		}
+
+		if !exists && job.BodyText != "" {
+			duplicate, err := jobBodyExists(ctx, transaction, job.Source, job.BodyText)
+			if err != nil {
+				return fmt.Errorf("check job body duplicate: %w", err)
+			}
+
+			if duplicate {
+				continue
+			}
+		}
+
 		companyID, err := upsertCompany(ctx, transaction, job.Company, now)
 		if err != nil {
 			return err
