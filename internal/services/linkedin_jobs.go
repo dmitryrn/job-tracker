@@ -273,6 +273,12 @@ func validLinkedInResult(job models.Job) bool {
 
 func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) models.Job {
 	metadata, _ := json.Marshal(map[string]string{"posted_text": result.PostedAt})
+	workplace := strings.ToLower(strings.TrimSpace(details.WorkplaceType))
+	workplace = strings.ReplaceAll(workplace, "-", "")
+	workplace = strings.ReplaceAll(workplace, " ", "")
+	if workplace == "" {
+		workplace = "unknown"
+	}
 	return models.Job{
 		Source:         "linkedin",
 		SourceID:       result.ID,
@@ -281,7 +287,7 @@ func toLinkedInJob(result linkedin.SearchResult, details linkedin.Job) models.Jo
 		BodyText:       details.Description,
 		Company:        result.Company,
 		Location:       result.Location,
-		Workplace:      linkedInWorkplace(result.Title, details.Description, result.Location),
+		Workplace:      workplace,
 		EmploymentType: details.EmploymentType,
 		PostedAt:       linkedInPostedAt(result.PostedAt),
 		MetadataJSON:   string(metadata),
@@ -298,15 +304,4 @@ func linkedInPostedAt(value string) string {
 		return ""
 	}
 	return parsed.UTC().Format(time.RFC3339)
-}
-
-func linkedInWorkplace(values ...string) string {
-	text := strings.ToLower(strings.Join(values, " "))
-	if strings.Contains(text, "remote") {
-		return "remote"
-	}
-	if strings.Contains(text, "hybrid") {
-		return "hybrid"
-	}
-	return "unknown"
 }

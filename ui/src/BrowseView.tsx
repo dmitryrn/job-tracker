@@ -95,6 +95,21 @@ export function jobsReadyToQueue(jobs: BrowseJob[], queuedJobIDs: ReadonlySet<nu
   return jobs.filter((job) => !job.hasMatch && !queuedJobIDs.has(job.id));
 }
 
+export function workplaceLabel(value: string) {
+  switch (value.toLowerCase()) {
+    case "remote":
+      return "Remote";
+    case "hybrid":
+      return "Hybrid";
+    case "onsite":
+      return "On-site";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "";
+  }
+}
+
 function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
   const lastViewed = formatRelativeTime(job.lastViewedAt);
   return (
@@ -109,6 +124,7 @@ function JobCard({ job, onOpen }: { job: BrowseJob; onOpen: () => void }) {
         <p className="job-excerpt">{plainText(job.bodyText).replace(/\s+/g, " ").trim()}</p>
          <div className="job-meta">
            <span>{job.location || "Location flexible"}</span>
+           <span>{workplaceLabel(job.workplace) || "Work arrangement not listed"}</span>
            <span>{job.employmentType || "Role type not listed"}</span>
          </div>
       </button>

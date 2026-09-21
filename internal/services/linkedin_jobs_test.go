@@ -23,7 +23,7 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 		results[index] = linkedin.SearchResult{ID: id, URL: "https://www.linkedin.com/jobs/view/" + id, Title: "Engineer", Company: "Example Co", Location: "Berlin", PostedAt: "2026-09-02"}
 		details[id] = linkedin.Job{Description: "Remote work", EmploymentType: "Full-time"}
 	}
-	details["last"] = linkedin.Job{Description: "Hybrid work", EmploymentType: "Full-time"}
+	details["last"] = linkedin.Job{Description: "Hybrid work", EmploymentType: "Full-time", WorkplaceType: "Hybrid"}
 	client := &linkedInClientStub{
 		results: map[int][]linkedin.SearchResult{
 			0:  results,
@@ -40,10 +40,18 @@ func TestLinkedInJobsFetchPaginatesAndMapsResults(t *testing.T) {
 	require.Len(t, jobs, firstPageSize+1)
 	assert.Equal(t, []int{0, 10}, client.starts)
 	assert.Equal(t, "linkedin", jobs[0].Source)
-	assert.Equal(t, "remote", jobs[0].Workplace)
+	assert.Equal(t, "unknown", jobs[0].Workplace)
 	assert.Equal(t, "hybrid", jobs[firstPageSize].Workplace)
 	assert.Equal(t, "2026-09-02T00:00:00Z", jobs[firstPageSize].PostedAt)
 	assert.Equal(t, "Full-time", jobs[0].EmploymentType)
+}
+
+func TestLinkedInWorkplaceUsesStructuredValueOnly(t *testing.T) {
+	result := linkedin.SearchResult{ID: "1", PostedAt: "2026-09-02"}
+
+	assert.Equal(t, "unknown", toLinkedInJob(result, linkedin.Job{Description: "Hybrid work with remote days"}).Workplace)
+	assert.Equal(t, "hybrid", toLinkedInJob(result, linkedin.Job{WorkplaceType: "Hybrid"}).Workplace)
+	assert.Equal(t, "onsite", toLinkedInJob(result, linkedin.Job{WorkplaceType: "On-site"}).Workplace)
 }
 
 func TestLinkedInJobsFetchSkipsIncompleteJobs(t *testing.T) {

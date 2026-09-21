@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatJobPostedDate, formatMatchDate, matchLabelScore, matchSearchFromParams, matchSearchPath } from "./JobMatchesView";
+import { formatJobPostedDate, formatMatchDate, matchSearchFromParams, matchSearchPath } from "./JobMatchesView";
+import { matchLabelScore, matchScoreStyle } from "./matchScore";
 import { formatRelativeTime } from "./BrowseView";
 
 describe("match search URL", () => {
@@ -58,6 +59,11 @@ describe("match label colors", () => {
 
   it("uses the match score for unknown labels", () => {
     expect(matchLabelScore("Custom label", 55)).toBe(55);
+  });
+
+  it("shares a bounded CSS score between labels and the detail score", () => {
+    expect(matchScoreStyle(38)).toEqual({ "--match-score": 38 });
+    expect(matchScoreStyle(120)).toEqual({ "--match-score": 100 });
   });
 });
 

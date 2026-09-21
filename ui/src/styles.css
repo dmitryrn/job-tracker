@@ -264,9 +264,9 @@ button { cursor: pointer; }
 .eligibility-timestamp { color: #65758a; font-size: 13px; }
 .eligibility-timestamp { margin: 14px 0 0; }
 .match-score { align-items: baseline; display: flex; gap: 4px; margin: 8px 0 12px; }
-.match-score strong { color: #1e5948; font-family: Georgia, serif; font-size: 38px; font-weight: 400; line-height: 1; }
+.match-score strong { color: hsl(calc(var(--match-score) * 1.2) 75% 20%); font-family: Georgia, serif; font-size: 38px; font-weight: 400; line-height: 1; }
 .match-score span { color: #65758a; }
-.match-score p { color: #1e5948; font-size: 12px; font-weight: 700; margin: 0 0 0 8px; text-transform: uppercase; }
+.match-score p { color: hsl(calc(var(--match-score) * 1.2) 75% 20%); font-size: 12px; font-weight: 700; margin: 0 0 0 8px; text-transform: uppercase; }
 .job-page-actions { border-top: 1px solid #d6d5d0; margin-top: 28px; padding-top: 18px; }
 .match-panel .secondary-action { margin-top: 16px; }
 .match-chat { background: #fff; border: 1px solid #dedcd5; margin: 16px 0 0; padding: 14px; }

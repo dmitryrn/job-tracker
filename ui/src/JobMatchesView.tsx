@@ -1,6 +1,7 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { fetchJobMatches, type BrowseJob, type JobMatchSummary } from "./api";
 import { formatDate, formatRelativeTime } from "./BrowseView";
+import { matchLabelScore, matchScoreStyle, matchStatusLegend } from "./matchScore";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
 type JobMatchesViewProps = {
@@ -26,18 +27,6 @@ const matchSortDescriptions: Record<MatchSort, string> = {
   "profile-score-desc": "Highest profile fit first.",
   "profile-score-asc": "Lowest profile fit first.",
 };
-
-const matchStatusLegend = [
-  { label: "Exceptional fit", score: 90 },
-  { label: "Strong fit", score: 75 },
-  { label: "Worth applying", score: 60 },
-  { label: "Possible fit", score: 40 },
-  { label: "Skip", score: 0 },
-];
-
-export function matchLabelScore(label: string, score: number) {
-  return matchStatusLegend.find((status) => status.label === label)?.score ?? score;
-}
 
 const pageSizeOptions = [25, 50];
 
@@ -186,7 +175,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
         </div>
       </header>
       <aside className="match-legend" aria-label="Filter matches by minimum fit">
-        {matchStatusLegend.map((status) => <button type="button" className="match-label match-filter" key={status.label} aria-pressed={minimumScore === status.score} aria-label={`Show ${status.label} and higher`} onClick={() => updateSearch({ minimumScore: minimumScore === status.score ? null : status.score, offset: 0 })} style={{ "--match-score": status.score } as CSSProperties}>{status.label}</button>)}
+        {matchStatusLegend.map((status) => <button type="button" className="match-label match-filter" key={status.label} aria-pressed={minimumScore === status.score} aria-label={`Show ${status.label} and higher`} onClick={() => updateSearch({ minimumScore: minimumScore === status.score ? null : status.score, offset: 0 })} style={matchScoreStyle(status.score)}>{status.label}</button>)}
         <span className="match-label unlabeled">Unlabeled</span>
       </aside>
       {error && <p className="query-error">{error}</p>}
@@ -209,7 +198,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
                     <span className="match-topline-labels">
                       <span
                         className={match.label ? "match-label" : "match-label unlabeled"}
-                        style={{ "--match-score": matchLabelScore(match.label, match.score) } as CSSProperties}
+                        style={matchScoreStyle(matchLabelScore(match.label, match.score))}
                       >
                         {match.label || "Unlabeled"}
                       </span>

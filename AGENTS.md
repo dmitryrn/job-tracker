@@ -40,3 +40,4 @@ changing a unit definition. Read recent service logs with
 - live analyzer fixtures may use available free OpenRouter models; authentication loads from `.env.tokens` at runtime
 - when restarting a service, make sure it works, check logs, etc
 - check sqlite db (in this dir) schema if needed
+- DO NOT fetch or curl Linkedin without first curling https://ipinfo.io and confirming this matchine is running through the ProtonVPN

@@ -45,6 +45,7 @@ type SearchResult struct {
 type Job struct {
 	Description    string
 	EmploymentType string
+	WorkplaceType  string
 }
 
 func NewClient() *Client {
@@ -162,7 +163,10 @@ func parseJob(body []byte) Job {
 	if err != nil {
 		return Job{}
 	}
-	job := Job{EmploymentType: jobCriteria(document, "Employment type")}
+	job := Job{
+		EmploymentType: jobCriteria(document, "Employment type"),
+		WorkplaceType:  jobCriteria(document, "Workplace type"),
+	}
 	if node := first(document, hasClass("div", "show-more-less-html__markup")); node != nil {
 		job.Description = text(node)
 		return job

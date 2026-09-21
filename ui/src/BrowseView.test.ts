@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, jobsReadyToQueue } from "./BrowseView";
+import { formatDate, jobsReadyToQueue, workplaceLabel } from "./BrowseView";
 
 describe("formatDate", () => {
   const now = new Date("2026-08-27T12:00:00Z");
@@ -29,5 +29,16 @@ describe("jobsReadyToQueue", () => {
     ] as never[];
 
     expect(jobsReadyToQueue(jobs, new Set([3])).map((job) => job.id)).toEqual([1]);
+  });
+});
+
+describe("workplaceLabel", () => {
+  it("formats known workplace values", () => {
+    expect(workplaceLabel("hybrid")).toBe("Hybrid");
+    expect(workplaceLabel("onsite")).toBe("On-site");
+  });
+
+  it("labels an explicitly unknown workplace arrangement", () => {
+    expect(workplaceLabel("unknown")).toBe("Unknown");
   });
 });
