@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import initSqlJs, { type Database } from "sql.js";
 import sqlWasm from "sql.js/dist/sql-wasm.wasm?url";
 import BrowseView, { type BrowseMode } from "./BrowseView";
+import ApplicationsView from "./ApplicationsView";
 import DiscoverySettingsView from "./DiscoverySettingsView";
 import EventsView from "./EventsView";
 import JobDetailView from "./JobDetailView";
@@ -13,7 +14,7 @@ import { apiURL, fetchJob, type BrowseJob } from "./api";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
 import "./styles.css";
 
-type View = BrowseMode | "events" | "explorer" | "matches" | "profile" | "resume" | "match-queue" | "search-setup";
+type View = BrowseMode | "applications" | "events" | "explorer" | "matches" | "profile" | "resume" | "match-queue" | "search-setup";
 
 type Route = {
   view: View;
@@ -26,7 +27,7 @@ function readRoute(): Route {
   if (parts[0] === "jobs" && /^\d+$/.test(parts[1] ?? "")) {
 		return { view: "jobs", jobID: Number(parts[1]), tab: parts[2] === "match" || parts[2] === "chat" ? parts[2] : "post" };
   }
-  if (parts[0] === "companies" || parts[0] === "events" || parts[0] === "matches" || parts[0] === "profile" || parts[0] === "resume" || parts[0] === "match-queue" || parts[0] === "search-setup" || parts[0] === "database") {
+  if (parts[0] === "applications" || parts[0] === "companies" || parts[0] === "events" || parts[0] === "matches" || parts[0] === "profile" || parts[0] === "resume" || parts[0] === "match-queue" || parts[0] === "search-setup" || parts[0] === "database") {
     return { view: parts[0] === "database" ? "explorer" : parts[0] };
   }
   return { view: "jobs" };
@@ -236,7 +237,8 @@ export default function App() {
       <header className="app-header">
         <nav className="app-nav" aria-label="Application navigation">
           <button className={route.view === "jobs" || route.view === "companies" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "jobs" })}>Jobs</button>
-          <button className={route.view === "matches" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "matches" })}>Matches</button>
+           <button className={route.view === "matches" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "matches" })}>Matches</button>
+           <button className={route.view === "applications" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "applications" })}>Applications</button>
           <button className={route.view === "match-queue" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "match-queue" })}>Match queue</button>
            <button className={route.view === "profile" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "profile" })}>Profile</button>
            <button className={route.view === "resume" ? "app-nav-link active" : "app-nav-link"} onClick={() => navigate({ view: "resume" })}>Resume</button>
@@ -280,8 +282,10 @@ export default function App() {
           <BrowseView mode={route.view} onModeChange={(view) => navigate({ view })} onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "post" })} />
         ) : route.view === "match-queue" ? (
           <MatchQueueView onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "post" })} />
-        ) : route.view === "matches" ? (
-          <JobMatchesView onOpenMatch={(job) => navigate({ view: "jobs", jobID: job.id, tab: "match" })} />
+         ) : route.view === "matches" ? (
+           <JobMatchesView onOpenMatch={(job) => navigate({ view: "jobs", jobID: job.id, tab: "match" })} />
+         ) : route.view === "applications" ? (
+           <ApplicationsView onOpenJob={(job) => navigate({ view: "jobs", jobID: job.id, tab: "match" })} />
          ) : route.view === "profile" ? (
            <ProfileView />
          ) : route.view === "resume" ? (

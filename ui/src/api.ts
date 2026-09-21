@@ -163,6 +163,21 @@ export type JobMatch = {
   createdAt: string;
 };
 
+export type Application = {
+  jobId: number;
+  appliedAt: string;
+};
+
+export type ApplicationSummary = {
+  job: BrowseJob;
+  appliedAt: string;
+};
+
+export type ApplicationPage = {
+  applications: ApplicationSummary[];
+  total: number;
+};
+
 export type JobEligibilityAnswer = {
   id: string;
   question: string;
@@ -418,7 +433,23 @@ export function uploadResumePhoto(photo: File) {
 }
 
 export function fetchJobMatch(id: number, signal: AbortSignal) {
-	return request<{ match: JobMatch | null; analysis: JobAnalysis | null }>(`jobs/${id}/match`, { signal });
+	return request<{ match: JobMatch | null; analysis: JobAnalysis | null; application: Application | null }>(`jobs/${id}/match`, { signal });
+}
+
+export function applyToJob(id: number) {
+  return request<{ application: Application }>(`jobs/${id}/application`, { method: "POST" });
+}
+
+export async function unapplyFromJob(id: number) {
+  const response = await fetch(apiURL(`jobs/${id}/application`), { method: "DELETE" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => undefined) as { error?: string } | undefined;
+    throw new Error(body?.error || `Could not mark job unapplied (${response.status})`);
+  }
+}
+
+export function fetchApplications(limit: number, offset: number, signal: AbortSignal) {
+  return request<ApplicationPage>(`applications?limit=${limit}&offset=${offset}`, { signal });
 }
 
 export function runJobEligibilityCheck(id: number) {

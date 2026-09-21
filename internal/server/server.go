@@ -36,7 +36,7 @@ type syncTrigger interface {
 	Trigger(string) bool
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, syncer *services.JobSync, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, jobs repositories.JobRepository, matches *services.JobMatches, typeSafe *typesafe.Client, requests *services.JobMatchRequests, chat *services.JobMatchChat, metrics *services.LinkedInMetrics) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, syncer *services.JobSync, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, jobs repositories.JobRepository, applications *services.Applications, matches *services.JobMatches, typeSafe *typesafe.Client, requests *services.JobMatchRequests, chat *services.JobMatchChat, metrics *services.LinkedInMetrics) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
@@ -44,7 +44,10 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("GET /api/jobs/{id}", jobHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/rejection", rejectJobHandler(browse, logger))
-	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, browse, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match", jobMatchHandler(matches, applications, browse, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/application", jobApplicationHandler(applications, logger))
+	mux.HandleFunc("POST /api/jobs/{id}/application", applyJobHandler(applications, logger))
+	mux.HandleFunc("DELETE /api/jobs/{id}/application", unapplyJobHandler(applications, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match/eligibility", jobEligibilityCheckHandler(jobs, typeSafe, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match/resume.pdf", jobApplicationResumePDFHandler(chat, resumePDF, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
@@ -55,6 +58,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, even
 	mux.HandleFunc("POST /api/jobs/{id}/match/chat/{requestID}/stop", jobMatchChatStopHandler(chat, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}/match/chat/{sequence}", jobMatchChatRevertHandler(chat, logger))
 	mux.HandleFunc("GET /api/matches", jobMatchesHandler(matches, logger))
+	mux.HandleFunc("GET /api/applications", applicationsHandler(applications, logger))
 	mux.HandleFunc("GET /api/match-queue", matchQueueHandler(requests, logger))
 	mux.HandleFunc("POST /api/match-queue", queueUnmatchedJobMatchesHandler(requests, logger))
 	mux.HandleFunc("PUT /api/match-queue", reorderMatchQueueHandler(requests, logger))
@@ -632,7 +636,7 @@ func rejectJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.Handl
 	}
 }
 
-func jobMatchHandler(matches *services.JobMatches, browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+func jobMatchHandler(matches *services.JobMatches, applications *services.Applications, browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
 		if err != nil || id < 1 {
@@ -661,7 +665,104 @@ func jobMatchHandler(matches *services.JobMatches, browse *services.JobBrowse, l
 			writeError(writer, http.StatusInternalServerError, "could not load job analysis")
 			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"match": match, "analysis": analysis})
+		application, err := applications.Application(request.Context(), id)
+		if err != nil {
+			logger.Error("load job application with match failed", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load job application")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"match": match, "analysis": analysis, "application": application})
+	}
+}
+
+func parseJobID(request *http.Request, logger *zap.Logger, message string) (int64, error) {
+	id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		logger.Warn(message, zap.String("id", request.PathValue("id")))
+		return 0, errors.New("job ID must be a positive integer")
+	}
+	return id, nil
+}
+
+func jobApplicationHandler(applications *services.Applications, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := parseJobID(request, logger, "invalid job ID for application")
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		application, err := applications.Application(request.Context(), id)
+		if err != nil {
+			logger.Error("load job application failed", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load job application")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"application": application})
+	}
+}
+
+func applyJobHandler(applications *services.Applications, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := parseJobID(request, logger, "invalid job ID for applying")
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		application, err := applications.Apply(request.Context(), id)
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.Warn("apply missing job", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusNotFound, "job not found")
+			return
+		}
+		if err != nil {
+			logger.Error("apply to job failed", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not mark job applied")
+			return
+		}
+		logger.Info("job marked applied", zap.Int64("job_id", id))
+		writeJSON(writer, http.StatusOK, map[string]any{"application": application})
+	}
+}
+
+func unapplyJobHandler(applications *services.Applications, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		id, err := parseJobID(request, logger, "invalid job ID for unapplying")
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		removed, err := applications.Unapply(request.Context(), id)
+		if err != nil {
+			logger.Error("unapply from job failed", zap.Int64("job_id", id), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not mark job unapplied")
+			return
+		}
+		logger.Info("job marked unapplied", zap.Int64("job_id", id), zap.Bool("removed", removed))
+		writer.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func applicationsHandler(applications *services.Applications, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		limit, err := paginationQueryInt(request, "limit", 25)
+		if err != nil {
+			logger.Warn("invalid applications limit", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "limit must be a positive integer no greater than 100")
+			return
+		}
+		offset, err := paginationQueryInt(request, "offset", 0)
+		if err != nil {
+			logger.Warn("invalid applications offset", zap.Error(err))
+			writeError(writer, http.StatusBadRequest, "offset must be a non-negative integer")
+			return
+		}
+		page, err := applications.List(request.Context(), models.ApplicationSearch{Limit: limit, Offset: offset})
+		if err != nil {
+			logger.Error("list applications failed", zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load applications")
+			return
+		}
+		writeJSON(writer, http.StatusOK, page)
 	}
 }
 

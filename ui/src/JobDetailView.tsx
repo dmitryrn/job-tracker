@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
+import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, rejectJob, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
 import { formatRelativeTime } from "./BrowseView";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
@@ -409,6 +409,7 @@ function resumeDiff(previous: Resume, next: Resume) {
 
 export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted }: JobDetailViewProps) {
   const [match, setMatch] = useState<JobMatch | null>();
+  const [application, setApplication] = useState<Application | null>();
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
   const [eligibility, setEligibility] = useState<JobEligibilityCheck | null>(null);
   const [error, setError] = useState("");
@@ -419,6 +420,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [rejectionReason, setRejectionReason] = useState("");
   const [queueing, setQueueing] = useState(false);
   const [queued, setQueued] = useState(false);
+  const [applicationUpdating, setApplicationUpdating] = useState(false);
   const [eligibilityRunning, setEligibilityRunning] = useState(false);
   const actionsMenuRef = useRef<HTMLDetailsElement>(null);
   const rejectionDialogRef = useRef<HTMLDialogElement>(null);
@@ -430,11 +432,13 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     const controller = new AbortController();
     async function loadMatch() {
       setMatch(undefined);
+      setApplication(undefined);
       setAnalysis(undefined);
       try {
         const result = await fetchJobMatch(job.id, controller.signal);
         if (!controller.signal.aborted) {
            setMatch(result.match);
+           setApplication(result.application);
            setAnalysis(result.analysis);
           setError("");
           setQueued(false);
@@ -524,6 +528,25 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     }
   }
 
+  async function toggleApplication() {
+    if (application === undefined || applicationUpdating) return;
+    setApplicationUpdating(true);
+    setError("");
+    try {
+      if (application) {
+        await unapplyFromJob(job.id);
+        setApplication(null);
+      } else {
+        const result = await applyToJob(job.id);
+        setApplication(result.application);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not update application status");
+    } finally {
+      setApplicationUpdating(false);
+    }
+  }
+
   return (
     <section className={tab === "chat" ? "job-page chat-job-page" : "job-page"}>
       <button type="button" className="back-link" onClick={onBack}>Back to jobs</button>
@@ -532,10 +555,13 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
           <p className="eyebrow">{job.source}</p>
           <h1>{job.title || "Untitled job"}</h1>
           <p>{job.company || "Company not listed"}</p>
-        </div>
-        <div className="job-page-header-actions">
-          <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
-          <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
+         </div>
+         <div className="job-page-header-actions">
+           <div className="job-primary-actions">
+             <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
+             {application !== undefined && <button type="button" className={application ? "application-toggle applied" : "application-toggle"} disabled={applicationUpdating} onClick={() => void toggleApplication()}>{applicationUpdating ? "Saving..." : application ? "Mark unapplied" : "Mark applied"}</button>}
+           </div>
+           <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
             <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
             <div className="job-overflow-menu">
               <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
@@ -561,9 +587,9 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
        {error && <p className="query-error">{error}</p>}
        {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} /> : (
         <>
-           <section className="match-panel">
-            <p className="eyebrow">Current match</p>
-            {matchedAt && <p className="detail-timestamp">Matched {matchedAt}</p>}
+            <section className="match-panel">
+             <p className="eyebrow">Current match</p>
+             {matchedAt && <p className="detail-timestamp">Matched {matchedAt}</p>}
             {match === undefined ? <p>Loading match...</p> : match === null ? <p>{queued ? "Match request queued." : "No match yet."}</p> : match.assessment ? <JobMatchAssessmentPanel assessment={match.assessment} /> : <p>{match.content}</p>}
             {match !== undefined && <button type="button" className="secondary-action" disabled={queueing || !job.bodyText.trim()} onClick={() => void requestMatch(match !== null)}>{queueing ? "Queueing..." : match === null ? "Create match" : "Redo match"}</button>}
             {!job.bodyText.trim() && <p>Add the job description before creating a match.</p>}

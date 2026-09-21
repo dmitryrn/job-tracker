@@ -175,3 +175,23 @@ type JobMatchPage struct {
 	Matches []JobMatchSummary `json:"matches"`
 	Total   int               `json:"total"`
 }
+
+type Application struct {
+	JobID     int64  `json:"jobId"`
+	AppliedAt string `json:"appliedAt"`
+}
+
+type ApplicationSummary struct {
+	Job       BrowseJob `json:"job"`
+	AppliedAt string    `json:"appliedAt"`
+}
+
+type ApplicationSearch struct {
+	Limit  int
+	Offset int
+}
+
+type ApplicationPage struct {
+	Applications []ApplicationSummary `json:"applications"`
+	Total        int                  `json:"total"`
+}

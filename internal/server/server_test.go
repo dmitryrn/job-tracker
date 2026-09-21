@@ -220,6 +220,51 @@ func TestJobAPIListsPaginatedResults(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestApplicationAPI(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := repositories.NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "example", SourceID: "application", SourceURL: "https://example.com/application", Title: "Applied role", Workplace: "remote", MetadataJSON: "{}",
+	}}))
+	handler := newTestServer(repository).http.Handler
+
+	response := request(handler, http.MethodGet, "/api/jobs/1/match")
+	require.Equal(t, http.StatusOK, response.Code)
+	var matchResult struct {
+		Application *models.Application `json:"application"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&matchResult))
+	assert.Nil(t, matchResult.Application)
+
+	response = request(handler, http.MethodPost, "/api/jobs/1/application")
+	require.Equal(t, http.StatusOK, response.Code)
+	var applied struct {
+		Application models.Application `json:"application"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&applied))
+	assert.Equal(t, int64(1), applied.Application.JobID)
+	assert.NotEmpty(t, applied.Application.AppliedAt)
+
+	response = request(handler, http.MethodGet, "/api/applications?limit=1")
+	require.Equal(t, http.StatusOK, response.Code)
+	var page models.ApplicationPage
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&page))
+	assert.Equal(t, 1, page.Total)
+	require.Len(t, page.Applications, 1)
+	assert.Equal(t, "Applied role", page.Applications[0].Job.Title)
+
+	response = request(handler, http.MethodDelete, "/api/jobs/1/application")
+	assert.Equal(t, http.StatusNoContent, response.Code)
+	response = request(handler, http.MethodGet, "/api/applications")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&page))
+	assert.Zero(t, page.Total)
+}
+
 func TestDiscoverySettingsAPI(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
@@ -879,6 +924,7 @@ func newTestServerWithDependencies(repository *repositories.SQLite, client servi
 		services.NewResumeService(repository),
 		services.NewResumePDFService(services.NewResumeService(repository)),
 		repository,
+		services.NewApplications(repository),
 		services.NewJobMatches(repository, repository),
 		nil,
 		services.NewJobMatchRequests(repository, repository, worker),

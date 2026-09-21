@@ -139,3 +139,37 @@ func TestMarkJobViewedStoresLastViewedAt(t *testing.T) {
 	_, err = time.Parse(time.RFC3339Nano, job.LastViewedAt)
 	require.NoError(t, err)
 }
+
+func TestApplicationsCanBeCreatedListedAndRemoved(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{
+		{Source: "example", SourceID: "applied", SourceURL: "https://example.com/applied", Title: "Applied role", Workplace: "remote", MetadataJSON: "{}"},
+	}))
+
+	created, err := repository.CreateApplication(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), created.JobID)
+	assert.NotEmpty(t, created.AppliedAt)
+
+	duplicate, err := repository.CreateApplication(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, created.AppliedAt, duplicate.AppliedAt)
+
+	page, err := repository.Applications(context.Background(), models.ApplicationSearch{Limit: 10})
+	require.NoError(t, err)
+	assert.Equal(t, 1, page.Total)
+	require.Len(t, page.Applications, 1)
+	assert.Equal(t, "Applied role", page.Applications[0].Job.Title)
+
+	removed, err := repository.DeleteApplication(context.Background(), 1)
+	require.NoError(t, err)
+	assert.True(t, removed)
+	removed, err = repository.DeleteApplication(context.Background(), 1)
+	require.NoError(t, err)
+	assert.False(t, removed)
+}
