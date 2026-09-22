@@ -108,30 +108,8 @@ func (writer *EventWriter) run(ctx context.Context) {
 	defer close(writer.done)
 	batch := make([]models.Event, 0, writer.batchSize)
 	timer := time.NewTimer(writer.flushInterval)
-	if !timer.Stop() {
-		<-timer.C
-	}
-
+	stopTimer(timer)
 	defer timer.Stop()
-
-	flush := func(flushContext context.Context) {
-		if len(batch) == 0 {
-			return
-		}
-
-		for {
-			err := writer.repository.RecordEvents(flushContext, batch)
-			if err == nil {
-				writer.logger.Info("event batch recorded", zap.Int("count", len(batch)))
-				batch = batch[:0]
-				return
-			}
-
-			writer.logger.Error("record event batch failed", zap.Int("count", len(batch)), zap.Error(err))
-
-			time.Sleep(eventWriteRetryInterval)
-		}
-	}
 
 	for {
 		var timerChannel <-chan time.Time
@@ -147,28 +125,56 @@ func (writer *EventWriter) run(ctx context.Context) {
 			}
 
 			if len(batch) == writer.batchSize {
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-
-				flush(context.WithoutCancel(ctx))
+				stopTimer(timer)
+				writer.flush(context.WithoutCancel(ctx), &batch)
 			}
 		case <-timerChannel:
-			flush(context.WithoutCancel(ctx))
+			writer.flush(context.WithoutCancel(ctx), &batch)
 		case <-ctx.Done():
-			for {
-				select {
-				case event := <-writer.queue:
-					batch = append(batch, event)
-				default:
-					flush(context.WithoutCancel(ctx))
-					writer.logger.Info("event writer stopped")
-					return
-				}
-			}
+			writer.drain(context.WithoutCancel(ctx), &batch)
+			writer.logger.Info("event writer stopped")
+			return
+		}
+	}
+}
+
+func stopTimer(timer *time.Timer) {
+	if timer.Stop() {
+		return
+	}
+
+	select {
+	case <-timer.C:
+	default:
+	}
+}
+
+func (writer *EventWriter) flush(ctx context.Context, batch *[]models.Event) {
+	if len(*batch) == 0 {
+		return
+	}
+
+	for {
+		err := writer.repository.RecordEvents(ctx, *batch)
+		if err == nil {
+			writer.logger.Info("event batch recorded", zap.Int("count", len(*batch)))
+			*batch = (*batch)[:0]
+			return
+		}
+
+		writer.logger.Error("record event batch failed", zap.Int("count", len(*batch)), zap.Error(err))
+		time.Sleep(eventWriteRetryInterval)
+	}
+}
+
+func (writer *EventWriter) drain(ctx context.Context, batch *[]models.Event) {
+	for {
+		select {
+		case event := <-writer.queue:
+			*batch = append(*batch, event)
+		default:
+			writer.flush(ctx, batch)
+			return
 		}
 	}
 }

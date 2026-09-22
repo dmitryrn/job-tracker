@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -26,6 +27,11 @@ type blockingEventBatchRecorder struct {
 	once    sync.Once
 }
 
+type retryingEventBatchRecorder struct {
+	eventBatchRecorder
+	attempts int
+}
+
 func TestEventWriterFlushesAtBatchSize(t *testing.T) {
 	repository := &eventBatchRecorder{batches: make(chan []models.Event, 1)}
 	writer := newTestEventWriter(repository, 10, 2, time.Hour)
@@ -48,7 +54,7 @@ func TestEventWriterFlushesAfterInterval(t *testing.T) {
 
 	require.NoError(t, writer.RecordEvent(context.Background(), models.Event{Type: "scheduled"}))
 
-	batch := receiveEventBatch(t, repository.batches)
+	batch := receiveEventBatchWithin(t, repository.batches, 3*time.Second)
 	require.Len(t, batch, 1)
 	assert.Equal(t, "scheduled", batch[0].Type)
 }
@@ -90,16 +96,34 @@ func TestEventWriterFlushesQueuedEventsDuringShutdown(t *testing.T) {
 	assert.Equal(t, "pending", batch[0].Type)
 }
 
+func TestEventWriterRetriesFailedBatch(t *testing.T) {
+	repository := &retryingEventBatchRecorder{eventBatchRecorder: eventBatchRecorder{batches: make(chan []models.Event, 1)}}
+	writer := newTestEventWriter(repository, 10, 1, time.Hour)
+	writer.start(context.Background())
+	t.Cleanup(func() { require.NoError(t, writer.stop(context.Background())) })
+
+	require.NoError(t, writer.RecordEvent(context.Background(), models.Event{Type: "retry"}))
+
+	batch := receiveEventBatchWithin(t, repository.batches, 3*time.Second)
+	assert.Equal(t, "retry", batch[0].Type)
+	assert.Equal(t, 2, repository.attempts)
+}
+
 func newTestEventWriter(repository repositories.EventRepository, queueSize, batchSize int, flushInterval time.Duration) *EventWriter {
 	return NewEventWriter(config.Config{Events: config.EventConfig{QueueSize: queueSize, BatchSize: batchSize, FlushInterval: flushInterval}}, repository, zap.NewNop())
 }
 
 func receiveEventBatch(t *testing.T, batches <-chan []models.Event) []models.Event {
 	t.Helper()
+	return receiveEventBatchWithin(t, batches, time.Second)
+}
+
+func receiveEventBatchWithin(t *testing.T, batches <-chan []models.Event, timeout time.Duration) []models.Event {
+	t.Helper()
 	select {
 	case batch := <-batches:
 		return batch
-	case <-time.After(time.Second):
+	case <-time.After(timeout):
 		t.Fatal("event batch was not recorded")
 		return nil
 	}
@@ -124,5 +148,15 @@ func (recorder *blockingEventBatchRecorder) RecordEvents(_ context.Context, _ []
 		close(recorder.started)
 		<-recorder.release
 	})
+	return nil
+}
+
+func (recorder *retryingEventBatchRecorder) RecordEvents(_ context.Context, events []models.Event) error {
+	recorder.attempts++
+	if recorder.attempts == 1 {
+		return errors.New("temporary event storage failure")
+	}
+
+	recorder.batches <- append([]models.Event(nil), events...)
 	return nil
 }

@@ -233,6 +233,13 @@ type jobMatchChatTurn struct {
 	done      chan struct{}
 }
 
+type jobMatchTurnState struct {
+	history     []models.JobMatchChatItem
+	current     resumeRevisionPayload
+	coverLetter coverLetterRevisionPayload
+	country     string
+}
+
 type JobMatchChatUpdate struct {
 	Item  *models.JobMatchChatItem
 	Reset bool
@@ -556,251 +563,257 @@ func (service *JobMatchChat) runTurn(jobID int64, requestID string, turn *jobMat
 }
 
 func (service *JobMatchChat) executeTurn(ctx context.Context, jobID int64, requestID string) error {
-	history, err := service.items.JobMatchChatItems(ctx, jobID, 0)
+	state, err := service.loadTurnState(ctx, jobID)
 	if err != nil {
-		return fmt.Errorf("load turn history: %w", err)
-	}
-
-	current, err := latestResumeRevision(history)
-	if err != nil {
-		return fmt.Errorf("load current application resume revision: %w", err)
-	}
-
-	baseResume, err := service.resumes.Resume(ctx)
-	if err != nil {
-		return fmt.Errorf("load base resume for chat: %w", err)
-	}
-
-	if baseResume == nil {
-		return ErrResumeNotFound
-	}
-
-	coverLetter, err := latestCoverLetterRevision(history)
-	if errors.Is(err, ErrApplicationCoverLetterNotFound) {
-		coverLetter = coverLetterRevisionPayload{}
-	} else if err != nil {
-		return fmt.Errorf("load current application cover letter revision: %w", err)
+		return err
 	}
 
 	sessionID := newLLMSessionID()
 	patchAttempts := 0
 	for {
-		if err := ctx.Err(); err != nil {
-			service.recordTerminal(ctx, jobID, requestID, "turn_stopped", "turn stopped by cancellation")
-			service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
-			return nil //nolint:nilerr // cancellation is a successful terminal chat state.
+		if service.turnStopped(ctx, jobID, requestID) {
+			return nil
 		}
 
-		request, err := providerRequest(history, service.reasoning, baseResume.Country)
+		request, err := providerRequest(state.history, service.reasoning, state.country)
 		if err != nil {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("assemble provider request: %w", err))
 		}
 
-		if _, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "provider_request", RequestID: requestID, Payload: payload(map[string]any{"model": service.model, "reasoningEffort": service.reasoning, "messageCount": len(request.Messages)})}); err != nil {
-			return fmt.Errorf("record provider request: %w", err)
-		}
-
-		response, err := service.client.Complete(ctx, service.model, sessionID, request)
+		response, stopped, err := service.requestTurn(ctx, jobID, requestID, sessionID, request)
 		if err != nil {
-			if ctx.Err() != nil {
-				service.recordTerminal(ctx, jobID, requestID, "turn_stopped", "turn stopped by cancellation")
-				service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
-				return nil //nolint:nilerr // cancellation is a successful terminal chat state.
-			}
-
-			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("complete job match chat: %w", err))
+			return err
 		}
 
-		responseItem, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "provider_response", RequestID: requestID, Payload: payload(map[string]any{"model": response.Model, "finishReason": response.FinishReason, "refusal": response.Refusal, "usage": rawJSON(response.Usage), "providerMetadata": rawJSON(response.ProviderMetadata)})})
-		if err != nil {
-			return fmt.Errorf("record provider response: %w", err)
+		if stopped {
+			return nil
 		}
 
-		history = append(history, responseItem)
-		if response.ReasoningSummary != "" || len(response.Reasoning) > 0 {
-			reasoning, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_reasoning", RequestID: requestID, Payload: payload(map[string]any{"summary": response.ReasoningSummary, "compatibility": rawJSON(response.Reasoning)})})
-			if err != nil {
-				return fmt.Errorf("record assistant reasoning: %w", err)
-			}
-
-			history = append(history, reasoning)
+		if err := service.recordProviderResponse(ctx, jobID, requestID, response, &state.history); err != nil {
+			return err
 		}
 
 		if len(response.ToolCalls) == 0 {
-			content := strings.TrimSpace(response.Content)
-			if content == "" {
-				return service.recordFailure(ctx, jobID, requestID, errors.New("provider returned no assistant message"))
-			}
-
-			_, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_message", RequestID: requestID, Payload: payload(map[string]string{"content": content})})
-			if err != nil {
-				return fmt.Errorf("record assistant message: %w", err)
-			}
-
-			service.recordTerminal(ctx, jobID, requestID, "turn_completed", "assistant reply completed")
-			return nil
+			return service.finishTurn(ctx, jobID, requestID, response.Content)
 		}
 
 		if len(response.ToolCalls) != 1 {
 			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("provider returned %d tool calls; exactly one is supported", len(response.ToolCalls)))
 		}
 
-		toolCall := response.ToolCalls[0]
-		toolItem, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_tool_call", RequestID: requestID, Payload: payload(toolCall)})
-		if err != nil {
-			return fmt.Errorf("record assistant tool call: %w", err)
-		}
-
-		history = append(history, toolItem)
 		patchAttempts++
-		service.logger.Info("job match resume patch received",
-			zap.Int64("job_id", jobID),
-			zap.String("request_id", requestID),
-			zap.Int("attempt", patchAttempts),
-			zap.String("tool_call_id", toolCall.ID),
-			zap.String("tool_type", toolCall.Type),
-			zap.String("tool_name", toolCall.Function.Name),
-			zap.Int("arguments_bytes", len(toolCall.Function.Arguments)),
-		)
-		if toolCall.Type != "function" {
-			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
-		}
-
-		if toolCall.Function.Name == createCoverLetterTool.Function.Name || toolCall.Function.Name == reviseCoverLetterTool.Function.Name {
-			updated, err := applyCoverLetterToolCall(toolCall.Function.Name, toolCall.Function.Arguments, coverLetter)
-			if err != nil {
-				service.logger.Warn("job match cover letter revision rejected",
-					zap.Int64("job_id", jobID),
-					zap.String("request_id", requestID),
-					zap.Int("attempt", patchAttempts),
-					zap.String("tool_call_id", toolCall.ID),
-					zap.String("tool_name", toolCall.Function.Name),
-					zap.Int("current_revision", coverLetter.Revision),
-					zap.Error(err),
-				)
-				result, resultErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "rejected", Error: err.Error()})})
-				if resultErr != nil {
-					return fmt.Errorf("record rejected cover letter tool result: %w", resultErr)
-				}
-
-				history = append(history, result)
-				if patchAttempts >= resumePatchAttempts {
-					service.recordTerminal(ctx, jobID, requestID, "retry_limit_reached", "no document changes were made after three rejected revisions")
-					service.recordTerminal(ctx, jobID, requestID, "turn_halted", "document revision retry limit reached")
-					return nil
-				}
-
-				retry, retryErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "patch_retrying", RequestID: requestID, Payload: payload(map[string]any{"attempt": patchAttempts, "detail": "cover letter revision rejected; request a corrected revision"})})
-				if retryErr != nil {
-					return fmt.Errorf("record cover letter revision retry: %w", retryErr)
-				}
-
-				history = append(history, retry)
-				continue
-			}
-
-			service.logger.Info("job match cover letter revision accepted",
-				zap.Int64("job_id", jobID),
-				zap.String("request_id", requestID),
-				zap.Int("attempt", patchAttempts),
-				zap.String("tool_call_id", toolCall.ID),
-				zap.String("tool_name", toolCall.Function.Name),
-				zap.Int("revision", updated.Revision),
-			)
-			result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: updated.Revision, CoverLetter: &updated})})
-			if err != nil {
-				return fmt.Errorf("record accepted cover letter tool result: %w", err)
-			}
-
-			history = append(history, result)
-			coverLetter = updated
-			continue
-		}
-
-		if toolCall.Function.Name != resumePatchTool.Function.Name {
-			return service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
-		}
-
-		var patch resumePatch
-		err = json.Unmarshal([]byte(toolCall.Function.Arguments), &patch)
-		if err == nil && patch.BaseRevision != current.Revision {
-			err = fmt.Errorf("patch was based on revision %d, but the current revision is %d", patch.BaseRevision, current.Revision)
-		}
-
-		updated := cloneResume(current.Resume)
-		if err == nil {
-			err = applyResumePatch(&updated, patch)
-		}
-
+		continueTurn, err := service.handleToolCall(ctx, jobID, requestID, response.ToolCalls[0], &state, patchAttempts)
 		if err != nil {
-			summaryIDs, skillIDs, experienceIDs, educationIDs := resumePatchAvailableIDs(current.Resume)
-			service.logger.Warn("job match resume patch rejected",
-				zap.Int64("job_id", jobID),
-				zap.String("request_id", requestID),
-				zap.Int("attempt", patchAttempts),
-				zap.String("tool_call_id", toolCall.ID),
-				zap.Int("base_revision", patch.BaseRevision),
-				zap.Int("current_revision", current.Revision),
-				zap.Int("operation_count", len(patch.Operations)),
-				zap.Strings("operations", resumePatchOperationSummaries(patch.Operations)),
-				zap.Int64s("available_summary_ids", summaryIDs),
-				zap.Int64s("available_skill_ids", skillIDs),
-				zap.Int64s("available_experience_ids", experienceIDs),
-				zap.Int64s("available_education_ids", educationIDs),
-				zap.Error(err),
-			)
-			result, resultErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "rejected", Error: err.Error()})})
-			if resultErr != nil {
-				return fmt.Errorf("record rejected tool result: %w", resultErr)
-			}
-
-			history = append(history, result)
-			if patchAttempts >= resumePatchAttempts {
-				service.logger.Error("job match resume patch retries exhausted",
-					zap.Int64("job_id", jobID),
-					zap.String("request_id", requestID),
-					zap.Int("attempts", patchAttempts),
-					zap.Int("current_revision", current.Revision),
-					zap.String("last_error", err.Error()),
-				)
-				service.recordTerminal(ctx, jobID, requestID, "retry_limit_reached", "no resume changes were made after three rejected patches")
-				service.recordTerminal(ctx, jobID, requestID, "turn_halted", "resume patch retry limit reached")
-				return nil
-			}
-
-			service.logger.Info("job match resume patch retrying",
-				zap.Int64("job_id", jobID),
-				zap.String("request_id", requestID),
-				zap.Int("rejected_attempt", patchAttempts),
-				zap.Int("next_attempt", patchAttempts+1),
-				zap.String("feedback_sent_to_model", err.Error()),
-			)
-			retry, retryErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "patch_retrying", RequestID: requestID, Payload: payload(map[string]any{"attempt": patchAttempts, "detail": "patch rejected; request a corrected patch"})})
-			if retryErr != nil {
-				return fmt.Errorf("record patch retry: %w", retryErr)
-			}
-
-			history = append(history, retry)
-			continue
+			return err
 		}
 
-		service.logger.Info("job match resume patch accepted",
-			zap.Int64("job_id", jobID),
-			zap.String("request_id", requestID),
-			zap.Int("attempt", patchAttempts),
-			zap.String("tool_call_id", toolCall.ID),
-			zap.Int("revision", current.Revision+1),
-			zap.Int("operation_count", len(patch.Operations)),
-			zap.Strings("operations", resumePatchOperationSummaries(patch.Operations)),
-		)
-		result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: current.Revision + 1, Resume: &updated})})
-		if err != nil {
-			return fmt.Errorf("record accepted tool result: %w", err)
+		if !continueTurn {
+			return nil
 		}
-
-		history = append(history, result)
-		current = resumeRevisionPayload{Revision: current.Revision + 1, Resume: updated}
 	}
+}
+
+func (service *JobMatchChat) handleToolCall(ctx context.Context, jobID int64, requestID string, toolCall openai.ToolCall, state *jobMatchTurnState, attempt int) (bool, error) {
+	toolItem, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_tool_call", RequestID: requestID, Payload: payload(toolCall)})
+	if err != nil {
+		return false, fmt.Errorf("record assistant tool call: %w", err)
+	}
+
+	state.history = append(state.history, toolItem)
+	service.logger.Info("job match resume patch received", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Int("attempt", attempt), zap.String("tool_call_id", toolCall.ID), zap.String("tool_type", toolCall.Type), zap.String("tool_name", toolCall.Function.Name), zap.Int("arguments_bytes", len(toolCall.Function.Arguments)))
+	if toolCall.Type != "function" {
+		return false, service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
+	}
+
+	if toolCall.Function.Name == createCoverLetterTool.Function.Name || toolCall.Function.Name == reviseCoverLetterTool.Function.Name {
+		return service.applyCoverLetterTool(ctx, jobID, requestID, toolCall, state, attempt)
+	}
+
+	if toolCall.Function.Name != resumePatchTool.Function.Name {
+		return false, service.recordFailure(ctx, jobID, requestID, fmt.Errorf("unexpected tool call %q", toolCall.Function.Name))
+	}
+
+	return service.applyResumeTool(ctx, jobID, requestID, toolCall, state, attempt)
+}
+
+func (service *JobMatchChat) loadTurnState(ctx context.Context, jobID int64) (jobMatchTurnState, error) {
+	history, err := service.items.JobMatchChatItems(ctx, jobID, 0)
+	if err != nil {
+		return jobMatchTurnState{}, fmt.Errorf("load turn history: %w", err)
+	}
+
+	current, err := latestResumeRevision(history)
+	if err != nil {
+		return jobMatchTurnState{}, fmt.Errorf("load current application resume revision: %w", err)
+	}
+
+	baseResume, err := service.resumes.Resume(ctx)
+	if err != nil {
+		return jobMatchTurnState{}, fmt.Errorf("load base resume for chat: %w", err)
+	}
+
+	if baseResume == nil {
+		return jobMatchTurnState{}, ErrResumeNotFound
+	}
+
+	coverLetter, err := latestCoverLetterRevision(history)
+	if errors.Is(err, ErrApplicationCoverLetterNotFound) {
+		coverLetter = coverLetterRevisionPayload{}
+	} else if err != nil {
+		return jobMatchTurnState{}, fmt.Errorf("load current application cover letter revision: %w", err)
+	}
+
+	return jobMatchTurnState{history: history, current: current, coverLetter: coverLetter, country: baseResume.Country}, nil
+}
+
+func (service *JobMatchChat) turnStopped(ctx context.Context, jobID int64, requestID string) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+
+	service.recordTerminal(ctx, jobID, requestID, "turn_stopped", "turn stopped by cancellation")
+	service.logger.Info("job match chat turn stopped", zap.Int64("job_id", jobID), zap.String("request_id", requestID))
+	return true
+}
+
+func (service *JobMatchChat) requestTurn(ctx context.Context, jobID int64, requestID, sessionID string, request openai.ChatRequest) (openai.ChatResponse, bool, error) {
+	if _, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "provider_request", RequestID: requestID, Payload: payload(map[string]any{"model": service.model, "reasoningEffort": service.reasoning, "messageCount": len(request.Messages)})}); err != nil {
+		return openai.ChatResponse{}, false, fmt.Errorf("record provider request: %w", err)
+	}
+
+	response, err := service.client.Complete(ctx, service.model, sessionID, request)
+	if err == nil {
+		return response, false, nil
+	}
+
+	if service.turnStopped(ctx, jobID, requestID) {
+		return openai.ChatResponse{}, true, nil
+	}
+
+	return openai.ChatResponse{}, false, service.recordFailure(ctx, jobID, requestID, fmt.Errorf("complete job match chat: %w", err))
+}
+
+func (service *JobMatchChat) recordProviderResponse(ctx context.Context, jobID int64, requestID string, response openai.ChatResponse, history *[]models.JobMatchChatItem) error {
+	responseItem, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "provider_response", RequestID: requestID, Payload: payload(map[string]any{"model": response.Model, "finishReason": response.FinishReason, "refusal": response.Refusal, "usage": rawJSON(response.Usage), "providerMetadata": rawJSON(response.ProviderMetadata)})})
+	if err != nil {
+		return fmt.Errorf("record provider response: %w", err)
+	}
+
+	*history = append(*history, responseItem)
+	if response.ReasoningSummary == "" && len(response.Reasoning) == 0 {
+		return nil
+	}
+
+	reasoning, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_reasoning", RequestID: requestID, Payload: payload(map[string]any{"summary": response.ReasoningSummary, "compatibility": rawJSON(response.Reasoning)})})
+	if err != nil {
+		return fmt.Errorf("record assistant reasoning: %w", err)
+	}
+
+	*history = append(*history, reasoning)
+	return nil
+}
+
+func (service *JobMatchChat) finishTurn(ctx context.Context, jobID int64, requestID, content string) error {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return service.recordFailure(ctx, jobID, requestID, errors.New("provider returned no assistant message"))
+	}
+
+	if _, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "assistant_message", RequestID: requestID, Payload: payload(map[string]string{"content": content})}); err != nil {
+		return fmt.Errorf("record assistant message: %w", err)
+	}
+
+	service.recordTerminal(ctx, jobID, requestID, "turn_completed", "assistant reply completed")
+	return nil
+}
+
+func (service *JobMatchChat) applyCoverLetterTool(ctx context.Context, jobID int64, requestID string, toolCall openai.ToolCall, state *jobMatchTurnState, attempt int) (bool, error) {
+	updated, err := applyCoverLetterToolCall(toolCall.Function.Name, toolCall.Function.Arguments, state.coverLetter)
+	if err != nil {
+		service.logger.Warn("job match cover letter revision rejected", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Int("attempt", attempt), zap.String("tool_call_id", toolCall.ID), zap.String("tool_name", toolCall.Function.Name), zap.Int("current_revision", state.coverLetter.Revision), zap.Error(err))
+		result, resultErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "rejected", Error: err.Error()})})
+		if resultErr != nil {
+			return false, fmt.Errorf("record rejected cover letter tool result: %w", resultErr)
+		}
+
+		state.history = append(state.history, result)
+		if attempt >= resumePatchAttempts {
+			service.recordTerminal(ctx, jobID, requestID, "retry_limit_reached", "no document changes were made after three rejected revisions")
+			service.recordTerminal(ctx, jobID, requestID, "turn_halted", "document revision retry limit reached")
+			return false, nil
+		}
+
+		retry, retryErr := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "patch_retrying", RequestID: requestID, Payload: payload(map[string]any{"attempt": attempt, "detail": "cover letter revision rejected; request a corrected revision"})})
+		if retryErr != nil {
+			return false, fmt.Errorf("record cover letter revision retry: %w", retryErr)
+		}
+
+		state.history = append(state.history, retry)
+		return true, nil
+	}
+
+	service.logger.Info("job match cover letter revision accepted", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Int("attempt", attempt), zap.String("tool_call_id", toolCall.ID), zap.String("tool_name", toolCall.Function.Name), zap.Int("revision", updated.Revision))
+	result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: updated.Revision, CoverLetter: &updated})})
+	if err != nil {
+		return false, fmt.Errorf("record accepted cover letter tool result: %w", err)
+	}
+
+	state.history = append(state.history, result)
+	state.coverLetter = updated
+	return true, nil
+}
+
+func (service *JobMatchChat) applyResumeTool(ctx context.Context, jobID int64, requestID string, toolCall openai.ToolCall, state *jobMatchTurnState, attempt int) (bool, error) {
+	var patch resumePatch
+	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &patch)
+	if err == nil && patch.BaseRevision != state.current.Revision {
+		err = fmt.Errorf("patch was based on revision %d, but the current revision is %d", patch.BaseRevision, state.current.Revision)
+	}
+
+	updated := cloneResume(state.current.Resume)
+	if err == nil {
+		err = applyResumePatch(&updated, patch)
+	}
+
+	if err != nil {
+		return service.rejectResumeTool(ctx, jobID, requestID, toolCall, state, attempt, patch, err)
+	}
+
+	service.logger.Info("job match resume patch accepted", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Int("attempt", attempt), zap.String("tool_call_id", toolCall.ID), zap.Int("revision", state.current.Revision+1), zap.Int("operation_count", len(patch.Operations)), zap.Strings("operations", resumePatchOperationSummaries(patch.Operations)))
+	result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "accepted", Revision: state.current.Revision + 1, Resume: &updated})})
+	if err != nil {
+		return false, fmt.Errorf("record accepted tool result: %w", err)
+	}
+
+	state.history = append(state.history, result)
+	state.current = resumeRevisionPayload{Revision: state.current.Revision + 1, Resume: updated}
+	return true, nil
+}
+
+func (service *JobMatchChat) rejectResumeTool(ctx context.Context, jobID int64, requestID string, toolCall openai.ToolCall, state *jobMatchTurnState, attempt int, patch resumePatch, patchErr error) (bool, error) {
+	summaryIDs, skillIDs, experienceIDs, educationIDs := resumePatchAvailableIDs(state.current.Resume)
+	service.logger.Warn("job match resume patch rejected", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Int("attempt", attempt), zap.String("tool_call_id", toolCall.ID), zap.Int("base_revision", patch.BaseRevision), zap.Int("current_revision", state.current.Revision), zap.Int("operation_count", len(patch.Operations)), zap.Strings("operations", resumePatchOperationSummaries(patch.Operations)), zap.Int64s("available_summary_ids", summaryIDs), zap.Int64s("available_skill_ids", skillIDs), zap.Int64s("available_experience_ids", experienceIDs), zap.Int64s("available_education_ids", educationIDs), zap.Error(patchErr))
+	result, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "tool_result", RequestID: requestID, Payload: payload(toolResultPayload{ToolCallID: toolCall.ID, Status: "rejected", Error: patchErr.Error()})})
+	if err != nil {
+		return false, fmt.Errorf("record rejected tool result: %w", err)
+	}
+
+	state.history = append(state.history, result)
+	if attempt >= resumePatchAttempts {
+		service.logger.Error("job match resume patch retries exhausted", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Int("attempts", attempt), zap.Int("current_revision", state.current.Revision), zap.String("last_error", patchErr.Error()))
+		service.recordTerminal(ctx, jobID, requestID, "retry_limit_reached", "no resume changes were made after three rejected patches")
+		service.recordTerminal(ctx, jobID, requestID, "turn_halted", "resume patch retry limit reached")
+		return false, nil
+	}
+
+	service.logger.Info("job match resume patch retrying", zap.Int64("job_id", jobID), zap.String("request_id", requestID), zap.Int("rejected_attempt", attempt), zap.Int("next_attempt", attempt+1), zap.String("feedback_sent_to_model", patchErr.Error()))
+	retry, err := service.append(ctx, models.JobMatchChatItem{JobID: jobID, Type: "patch_retrying", RequestID: requestID, Payload: payload(map[string]any{"attempt": attempt, "detail": "patch rejected; request a corrected patch"})})
+	if err != nil {
+		return false, fmt.Errorf("record patch retry: %w", err)
+	}
+
+	state.history = append(state.history, retry)
+	return true, nil
 }
 
 func providerRequest(items []models.JobMatchChatItem, reasoning, country string) (openai.ChatRequest, error) {
@@ -811,75 +824,116 @@ func providerRequest(items []models.JobMatchChatItem, reasoning, country string)
 	}
 
 	for _, item := range items {
-		switch item.Type {
-		case "initial_instructions":
-			var value struct {
-				Content string `json:"content"`
-			}
-			if err := json.Unmarshal(item.Payload, &value); err != nil {
-				return request, err
-			}
+		message, ok, err := providerMessage(item, country)
+		if err != nil {
+			return request, err
+		}
 
-			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: value.Content})
-		case "initial_context":
-			content, err := redactedInitialContext(item.Payload)
-			if err != nil {
-				return request, err
-			}
-
-			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Immutable application context:\n" + content})
-		case "resume_revision":
-			content, err := redactedResumeRevision(item.Payload, country)
-			if err != nil {
-				return request, err
-			}
-
-			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: "Application resume revision 0:\n" + content})
-		case "tool_result":
-			var result toolResultPayload
-			if err := json.Unmarshal(item.Payload, &result); err != nil {
-				return request, err
-			}
-
-			content, err := redactedToolResult(item.Payload, country)
-			if err != nil {
-				return request, err
-			}
-
-			request.Messages = append(request.Messages, openai.Message{Role: "tool", ToolCallID: result.ToolCallID, Content: content})
-		case "cover_letter_revision":
-			var revision coverLetterRevisionPayload
-			if err := json.Unmarshal(item.Payload, &revision); err != nil {
-				return request, err
-			}
-
-			request.Messages = append(request.Messages, openai.Message{Role: "system", Content: fmt.Sprintf("Application cover letter revision %d:\n%s", revision.Revision, revision.Content)})
-		case "user_message", "assistant_message":
-			var value struct {
-				Content string `json:"content"`
-			}
-			if err := json.Unmarshal(item.Payload, &value); err != nil {
-				return request, err
-			}
-
-			role := "user"
-			if item.Type == "assistant_message" {
-				role = "assistant"
-			}
-
-			request.Messages = append(request.Messages, openai.Message{Role: role, Content: value.Content})
-		case "assistant_tool_call":
-			var call openai.ToolCall
-			if err := json.Unmarshal(item.Payload, &call); err != nil {
-				return request, err
-			}
-
-			request.Messages = append(request.Messages, openai.Message{Role: "assistant", ToolCalls: []openai.ToolCall{call}})
+		if ok {
+			request.Messages = append(request.Messages, message)
 		}
 	}
 
 	redactProviderRequest(&request, redactions)
 	return request, nil
+}
+
+func providerMessage(item models.JobMatchChatItem, country string) (openai.Message, bool, error) {
+	switch item.Type {
+	case "initial_instructions":
+		return initialInstructionsMessage(item)
+	case "initial_context":
+		return initialContextMessage(item)
+	case "resume_revision":
+		return resumeRevisionMessage(item, country)
+	case "tool_result":
+		return toolResultMessage(item, country)
+	case "cover_letter_revision":
+		return coverLetterRevisionMessage(item)
+	case "user_message", "assistant_message":
+		return chatMessage(item)
+	case "assistant_tool_call":
+		return assistantToolCallMessage(item)
+	default:
+		return openai.Message{}, false, nil
+	}
+}
+
+func initialInstructionsMessage(item models.JobMatchChatItem) (openai.Message, bool, error) {
+	var value struct {
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(item.Payload, &value); err != nil {
+		return openai.Message{}, false, err
+	}
+
+	return openai.Message{Role: "system", Content: value.Content}, true, nil
+}
+
+func initialContextMessage(item models.JobMatchChatItem) (openai.Message, bool, error) {
+	content, err := redactedInitialContext(item.Payload)
+	if err != nil {
+		return openai.Message{}, false, err
+	}
+
+	return openai.Message{Role: "system", Content: "Immutable application context:\n" + content}, true, nil
+}
+
+func resumeRevisionMessage(item models.JobMatchChatItem, country string) (openai.Message, bool, error) {
+	content, err := redactedResumeRevision(item.Payload, country)
+	if err != nil {
+		return openai.Message{}, false, err
+	}
+
+	return openai.Message{Role: "system", Content: "Application resume revision 0:\n" + content}, true, nil
+}
+
+func toolResultMessage(item models.JobMatchChatItem, country string) (openai.Message, bool, error) {
+	var result toolResultPayload
+	if err := json.Unmarshal(item.Payload, &result); err != nil {
+		return openai.Message{}, false, err
+	}
+
+	content, err := redactedToolResult(item.Payload, country)
+	if err != nil {
+		return openai.Message{}, false, err
+	}
+
+	return openai.Message{Role: "tool", ToolCallID: result.ToolCallID, Content: content}, true, nil
+}
+
+func coverLetterRevisionMessage(item models.JobMatchChatItem) (openai.Message, bool, error) {
+	var revision coverLetterRevisionPayload
+	if err := json.Unmarshal(item.Payload, &revision); err != nil {
+		return openai.Message{}, false, err
+	}
+
+	return openai.Message{Role: "system", Content: fmt.Sprintf("Application cover letter revision %d:\n%s", revision.Revision, revision.Content)}, true, nil
+}
+
+func chatMessage(item models.JobMatchChatItem) (openai.Message, bool, error) {
+	var value struct {
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(item.Payload, &value); err != nil {
+		return openai.Message{}, false, err
+	}
+
+	role := "user"
+	if item.Type == "assistant_message" {
+		role = "assistant"
+	}
+
+	return openai.Message{Role: role, Content: value.Content}, true, nil
+}
+
+func assistantToolCallMessage(item models.JobMatchChatItem) (openai.Message, bool, error) {
+	var call openai.ToolCall
+	if err := json.Unmarshal(item.Payload, &call); err != nil {
+		return openai.Message{}, false, err
+	}
+
+	return openai.Message{Role: "assistant", ToolCalls: []openai.ToolCall{call}}, true, nil
 }
 
 func chatRedactionValues(items []models.JobMatchChatItem) ([]string, error) {

@@ -75,6 +75,17 @@ func TestCustomJobPageFromHTMLRendersReadableMarkdown(t *testing.T) {
 	assert.Equal(t, "# Platform Engineer\n\nBuild reliable systems.\n\n- Go\n\n- [Learn more](https://careers.example.com/about)", page.Markdown)
 }
 
+func TestCustomJobPageFromHTMLHandlesBreaksAndInvalidLinks(t *testing.T) {
+	baseURL, err := url.Parse("https://careers.example.com/jobs/platform-engineer")
+	require.NoError(t, err)
+
+	page, err := customJobPageFromHTML(`<main>First<br>Second<a href="%zz">broken link</a><a href=""> </a><svg>ignored</svg><footer>ignored</footer></main>`, baseURL)
+
+	require.NoError(t, err)
+	assert.Equal(t, "First\nSecond broken link", page.Markdown)
+	assert.NotContains(t, page.Markdown, "ignored")
+}
+
 func TestValidateCustomJobFieldsRejectsInvalidDates(t *testing.T) {
 	err := validateCustomJobFields(&customJobFields{Workplace: "remote", PostedAt: "2026-09-08"})
 	assert.ErrorContains(t, err, "posted date must use RFC3339")

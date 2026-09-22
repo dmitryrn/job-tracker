@@ -27,6 +27,15 @@ func (service *DiscoverySettingsService) Settings(ctx context.Context) (models.D
 }
 
 func (service *DiscoverySettingsService) Save(ctx context.Context, settings models.DiscoverySettings) (models.DiscoverySettings, error) {
+	settings = normalizeDiscoverySettings(settings)
+	if !discoverySettingsValid(settings) {
+		return models.DiscoverySettings{}, fmt.Errorf("%w: check required fields and numeric limits", ErrInvalidDiscoverySettings)
+	}
+
+	return service.repository.SaveDiscoverySettings(ctx, settings)
+}
+
+func normalizeDiscoverySettings(settings models.DiscoverySettings) models.DiscoverySettings {
 	settings.Adzuna.Query = strings.TrimSpace(settings.Adzuna.Query)
 	settings.Adzuna.Country = strings.TrimSpace(settings.Adzuna.Country)
 	settings.Adzuna.Workplace = strings.TrimSpace(settings.Adzuna.Workplace)
@@ -40,12 +49,29 @@ func (service *DiscoverySettingsService) Save(ctx context.Context, settings mode
 	settings.LinkedIn.PostedWithin = strings.TrimSpace(settings.LinkedIn.PostedWithin)
 	settings.LinkedIn.Workplace = strings.TrimSpace(settings.LinkedIn.Workplace)
 	settings.LinkedIn.ExperienceLevel = strings.TrimSpace(settings.LinkedIn.ExperienceLevel)
+	return settings
+}
 
-	if settings.Adzuna.Query == "" || settings.Adzuna.Country == "" || settings.Adzuna.MaxDaysOld < 1 || settings.Adzuna.MaxPages < 1 || settings.Adzuna.ResultsPerPage < 1 || !validWorkplace(settings.Adzuna.Workplace) || settings.Remotive.Query == "" || settings.Remotive.Category == "" || settings.Jobicy.Count < 1 || settings.Jobicy.Count > 200 || settings.LinkedIn.Query == "" || settings.LinkedIn.Location == "" || settings.LinkedIn.Limit < 1 || settings.LinkedIn.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.LinkedIn.PostedWithin) || !validLinkedInWorkplace(settings.LinkedIn.Workplace) || !validLinkedInExperienceLevel(settings.LinkedIn.ExperienceLevel) {
-		return models.DiscoverySettings{}, fmt.Errorf("%w: check required fields and numeric limits", ErrInvalidDiscoverySettings)
-	}
+func discoverySettingsValid(settings models.DiscoverySettings) bool {
+	return validAdzunaSettings(settings) && validRemotiveSettings(settings) && validJobicySettings(settings) && validLinkedInSettings(settings)
+}
 
-	return service.repository.SaveDiscoverySettings(ctx, settings)
+func validAdzunaSettings(settings models.DiscoverySettings) bool {
+	value := settings.Adzuna
+	return value.Query != "" && value.Country != "" && value.MaxDaysOld >= 1 && value.MaxPages >= 1 && value.ResultsPerPage >= 1 && validWorkplace(value.Workplace)
+}
+
+func validRemotiveSettings(settings models.DiscoverySettings) bool {
+	return settings.Remotive.Query != "" && settings.Remotive.Category != ""
+}
+
+func validJobicySettings(settings models.DiscoverySettings) bool {
+	return settings.Jobicy.Count >= 1 && settings.Jobicy.Count <= 200
+}
+
+func validLinkedInSettings(settings models.DiscoverySettings) bool {
+	value := settings.LinkedIn
+	return value.Query != "" && value.Location != "" && value.Limit >= 1 && value.Limit <= maxLinkedInResults && validLinkedInPostedWithin(value.PostedWithin) && validLinkedInWorkplace(value.Workplace) && validLinkedInExperienceLevel(value.ExperienceLevel)
 }
 
 func validWorkplace(value string) bool {

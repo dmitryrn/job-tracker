@@ -330,33 +330,69 @@ func (renderer *markdownRenderer) render(node *html.Node) {
 		return
 	}
 
-	if node.Type != html.ElementNode && node.Type != html.DocumentNode {
+	if !renderableHTMLNode(node) {
 		return
 	}
 
 	name := strings.ToLower(node.Data)
-	switch name {
-	case "script", "style", "svg", "noscript", "template", "nav", "footer", "form":
+	if skippedHTMLNode(name) {
 		return
-	case "title", "head":
-		return
-	case "br":
+	}
+
+	if name == "br" {
 		renderer.output.WriteByte('\n')
 		return
-	case "a":
-		label := strings.TrimSpace(nodeText(node))
-		if label == "" {
-			return
-		}
+	}
 
-		href, err := url.Parse(attribute(node, "href"))
-		if err == nil && href.String() != "" {
-			renderer.text("[" + label + "](" + renderer.baseURL.ResolveReference(href).String() + ")")
-			return
-		}
-
-		renderer.text(label)
+	if name == "a" {
+		renderer.link(node)
 		return
+	}
+
+	renderer.renderElement(name, node)
+}
+
+func renderableHTMLNode(node *html.Node) bool {
+	return node.Type == html.ElementNode || node.Type == html.DocumentNode
+}
+
+func skippedHTMLNode(name string) bool {
+	switch name {
+	case "script", "style", "svg", "noscript", "template", "nav", "footer", "form", "title", "head":
+		return true
+	default:
+		return false
+	}
+}
+
+func (renderer *markdownRenderer) link(node *html.Node) {
+	label := strings.TrimSpace(nodeText(node))
+	if label == "" {
+		return
+	}
+
+	href, err := url.Parse(attribute(node, "href"))
+	if err == nil && href.String() != "" {
+		renderer.text("[" + label + "](" + renderer.baseURL.ResolveReference(href).String() + ")")
+		return
+	}
+
+	renderer.text(label)
+}
+
+func (renderer *markdownRenderer) renderElement(name string, node *html.Node) {
+	renderer.startElement(name)
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		renderer.render(child)
+	}
+
+	if blockHTMLNode(name) {
+		renderer.block()
+	}
+}
+
+func (renderer *markdownRenderer) startElement(name string) {
+	switch name {
 	case "h1", "h2", "h3", "h4", "h5", "h6":
 		renderer.block()
 		renderer.output.WriteString(strings.Repeat("#", int(name[1]-'0')) + " ")
@@ -366,14 +402,14 @@ func (renderer *markdownRenderer) render(node *html.Node) {
 	case "p", "div", "article", "section", "main", "header", "aside", "blockquote", "pre", "table", "tr":
 		renderer.block()
 	}
+}
 
-	for child := node.FirstChild; child != nil; child = child.NextSibling {
-		renderer.render(child)
-	}
-
+func blockHTMLNode(name string) bool {
 	switch name {
 	case "h1", "h2", "h3", "h4", "h5", "h6", "li", "p", "div", "article", "section", "main", "header", "aside", "blockquote", "pre", "table", "tr":
-		renderer.block()
+		return true
+	default:
+		return false
 	}
 }
 

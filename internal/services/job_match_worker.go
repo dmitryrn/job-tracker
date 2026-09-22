@@ -369,31 +369,9 @@ func (matches *JobMatches) Analysis(ctx context.Context, jobID int64) (*models.J
 }
 
 func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearch) (models.JobMatchPage, error) {
-	search.Sort = strings.TrimSpace(strings.ToLower(search.Sort))
-	if search.Sort == "" {
-		search.Sort = "created-desc"
-	}
-
-	if search.Sort != "created-desc" && search.Sort != "created-asc" && search.Sort != "score-desc" && search.Sort != "score-asc" && search.Sort != "profile-score-desc" && search.Sort != "profile-score-asc" {
-		return models.JobMatchPage{}, ErrInvalidJobMatchSort
-	}
-
-	search.Viewed = strings.TrimSpace(strings.ToLower(search.Viewed))
-	if search.Viewed == "" {
-		search.Viewed = "all"
-	}
-
-	if search.Viewed != "all" && search.Viewed != "seen" && search.Viewed != "unseen" {
-		return models.JobMatchPage{}, ErrInvalidJobMatchViewed
-	}
-
-	search.Applied = strings.TrimSpace(strings.ToLower(search.Applied))
-	if search.Applied == "" {
-		search.Applied = "all"
-	}
-
-	if search.Applied != "all" && search.Applied != "applied" && search.Applied != "not-applied" {
-		return models.JobMatchPage{}, ErrInvalidJobMatchApplied
+	search, err := normalizeJobMatchSearch(search)
+	if err != nil {
+		return models.JobMatchPage{}, err
 	}
 
 	return matches.matches.JobMatches(ctx, search)
@@ -401,6 +379,54 @@ func (matches *JobMatches) List(ctx context.Context, search models.JobMatchSearc
 
 func NewJobMatchRequests(jobs repositories.JobRepository, queue repositories.MatchQueueRepository, worker *JobMatchWorker) *JobMatchRequests {
 	return &JobMatchRequests{jobs: jobs, queue: queue, worker: worker}
+}
+
+func normalizeJobMatchSearch(search models.JobMatchSearch) (models.JobMatchSearch, error) {
+	search.Sort = strings.TrimSpace(strings.ToLower(search.Sort))
+	if search.Sort == "" {
+		search.Sort = "created-desc"
+	}
+
+	if !validJobMatchSort(search.Sort) {
+		return models.JobMatchSearch{}, ErrInvalidJobMatchSort
+	}
+
+	search.Viewed = strings.TrimSpace(strings.ToLower(search.Viewed))
+	if search.Viewed == "" {
+		search.Viewed = "all"
+	}
+
+	if !validJobMatchViewed(search.Viewed) {
+		return models.JobMatchSearch{}, ErrInvalidJobMatchViewed
+	}
+
+	search.Applied = strings.TrimSpace(strings.ToLower(search.Applied))
+	if search.Applied == "" {
+		search.Applied = "all"
+	}
+
+	if !validJobMatchApplied(search.Applied) {
+		return models.JobMatchSearch{}, ErrInvalidJobMatchApplied
+	}
+
+	return search, nil
+}
+
+func validJobMatchSort(value string) bool {
+	switch value {
+	case "created-desc", "created-asc", "score-desc", "score-asc", "profile-score-desc", "profile-score-asc":
+		return true
+	default:
+		return false
+	}
+}
+
+func validJobMatchViewed(value string) bool {
+	return value == "all" || value == "seen" || value == "unseen"
+}
+
+func validJobMatchApplied(value string) bool {
+	return value == "all" || value == "applied" || value == "not-applied"
 }
 
 func jobMatchRunInterval(worked bool, err error, runInterval time.Duration) (time.Duration, bool) {
