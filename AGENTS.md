@@ -25,6 +25,7 @@ changing a unit definition. Read recent service logs with
 `journalctl --user-unit=jobs-ui.service -n 30 --no-pager`.
 
 # Rules
+- frontend breakpoints: 640px (large phones / small tablets), 768px (tablet), 1024px (laptop / desktop), and 1280px (large desktop)
 - don't hallucinate lib versions when adding
 - handlers should log all errors, including service errors
 - worker execution paths should log all outcomes, including early returns, successes, and errors, with relevant IDs and context

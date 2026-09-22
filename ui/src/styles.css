@@ -476,7 +476,7 @@ tr:hover td { background: #fffbed; }
 .state { align-items: center; color: #d8e1ee; display: flex; justify-content: center; min-height: 100vh; }
 .state.error { color: #ff9e8c; padding: 24px; text-align: center; }
 
-@media (max-width: 700px) {
+@media (max-width: 767px) {
   .shell { display: block; }
   .sidebar { border-bottom: 1px solid #2e4059; border-right: 0; padding: 18px; }
   .app-header { align-items: start; flex-direction: column; gap: 16px; padding: 18px; }
@@ -523,7 +523,12 @@ tr:hover td { background: #fffbed; }
   .value-dialog pre { font-size: 13px; padding: 16px; }
 }
 
-@media (min-width: 701px) {
+@media (min-width: 768px) and (max-width: 1023px) {
+  .browse-search { grid-template-columns: auto minmax(0, 1fr) auto minmax(160px, .75fr); }
+  .browse-search input { grid-column: 2 / -1; }
+}
+
+@media (min-width: 768px) {
   .job-page-header-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto auto; justify-content: initial; }
   .job-primary-actions { display: contents; }
   .job-primary-actions .primary-action { grid-column: 1 / -1; grid-row: 1; justify-self: start; }
