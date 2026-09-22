@@ -237,6 +237,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
                   <strong>{match.job.title}</strong>
                   <span className="match-job-meta">
                     <span>{match.job.company || "Company not listed"}</span>
+                    <span className="match-location">{match.job.location || "Location flexible"}</span>
                     {postedDate && <span className="match-posted">{postedDate}</span>}
                     {lastViewed ? (
                       <time className="match-viewed" dateTime={match.job.lastViewedAt} title={match.job.lastViewedAt}>

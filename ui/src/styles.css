@@ -431,6 +431,7 @@ button { cursor: pointer; }
 .match-job strong { font-size: 16px; }
 .match-job span { color: #65758a; font-size: 13px; }
 .match-job .match-job-meta { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.match-job .match-location { color: #496178; }
 .match-job .match-posted { color: #8996a5; font-size: 11px; }
 .match-job .match-viewed { color: #a26d20; font-size: 11px; }
 .match-topline { align-items: center; display: flex; gap: 9px; justify-content: space-between; }
