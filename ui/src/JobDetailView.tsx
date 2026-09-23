@@ -674,10 +674,12 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
          <button className={tab === "match" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("match")}>Match</button>
          <button className={tab === "chat" ? "detail-tab active" : "detail-tab"} onClick={() => onTabChange("chat")}>Chat</button>
        </nav>
-        <div className="application-document-prompts">
-          <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={tailorResume}>Tailor my resume for this application</button>
-          <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={createCoverLetter}>Create a cover letter for this application</button>
-        </div>
+        {tab === "chat" && (
+          <div className="application-document-prompts">
+            <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={tailorResume}>Tailor my resume for this application</button>
+            <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={createCoverLetter}>Create a cover letter for this application</button>
+          </div>
+        )}
        {error && <p className="query-error">{error}</p>}
        {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} promptRequest={chatPromptRequest} onPromptHandled={(id) => setChatPromptRequest((current) => current?.id === id ? undefined : current)} /> : (
         <>
