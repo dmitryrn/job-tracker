@@ -44,11 +44,28 @@ func normalizeDiscoverySettings(settings models.DiscoverySettings) models.Discov
 	settings.Jobicy.Geo = strings.TrimSpace(settings.Jobicy.Geo)
 	settings.Jobicy.Industry = strings.TrimSpace(settings.Jobicy.Industry)
 	settings.Jobicy.Tag = strings.TrimSpace(settings.Jobicy.Tag)
-	settings.LinkedIn.Query = strings.TrimSpace(settings.LinkedIn.Query)
-	settings.LinkedIn.Location = strings.TrimSpace(settings.LinkedIn.Location)
-	settings.LinkedIn.PostedWithin = strings.TrimSpace(settings.LinkedIn.PostedWithin)
-	settings.LinkedIn.Workplace = strings.TrimSpace(settings.LinkedIn.Workplace)
-	settings.LinkedIn.ExperienceLevel = strings.TrimSpace(settings.LinkedIn.ExperienceLevel)
+	nextID := int64(1)
+	for index := range settings.LinkedIn {
+		search := &settings.LinkedIn[index]
+		search.Name = strings.TrimSpace(search.Name)
+		search.Query = strings.TrimSpace(search.Query)
+		search.Location = strings.TrimSpace(search.Location)
+		search.PostedWithin = strings.TrimSpace(search.PostedWithin)
+		search.Workplace = strings.TrimSpace(search.Workplace)
+		search.ExperienceLevel = strings.TrimSpace(search.ExperienceLevel)
+		search.SortOrder = index + 1
+		if search.ID >= nextID {
+			nextID = search.ID + 1
+		}
+	}
+
+	for index := range settings.LinkedIn {
+		if settings.LinkedIn[index].ID == 0 {
+			settings.LinkedIn[index].ID = nextID
+			nextID++
+		}
+	}
+
 	return settings
 }
 
@@ -70,8 +87,13 @@ func validJobicySettings(settings models.DiscoverySettings) bool {
 }
 
 func validLinkedInSettings(settings models.DiscoverySettings) bool {
-	value := settings.LinkedIn
-	return value.Query != "" && value.Location != "" && value.Limit >= 1 && value.Limit <= maxLinkedInResults && validLinkedInPostedWithin(value.PostedWithin) && validLinkedInWorkplace(value.Workplace) && validLinkedInExperienceLevel(value.ExperienceLevel)
+	for _, value := range settings.LinkedIn {
+		if value.Name == "" || value.Query == "" || value.Location == "" || value.Limit < 1 || value.Limit > maxLinkedInResults || !validLinkedInPostedWithin(value.PostedWithin) || !validLinkedInWorkplace(value.Workplace) || !validLinkedInExperienceLevel(value.ExperienceLevel) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func validWorkplace(value string) bool {

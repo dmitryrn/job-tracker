@@ -58,6 +58,10 @@ type linkedInFetcherRecorder struct {
 	calls int
 }
 
+type orderedLinkedInFetcher struct {
+	names []string
+}
+
 type eventRepositoryRecorder struct {
 	events          []models.Event
 	contextCanceled []bool
@@ -71,7 +75,7 @@ func TestJobSyncSkipsDisabledProviders(t *testing.T) {
 			Adzuna:   models.AdzunaSearchSettings{Enabled: false},
 			Remotive: models.RemotiveSearchSettings{Enabled: false},
 			Jobicy:   models.JobicySearchSettings{Enabled: false},
-			LinkedIn: models.LinkedInSearchSettings{Enabled: false},
+			LinkedIn: []models.LinkedInSearchSettings{{Enabled: false}},
 		}},
 		logger: zap.NewNop(),
 	}
@@ -108,7 +112,7 @@ func TestJobSyncRunsProvidersConcurrently(t *testing.T) {
 			Adzuna:   models.AdzunaSearchSettings{Enabled: true},
 			Remotive: models.RemotiveSearchSettings{Enabled: true},
 			Jobicy:   models.JobicySearchSettings{Enabled: true},
-			LinkedIn: models.LinkedInSearchSettings{Enabled: true},
+			LinkedIn: []models.LinkedInSearchSettings{{Enabled: true, Name: "LinkedIn"}},
 		}},
 		logger: zap.NewNop(),
 	}
@@ -150,7 +154,7 @@ func TestJobSyncRecordsPartialLinkedInResults(t *testing.T) {
 		logger:       zap.NewNop(),
 	}
 
-	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true}, false)
+	syncer.syncLinkedIn(context.Background(), []models.LinkedInSearchSettings{{Enabled: true, Name: "Europe", ID: 1, Limit: 25}}, false)
 
 	require.Len(t, events.events, 3)
 	assert.Equal(t, "linkedin.ip_info.resolved", events.events[0].Type)
@@ -159,6 +163,24 @@ func TestJobSyncRecordsPartialLinkedInResults(t *testing.T) {
 	assert.Equal(t, "provider.run.finished", events.events[2].Type)
 	assert.Equal(t, events.events[1].RunID, events.events[2].RunID)
 	assert.Equal(t, 1, events.events[2].Data["savedJobs"])
+}
+
+func TestJobSyncRunsEnabledLinkedInSearchesInOrderAfterAnError(t *testing.T) {
+	fetcher := &orderedLinkedInFetcher{}
+	syncer := JobSync{
+		linkedin:     fetcher,
+		ipInfo:       ipInfoLookupStub{info: ipinfo.Info{Country: "DE"}},
+		providerRuns: &providerRunRecorder{},
+		events:       &eventRepositoryRecorder{},
+		logger:       zap.NewNop(),
+	}
+
+	syncer.syncLinkedIn(context.Background(), []models.LinkedInSearchSettings{
+		{ID: 1, Name: "Europe", Enabled: true, Limit: 25},
+		{ID: 2, Name: "Serbia", Enabled: true, Limit: 25},
+	}, false)
+
+	assert.Equal(t, []string{"Europe", "Serbia"}, fetcher.names)
 }
 
 func TestJobSyncFinalizesLinkedInEventsAfterCancellation(t *testing.T) {
@@ -185,7 +207,7 @@ func TestJobSyncBlocksLinkedInWhenEgressIsInSerbia(t *testing.T) {
 		logger:       zap.NewNop(),
 	}
 
-	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true}, false)
+	syncer.syncLinkedIn(context.Background(), []models.LinkedInSearchSettings{{Enabled: true, Name: "Europe", ID: 1, Limit: 25}}, false)
 
 	assert.Zero(t, fetcher.calls)
 	require.Len(t, events.events, 2)
@@ -205,7 +227,7 @@ func TestJobSyncBlocksLinkedInWhenIPInfoLookupFails(t *testing.T) {
 		logger:       zap.NewNop(),
 	}
 
-	syncer.syncLinkedIn(context.Background(), models.LinkedInSearchSettings{Enabled: true}, false)
+	syncer.syncLinkedIn(context.Background(), []models.LinkedInSearchSettings{{Enabled: true, Name: "Europe", ID: 1, Limit: 25}}, false)
 
 	assert.Zero(t, fetcher.calls)
 	require.Len(t, events.events, 1)
@@ -257,6 +279,15 @@ func (stub ipInfoLookupStub) Lookup(context.Context) (ipinfo.Info, error) {
 
 func (fetcher *linkedInFetcherRecorder) Sync(context.Context, models.LinkedInSearchSettings, string, time.Duration) (LinkedInFetchResult, error) {
 	fetcher.calls++
+	return LinkedInFetchResult{}, nil
+}
+
+func (fetcher *orderedLinkedInFetcher) Sync(_ context.Context, settings models.LinkedInSearchSettings, _ string, _ time.Duration) (LinkedInFetchResult, error) {
+	fetcher.names = append(fetcher.names, settings.Name)
+	if settings.Name == "Europe" {
+		return LinkedInFetchResult{}, errors.New("Europe failed")
+	}
+
 	return LinkedInFetchResult{}, nil
 }
 

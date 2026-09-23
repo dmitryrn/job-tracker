@@ -55,7 +55,7 @@ func TestProviderPreviewRejectsInvalidOrUnknownProvider(t *testing.T) {
 	_, err = service.Preview(context.Background(), "unknown", models.DiscoverySettings{})
 	require.ErrorIs(t, err, ErrUnknownDiscoveryProvider)
 
-	_, err = service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: models.LinkedInSearchSettings{Query: "engineer", Workplace: "remote", Limit: 25}})
+	_, err = service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: []models.LinkedInSearchSettings{{Name: "Europe", Query: "engineer", Workplace: "remote", Location: "Europe", Limit: 25}}})
 	require.ErrorIs(t, err, ErrInvalidDiscoverySettings)
 }
 
@@ -63,14 +63,15 @@ func TestProviderPreviewUsesLinkedInFilters(t *testing.T) {
 	linkedIn := &linkedInPreviewStub{jobs: []models.Job{{Title: "Platform engineer"}}}
 	service := ProviderPreviewService{linkedin: linkedIn, linkedInPreviewRequestInterval: 5 * time.Second}
 
-	jobs, err := service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: models.LinkedInSearchSettings{
+	jobs, err := service.Preview(context.Background(), "linkedin", models.DiscoverySettings{LinkedIn: []models.LinkedInSearchSettings{{
+		Name:            "Europe",
 		Query:           "  platform engineer ",
 		Location:        " Europe ",
 		PostedWithin:    " r604800 ",
 		Workplace:       " 2 ",
 		ExperienceLevel: " 4 ",
 		Limit:           1000,
-	}})
+	}}})
 
 	require.NoError(t, err)
 	assert.Equal(t, []models.Job{{Title: "Platform engineer"}}, jobs)

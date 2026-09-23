@@ -111,18 +111,28 @@ func (service *ProviderPreviewService) previewJobicy(ctx context.Context, settin
 	return emitPreviewJobs(jobs, err, onJob)
 }
 
-func (service *ProviderPreviewService) previewLinkedIn(ctx context.Context, settings models.LinkedInSearchSettings, onJob func(models.Job) error) error {
-	settings.Query = strings.TrimSpace(settings.Query)
-	settings.Location = strings.TrimSpace(settings.Location)
-	settings.PostedWithin = strings.TrimSpace(settings.PostedWithin)
-	settings.Workplace = strings.TrimSpace(settings.Workplace)
-	settings.ExperienceLevel = strings.TrimSpace(settings.ExperienceLevel)
-	if settings.Query == "" || settings.Location == "" || settings.Limit < 1 || settings.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.PostedWithin) || !validLinkedInWorkplace(settings.Workplace) || !validLinkedInExperienceLevel(settings.ExperienceLevel) {
-		return fmt.Errorf("%w: LinkedIn query is required and results must be between 1 and %d", ErrInvalidDiscoverySettings, maxLinkedInResults)
+func (service *ProviderPreviewService) previewLinkedIn(ctx context.Context, searches []models.LinkedInSearchSettings, onJob func(models.Job) error) error {
+	if len(searches) == 0 {
+		return fmt.Errorf("%w: at least one LinkedIn search is required", ErrInvalidDiscoverySettings)
 	}
 
-	_, err := service.linkedin.PreviewStream(ctx, settings, service.linkedInPreviewRequestInterval, onJob)
-	return err
+	for _, settings := range searches {
+		settings.Name = strings.TrimSpace(settings.Name)
+		settings.Query = strings.TrimSpace(settings.Query)
+		settings.Location = strings.TrimSpace(settings.Location)
+		settings.PostedWithin = strings.TrimSpace(settings.PostedWithin)
+		settings.Workplace = strings.TrimSpace(settings.Workplace)
+		settings.ExperienceLevel = strings.TrimSpace(settings.ExperienceLevel)
+		if settings.Name == "" || settings.Query == "" || settings.Location == "" || settings.Limit < 1 || settings.Limit > maxLinkedInResults || !validLinkedInPostedWithin(settings.PostedWithin) || !validLinkedInWorkplace(settings.Workplace) || !validLinkedInExperienceLevel(settings.ExperienceLevel) {
+			return fmt.Errorf("%w: LinkedIn search query is required and results must be between 1 and %d", ErrInvalidDiscoverySettings, maxLinkedInResults)
+		}
+
+		if _, err := service.linkedin.PreviewStream(ctx, settings, service.linkedInPreviewRequestInterval, onJob); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func emitPreviewJobs(jobs []models.Job, fetchErr error, onJob func(models.Job) error) error {

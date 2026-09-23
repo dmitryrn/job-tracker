@@ -21,21 +21,23 @@ func TestDiscoverySettingsPersistLinkedInFilters(t *testing.T) {
 	repository := NewSQLite(db)
 	settings, err := repository.DiscoverySettings(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "Europe", settings.LinkedIn.Location)
-	assert.Empty(t, settings.LinkedIn.PostedWithin)
-	assert.Empty(t, settings.LinkedIn.Workplace)
-	assert.Empty(t, settings.LinkedIn.ExperienceLevel)
+	require.Len(t, settings.LinkedIn, 2)
+	assert.Equal(t, "Europe", settings.LinkedIn[0].Location)
+	assert.Equal(t, "Serbia", settings.LinkedIn[1].Location)
+	assert.Empty(t, settings.LinkedIn[0].PostedWithin)
+	assert.Empty(t, settings.LinkedIn[0].Workplace)
+	assert.Empty(t, settings.LinkedIn[0].ExperienceLevel)
 
-	settings.LinkedIn.PostedWithin = "r604800"
-	settings.LinkedIn.Location = "Europe"
-	settings.LinkedIn.Workplace = "2"
-	settings.LinkedIn.ExperienceLevel = "4"
+	settings.LinkedIn[0].PostedWithin = "r604800"
+	settings.LinkedIn[0].Location = "Europe"
+	settings.LinkedIn[0].Workplace = "2"
+	settings.LinkedIn[0].ExperienceLevel = "4"
 	_, err = repository.SaveDiscoverySettings(context.Background(), settings)
 	require.NoError(t, err)
 
 	actual, err := repository.DiscoverySettings(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "r604800", actual.LinkedIn.PostedWithin)
-	assert.Equal(t, "2", actual.LinkedIn.Workplace)
-	assert.Equal(t, "4", actual.LinkedIn.ExperienceLevel)
+	assert.Equal(t, "r604800", actual.LinkedIn[0].PostedWithin)
+	assert.Equal(t, "2", actual.LinkedIn[0].Workplace)
+	assert.Equal(t, "4", actual.LinkedIn[0].ExperienceLevel)
 }

@@ -146,15 +146,18 @@ export type DiscoverySettings = {
     industry: string;
     tag: string;
   };
-  linkedin: {
+  linkedin: Array<{
+    id: number;
+    name: string;
     enabled: boolean;
+    sortOrder: number;
     query: string;
     location: string;
     postedWithin: string;
     workplace: string;
     experienceLevel: string;
     limit: number;
-  };
+  }>;
 };
 
 export type JobMatch = {

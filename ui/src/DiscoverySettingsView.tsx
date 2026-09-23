@@ -6,10 +6,11 @@ const emptySettings: DiscoverySettings = {
   adzuna: { enabled: true, query: "", country: "", maxDaysOld: 30, maxPages: 1, resultsPerPage: 50, workplace: "remote-hybrid" },
   remotive: { enabled: true, query: "", category: "software-development" },
   jobicy: { enabled: true, count: 50, geo: "", industry: "", tag: "" },
-  linkedin: { enabled: false, query: "", location: "Europe", postedWithin: "", workplace: "", experienceLevel: "", limit: 25 },
+  linkedin: [],
 };
 
 type DiscoveryProvider = keyof DiscoverySettings;
+type PreviewKey = string;
 
 export default function DiscoverySettingsView() {
   const [settings, setSettings] = useState<DiscoverySettings>(emptySettings);
@@ -19,9 +20,9 @@ export default function DiscoverySettingsView() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [fetchMessage, setFetchMessage] = useState("");
-  const [previewing, setPreviewing] = useState<DiscoveryProvider>();
-  const [previews, setPreviews] = useState<Partial<Record<DiscoveryProvider, unknown[]>>>({});
-  const [previewErrors, setPreviewErrors] = useState<Partial<Record<DiscoveryProvider, string>>>({});
+  const [previewing, setPreviewing] = useState<PreviewKey>();
+  const [previews, setPreviews] = useState<Record<PreviewKey, unknown[]>>({});
+  const [previewErrors, setPreviewErrors] = useState<Record<PreviewKey, string>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -48,6 +49,37 @@ export default function DiscoverySettingsView() {
 
   function update(provider: keyof DiscoverySettings, field: string, value: string | number | boolean) {
     setSettings((current) => ({ ...current, [provider]: { ...current[provider], [field]: value } }));
+    setSaved(false);
+    setFetchMessage("");
+  }
+
+  function updateLinkedIn(index: number, field: string, value: string | number | boolean) {
+    setSettings((current) => ({
+      ...current,
+      linkedin: current.linkedin.map((search, searchIndex) => searchIndex === index ? { ...search, [field]: value } : search),
+    }));
+    setSaved(false);
+    setFetchMessage("");
+  }
+
+  function addLinkedInSearch() {
+    setSettings((current) => {
+      const previous = current.linkedin[current.linkedin.length - 1];
+      const next = previous ? { ...previous } : { id: 0, name: "New search", enabled: true, sortOrder: 0, query: "", location: "", postedWithin: "", workplace: "", experienceLevel: "", limit: 25 };
+      return {
+        ...current,
+        linkedin: [...current.linkedin, { ...next, id: 0, name: `Search ${current.linkedin.length + 1}`, sortOrder: current.linkedin.length + 1 }],
+      };
+    });
+    setSaved(false);
+    setFetchMessage("");
+  }
+
+  function removeLinkedInSearch(index: number) {
+    setSettings((current) => ({
+      ...current,
+      linkedin: current.linkedin.filter((_, searchIndex) => searchIndex !== index),
+    }));
     setSaved(false);
     setFetchMessage("");
   }
@@ -83,16 +115,18 @@ export default function DiscoverySettingsView() {
     }
   }
 
-  async function preview(provider: DiscoveryProvider) {
-    setPreviewing(provider);
-    setPreviewErrors((current) => ({ ...current, [provider]: "" }));
-    setPreviews((current) => ({ ...current, [provider]: [] }));
+  async function preview(provider: DiscoveryProvider, linkedinIndex?: number) {
+    const key = linkedinIndex === undefined ? provider : `linkedin-${linkedinIndex}`;
+    const previewSettings = linkedinIndex === undefined ? settings : { ...settings, linkedin: [settings.linkedin[linkedinIndex]] };
+    setPreviewing(key);
+    setPreviewErrors((current) => ({ ...current, [key]: "" }));
+    setPreviews((current) => ({ ...current, [key]: [] }));
     try {
-      await streamProviderPreview(provider, settings, (job) => {
-        setPreviews((current) => ({ ...current, [provider]: [...(current[provider] ?? []), job] }));
+      await streamProviderPreview(provider, previewSettings, (job) => {
+        setPreviews((current) => ({ ...current, [key]: [...(current[key] ?? []), job] }));
       });
     } catch (reason) {
-      setPreviewErrors((current) => ({ ...current, [provider]: reason instanceof Error ? reason.message : "Could not fetch provider preview" }));
+      setPreviewErrors((current) => ({ ...current, [key]: reason instanceof Error ? reason.message : "Could not fetch provider preview" }));
     } finally {
       setPreviewing(undefined);
     }
@@ -173,28 +207,45 @@ export default function DiscoverySettingsView() {
             {previews.jobicy !== undefined && <ProviderPreview jobs={previews.jobicy} fetching={previewing === "jobicy"} />}
           </section>
 
-          <section className="profile-section">
-            <div className="profile-section-heading">
-              <h2>LinkedIn</h2>
-              <div className="provider-section-actions">
-                 <label className="provider-toggle"><input type="checkbox" checked={settings.linkedin.enabled} onChange={(event) => update("linkedin", "enabled", event.target.checked)} /> Enabled</label>
+           <section className="profile-section">
+             <div className="profile-section-heading">
+               <h2>LinkedIn</h2>
+               <div className="provider-section-actions">
+                  <span>{settings.linkedin.filter((search) => search.enabled).length} enabled searches</span>
                   <button className="secondary-action" type="button" disabled={previewing === "linkedin"} onClick={() => void preview("linkedin")}>{previewing === "linkedin" ? "Fetching..." : "Fetch preview"}</button>
                   <button className="secondary-action" type="button" disabled={saving || fetching !== undefined} onClick={() => void fetchJobs("linkedin")}>{fetching === "linkedin" ? "Starting..." : "Fetch jobs now"}</button>
-                <PreviewOutcome jobs={previews.linkedin} fetching={previewing === "linkedin"} />
-              </div>
-            </div>
-            {previewErrors.linkedin && <p className="query-error">{previewErrors.linkedin}</p>}
-            <p>Public LinkedIn job listings, fetched without an account. Keep this disabled unless you want to import from LinkedIn.</p>
-            <div className="profile-fields">
-              <label>Search phrase<input value={settings.linkedin.query} onChange={(event) => update("linkedin", "query", event.target.value)} /></label>
-              <label>Location<input value={settings.linkedin.location} onChange={(event) => update("linkedin", "location", event.target.value)} /></label>
-              <label>Posted within<select value={settings.linkedin.postedWithin} onChange={(event) => update("linkedin", "postedWithin", event.target.value)}><option value="">Any time</option><option value="r86400">Past 24 hours</option><option value="r604800">Past week</option><option value="r2592000">Past month</option></select></label>
-              <label>Workplace<select value={settings.linkedin.workplace} onChange={(event) => update("linkedin", "workplace", event.target.value)}><option value="">Any workplace</option><option value="1">On-site</option><option value="2">Remote</option><option value="3">Hybrid</option></select></label>
-              <label>Experience level<select value={settings.linkedin.experienceLevel} onChange={(event) => update("linkedin", "experienceLevel", event.target.value)}><option value="">Any level</option><option value="1">Internship</option><option value="2">Entry level</option><option value="3">Associate</option><option value="4">Mid-Senior level</option><option value="5">Director</option><option value="6">Executive</option></select></label>
-              <label>Results to fetch<input type="number" min="1" max="1000" value={settings.linkedin.limit} onChange={(event) => update("linkedin", "limit", Number(event.target.value))} /></label>
-            </div>
-            {previews.linkedin !== undefined && <ProviderPreview jobs={previews.linkedin} fetching={previewing === "linkedin"} />}
-          </section>
+                 <PreviewOutcome jobs={previews.linkedin} fetching={previewing === "linkedin"} />
+               </div>
+             </div>
+             {previewErrors.linkedin && <p className="query-error">{previewErrors.linkedin}</p>}
+             <p>Public LinkedIn job listings, fetched without an account. Enabled searches run sequentially in the order shown.</p>
+             {settings.linkedin.map((search, index) => {
+               const key = `linkedin-${index}`;
+               return <section className="profile-section" key={search.id || key}>
+                 <div className="profile-section-heading">
+                   <h3>{search.name || `Search ${index + 1}`}</h3>
+                   <div className="provider-section-actions">
+                     <label className="provider-toggle"><input type="checkbox" checked={search.enabled} onChange={(event) => updateLinkedIn(index, "enabled", event.target.checked)} /> Enabled</label>
+                     <button className="secondary-action" type="button" disabled={previewing === key} onClick={() => void preview("linkedin", index)}>{previewing === key ? "Fetching..." : "Fetch preview"}</button>
+                     <button className="secondary-action" type="button" onClick={() => removeLinkedInSearch(index)}>Remove</button>
+                     <PreviewOutcome jobs={previews[key]} fetching={previewing === key} />
+                   </div>
+                 </div>
+                 {previewErrors[key] && <p className="query-error">{previewErrors[key]}</p>}
+                 <div className="profile-fields">
+                   <label>Name<input value={search.name} onChange={(event) => updateLinkedIn(index, "name", event.target.value)} /></label>
+                   <label>Search phrase<input value={search.query} onChange={(event) => updateLinkedIn(index, "query", event.target.value)} /></label>
+                   <label>Location<input value={search.location} onChange={(event) => updateLinkedIn(index, "location", event.target.value)} /></label>
+                   <label>Posted within<select value={search.postedWithin} onChange={(event) => updateLinkedIn(index, "postedWithin", event.target.value)}><option value="">Any time</option><option value="r86400">Past 24 hours</option><option value="r604800">Past week</option><option value="r2592000">Past month</option></select></label>
+                   <label>Workplace<select value={search.workplace} onChange={(event) => updateLinkedIn(index, "workplace", event.target.value)}><option value="">Any workplace</option><option value="1">On-site</option><option value="2">Remote</option><option value="3">Hybrid</option></select></label>
+                   <label>Experience level<select value={search.experienceLevel} onChange={(event) => updateLinkedIn(index, "experienceLevel", event.target.value)}><option value="">Any level</option><option value="1">Internship</option><option value="2">Entry level</option><option value="3">Associate</option><option value="4">Mid-Senior level</option><option value="5">Director</option><option value="6">Executive</option></select></label>
+                   <label>Results to fetch<input type="number" min="1" max="1000" value={search.limit} onChange={(event) => updateLinkedIn(index, "limit", Number(event.target.value))} /></label>
+                 </div>
+                 {previews[key] !== undefined && <ProviderPreview jobs={previews[key]} fetching={previewing === key} />}
+               </section>;
+             })}
+             <button className="secondary-action" type="button" onClick={addLinkedInSearch}>Add LinkedIn search</button>
+           </section>
 
           {error && <p className="query-error">{error}</p>}
           <div className="profile-actions">

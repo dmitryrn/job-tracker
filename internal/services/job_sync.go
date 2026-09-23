@@ -239,9 +239,16 @@ func isDiscoveryProvider(provider string) bool {
 	}
 }
 
-func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedInSearchSettings, force bool) {
-	if !settings.Enabled {
-		syncer.logger.Info("provider sync skipped", zap.String("provider", "linkedin"), zap.String("reason", "disabled"))
+func (syncer *JobSync) syncLinkedIn(ctx context.Context, searches []models.LinkedInSearchSettings, force bool) {
+	enabledSearches := make([]models.LinkedInSearchSettings, 0, len(searches))
+	for _, search := range searches {
+		if search.Enabled {
+			enabledSearches = append(enabledSearches, search)
+		}
+	}
+
+	if len(enabledSearches) == 0 {
+		syncer.logger.Info("provider sync skipped", zap.String("provider", "linkedin"), zap.String("reason", "no enabled searches"))
 		return
 	}
 
@@ -263,29 +270,49 @@ func (syncer *JobSync) syncLinkedIn(ctx context.Context, settings models.LinkedI
 	}
 
 	syncer.recordLinkedInEvent(ctx, runID, "provider.run.started", "info", "LinkedIn job sync started", map[string]any{
-		"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "requestedLimit": settings.Limit,
+		"searchCount": len(enabledSearches),
 	})
-	syncer.logger.Info("syncing LinkedIn jobs", zap.String("run_id", runID))
-	fetch, fetchErr := syncer.linkedin.Sync(ctx, settings, runID, syncer.linkedInRequestInterval)
-	if fetchErr != nil {
-		syncer.logger.Error("LinkedIn fetch incomplete", zap.String("run_id", runID), zap.Error(fetchErr), zap.Int("fetched_job_count", fetch.FetchedJobs))
-	}
-
-	if fetchErr != nil {
-		if syncer.metrics != nil {
-			syncer.metrics.Complete(time.Now(), fetch, false)
+	var total LinkedInFetchResult
+	var firstErr error
+	for _, search := range enabledSearches {
+		syncer.logger.Info("syncing LinkedIn search", zap.String("run_id", runID), zap.Int64("search_id", search.ID), zap.String("search_name", search.Name), zap.String("location", search.Location))
+		fetch, fetchErr := syncer.linkedin.Sync(ctx, search, runID, syncer.linkedInRequestInterval)
+		addLinkedInFetchResult(&total, fetch)
+		if fetchErr == nil {
+			syncer.logger.Info("stored LinkedIn search jobs", zap.String("run_id", runID), zap.Int64("search_id", search.ID), zap.String("search_name", search.Name), zap.Int("count", fetch.SavedJobs))
+			continue
 		}
 
-		syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, fetchErr)
-		return
+		syncer.logger.Error("LinkedIn search incomplete", zap.String("run_id", runID), zap.Int64("search_id", search.ID), zap.String("search_name", search.Name), zap.Error(fetchErr), zap.Int("fetched_job_count", fetch.FetchedJobs))
+		if firstErr == nil {
+			firstErr = fetchErr
+		}
+
+		if ctx.Err() != nil {
+			break
+		}
 	}
 
 	if syncer.metrics != nil {
-		syncer.metrics.Complete(time.Now(), fetch, true)
+		syncer.metrics.Complete(time.Now(), total, firstErr == nil)
 	}
 
-	syncer.logger.Info("stored LinkedIn jobs", zap.String("run_id", runID), zap.Int("count", fetch.SavedJobs))
-	syncer.finishLinkedInRun(ctx, runID, settings.Limit, fetch, fetch.SavedJobs, nil)
+	requestedLimit := 0
+	for _, search := range enabledSearches {
+		requestedLimit += search.Limit
+	}
+
+	syncer.finishLinkedInRun(ctx, runID, requestedLimit, total, total.SavedJobs, firstErr)
+}
+
+func addLinkedInFetchResult(total *LinkedInFetchResult, fetch LinkedInFetchResult) {
+	total.Jobs = append(total.Jobs, fetch.Jobs...)
+	total.SearchResults += fetch.SearchResults
+	total.DetailRequests += fetch.DetailRequests
+	total.FetchedJobs += fetch.FetchedJobs
+	total.SavedJobs += fetch.SavedJobs
+	total.SkippedJobs += fetch.SkippedJobs
+	total.InvalidJobs += fetch.InvalidJobs
 }
 
 func (syncer *JobSync) allowLinkedInSync(ctx context.Context, runID string) bool {

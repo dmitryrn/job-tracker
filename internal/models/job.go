@@ -64,10 +64,10 @@ type EventPage struct {
 }
 
 type DiscoverySettings struct {
-	Adzuna   AdzunaSearchSettings   `json:"adzuna"`
-	Remotive RemotiveSearchSettings `json:"remotive"`
-	Jobicy   JobicySearchSettings   `json:"jobicy"`
-	LinkedIn LinkedInSearchSettings `json:"linkedin"`
+	Adzuna   AdzunaSearchSettings     `json:"adzuna"`
+	Remotive RemotiveSearchSettings   `json:"remotive"`
+	Jobicy   JobicySearchSettings     `json:"jobicy"`
+	LinkedIn []LinkedInSearchSettings `json:"linkedin"`
 }
 
 type AdzunaSearchSettings struct {
@@ -95,7 +95,10 @@ type JobicySearchSettings struct {
 }
 
 type LinkedInSearchSettings struct {
+	ID              int64  `json:"id"`
+	Name            string `json:"name"`
 	Enabled         bool   `json:"enabled"`
+	SortOrder       int    `json:"sortOrder"`
 	Query           string `json:"query"`
 	Location        string `json:"location"`
 	PostedWithin    string `json:"postedWithin"`

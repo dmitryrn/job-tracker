@@ -166,7 +166,7 @@ func (service *LinkedInJobs) searchLinkedInPage(ctx context.Context, settings mo
 	}
 
 	service.recordEvent(ctx, runID, "linkedin.search.started", "info", "LinkedIn search started", map[string]any{
-		"query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "start": start, "requestedLimit": settings.Limit,
+		"searchID": settings.ID, "searchName": settings.Name, "query": settings.Query, "location": settings.Location, "postedWithin": settings.PostedWithin, "workplace": settings.Workplace, "experienceLevel": settings.ExperienceLevel, "start": start, "requestedLimit": settings.Limit,
 	})
 	results, err := service.client.Search(ctx, linkedin.SearchFilter{
 		Keywords:        settings.Query,
@@ -178,14 +178,14 @@ func (service *LinkedInJobs) searchLinkedInPage(ctx context.Context, settings mo
 	})
 	if err != nil {
 		service.recordEvent(ctx, runID, "linkedin.search.failed", "error", "LinkedIn search failed", map[string]any{
-			"start": start, "error": err.Error(),
+			"searchID": settings.ID, "searchName": settings.Name, "start": start, "error": err.Error(),
 		})
 		return nil, &linkedInClientError{cause: err}
 	}
 
 	fetch.SearchResults += len(results)
 	service.recordEvent(ctx, runID, "linkedin.search.succeeded", "info", "LinkedIn search succeeded", map[string]any{
-		"start": start, "resultCount": len(results), "searchResultsFetched": fetch.SearchResults, "requestedLimit": settings.Limit,
+		"searchID": settings.ID, "searchName": settings.Name, "start": start, "resultCount": len(results), "searchResultsFetched": fetch.SearchResults, "requestedLimit": settings.Limit,
 	})
 	return results, nil
 }

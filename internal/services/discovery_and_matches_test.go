@@ -36,11 +36,11 @@ func TestDiscoverySettingsSaveTrimsValuesBeforePersisting(t *testing.T) {
 	settings.Jobicy.Geo = " europe "
 	settings.Jobicy.Industry = " tech "
 	settings.Jobicy.Tag = " go "
-	settings.LinkedIn.Query = " engineer "
-	settings.LinkedIn.Location = " Berlin "
-	settings.LinkedIn.PostedWithin = " r86400 "
-	settings.LinkedIn.Workplace = " 1 "
-	settings.LinkedIn.ExperienceLevel = " 4 "
+	settings.LinkedIn[0].Query = " engineer "
+	settings.LinkedIn[0].Location = " Berlin "
+	settings.LinkedIn[0].PostedWithin = " r86400 "
+	settings.LinkedIn[0].Workplace = " 1 "
+	settings.LinkedIn[0].ExperienceLevel = " 4 "
 
 	saved, err := service.Save(context.Background(), settings)
 
@@ -54,11 +54,11 @@ func TestDiscoverySettingsSaveTrimsValuesBeforePersisting(t *testing.T) {
 	assert.Equal(t, "europe", saved.Jobicy.Geo)
 	assert.Equal(t, "tech", saved.Jobicy.Industry)
 	assert.Equal(t, "go", saved.Jobicy.Tag)
-	assert.Equal(t, "engineer", saved.LinkedIn.Query)
-	assert.Equal(t, "Berlin", saved.LinkedIn.Location)
-	assert.Equal(t, "r86400", saved.LinkedIn.PostedWithin)
-	assert.Equal(t, "1", saved.LinkedIn.Workplace)
-	assert.Equal(t, "4", saved.LinkedIn.ExperienceLevel)
+	assert.Equal(t, "engineer", saved.LinkedIn[0].Query)
+	assert.Equal(t, "Berlin", saved.LinkedIn[0].Location)
+	assert.Equal(t, "r86400", saved.LinkedIn[0].PostedWithin)
+	assert.Equal(t, "1", saved.LinkedIn[0].Workplace)
+	assert.Equal(t, "4", saved.LinkedIn[0].ExperienceLevel)
 	assert.Equal(t, 1, repository.calls)
 }
 
@@ -77,13 +77,13 @@ func TestDiscoverySettingsSaveRejectsInvalidValuesWithoutPersisting(t *testing.T
 		{name: "remotive category", mutate: func(settings *models.DiscoverySettings) { settings.Remotive.Category = "" }},
 		{name: "jobicy count zero", mutate: func(settings *models.DiscoverySettings) { settings.Jobicy.Count = 0 }},
 		{name: "jobicy count too large", mutate: func(settings *models.DiscoverySettings) { settings.Jobicy.Count = 201 }},
-		{name: "linkedin query", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn.Query = "" }},
-		{name: "linkedin location", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn.Location = "" }},
-		{name: "linkedin limit zero", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn.Limit = 0 }},
-		{name: "linkedin limit too large", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn.Limit = maxLinkedInResults + 1 }},
-		{name: "linkedin posted within", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn.PostedWithin = "r3600" }},
-		{name: "linkedin workplace", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn.Workplace = "4" }},
-		{name: "linkedin experience", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn.ExperienceLevel = "7" }},
+		{name: "linkedin query", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn[0].Query = "" }},
+		{name: "linkedin location", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn[0].Location = "" }},
+		{name: "linkedin limit zero", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn[0].Limit = 0 }},
+		{name: "linkedin limit too large", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn[0].Limit = maxLinkedInResults + 1 }},
+		{name: "linkedin posted within", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn[0].PostedWithin = "r3600" }},
+		{name: "linkedin workplace", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn[0].Workplace = "4" }},
+		{name: "linkedin experience", mutate: func(settings *models.DiscoverySettings) { settings.LinkedIn[0].ExperienceLevel = "7" }},
 	}
 
 	for _, test := range tests {
@@ -203,6 +203,6 @@ func validDiscoverySettings() models.DiscoverySettings {
 		Adzuna:   models.AdzunaSearchSettings{Query: "backend", Country: "de", MaxDaysOld: 7, MaxPages: 1, ResultsPerPage: 20, Workplace: "remote"},
 		Remotive: models.RemotiveSearchSettings{Query: "go", Category: "software-dev"},
 		Jobicy:   models.JobicySearchSettings{Count: 20},
-		LinkedIn: models.LinkedInSearchSettings{Query: "engineer", Location: "Berlin", PostedWithin: "r86400", Workplace: "1", ExperienceLevel: "4", Limit: 20},
+		LinkedIn: []models.LinkedInSearchSettings{{Name: "Berlin", Query: "engineer", Location: "Berlin", PostedWithin: "r86400", Workplace: "1", ExperienceLevel: "4", Limit: 20}},
 	}
 }
