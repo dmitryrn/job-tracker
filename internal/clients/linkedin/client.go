@@ -43,6 +43,9 @@ type SearchResult struct {
 }
 
 type Job struct {
+	Title          string
+	Company        string
+	Location       string
 	Description    string
 	EmploymentType string
 	WorkplaceType  string
@@ -50,10 +53,6 @@ type Job struct {
 
 func NewClient() *Client {
 	return newClient(&http.Client{Timeout: 30 * time.Second}, baseURL)
-}
-
-func newClient(httpClient *http.Client, baseURL string) *Client {
-	return &Client{http: httpClient, baseURL: strings.TrimRight(baseURL, "/")}
 }
 
 func (c *Client) Search(ctx context.Context, filter SearchFilter) ([]SearchResult, error) {
@@ -97,6 +96,25 @@ func (c *Client) Job(ctx context.Context, id string) (Job, error) {
 	}
 
 	return parseJob(body), nil
+}
+
+func JobIDFromURL(sourceURL string) (string, bool) {
+	parsed, err := url.Parse(sourceURL)
+	if err != nil {
+		return "", false
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	if host != "linkedin.com" && !strings.HasSuffix(host, ".linkedin.com") {
+		return "", false
+	}
+
+	id := jobID(parsed.EscapedPath())
+	return id, id != ""
+}
+
+func newClient(httpClient *http.Client, baseURL string) *Client {
+	return &Client{http: httpClient, baseURL: strings.TrimRight(baseURL, "/")}
 }
 
 func (c *Client) get(ctx context.Context, requestURL string) ([]byte, error) {
@@ -182,6 +200,9 @@ func parseJob(body []byte) Job {
 	}
 
 	job := Job{
+		Title:          elementText(document, hasClass("h2", "top-card-layout__title")),
+		Company:        elementText(document, hasClass("a", "topcard__org-name-link")),
+		Location:       elementText(document, hasClass("span", "topcard__flavor--bullet")),
 		EmploymentType: jobCriteria(document, "Employment type"),
 		WorkplaceType:  jobCriteria(document, "Workplace type"),
 	}
@@ -195,6 +216,14 @@ func parseJob(body []byte) Job {
 	}
 
 	return job
+}
+
+func elementText(document *html.Node, match func(*html.Node) bool) string {
+	if node := first(document, match); node != nil {
+		return text(node)
+	}
+
+	return ""
 }
 
 func jobCriteria(document *html.Node, label string) string {

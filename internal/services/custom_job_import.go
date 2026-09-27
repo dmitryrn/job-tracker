@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"nice/internal/clients/linkedin"
 	"nice/internal/clients/openai"
 	"nice/internal/models"
 )
@@ -58,8 +59,13 @@ type CustomJobImportService interface {
 }
 
 type CustomJobPage struct {
-	Title    string
-	Markdown string
+	Title          string
+	Markdown       string
+	Company        string
+	Location       string
+	EmploymentType string
+	WorkplaceType  string
+	LinkedIn       bool
 }
 
 type CustomJobPageFetcher interface {
@@ -72,9 +78,14 @@ type HTTPJobPageFetcher struct {
 
 type CustomJobImporter struct {
 	fetcher         CustomJobPageFetcher
+	linkedIn        linkedInJobFetcher
 	client          JobCompletionClient
 	model           string
 	reasoningEffort string
+}
+
+type linkedInJobFetcher interface {
+	Job(context.Context, string) (linkedin.Job, error)
 }
 
 type customJobFields struct {
@@ -110,8 +121,8 @@ func NewHTTPJobPageFetcher() *HTTPJobPageFetcher {
 	}}
 }
 
-func NewCustomJobImporter(fetcher CustomJobPageFetcher, client JobCompletionClient, model, reasoningEffort string) *CustomJobImporter {
-	return &CustomJobImporter{fetcher: fetcher, client: client, model: model, reasoningEffort: reasoningEffort}
+func NewCustomJobImporter(fetcher CustomJobPageFetcher, linkedIn linkedInJobFetcher, client JobCompletionClient, model, reasoningEffort string) *CustomJobImporter {
+	return &CustomJobImporter{fetcher: fetcher, linkedIn: linkedIn, client: client, model: model, reasoningEffort: reasoningEffort}
 }
 
 func (fetcher *HTTPJobPageFetcher) Fetch(ctx context.Context, sourceURL string) (CustomJobPage, error) {
@@ -167,9 +178,35 @@ func (fetcher *HTTPJobPageFetcher) Fetch(ctx context.Context, sourceURL string) 
 }
 
 func (importer *CustomJobImporter) Import(ctx context.Context, sourceURL string) (models.Job, error) {
-	page, err := importer.fetcher.Fetch(ctx, sourceURL)
+	var page CustomJobPage
+	var err error
+	if id, ok := linkedin.JobIDFromURL(sourceURL); ok {
+		if importer.linkedIn == nil {
+			return models.Job{}, fmt.Errorf("fetch LinkedIn custom job: LinkedIn client is unavailable")
+		}
+
+		var details linkedin.Job
+		details, err = importer.linkedIn.Job(ctx, id)
+		if err == nil {
+			page = CustomJobPage{
+				Title:          details.Title,
+				Markdown:       details.Description,
+				Company:        details.Company,
+				Location:       details.Location,
+				EmploymentType: details.EmploymentType,
+				WorkplaceType:  details.WorkplaceType,
+				LinkedIn:       true,
+			}
+			if page.Markdown == "" {
+				err = fmt.Errorf("LinkedIn job %s did not contain a readable description", id)
+			}
+		}
+	} else {
+		page, err = importer.fetcher.Fetch(ctx, sourceURL)
+	}
+
 	if err != nil {
-		return models.Job{}, err
+		return models.Job{}, fmt.Errorf("fetch custom job page: %w", err)
 	}
 
 	fields, err := importer.extract(ctx, sourceURL, page)
@@ -177,8 +214,26 @@ func (importer *CustomJobImporter) Import(ctx context.Context, sourceURL string)
 		return models.Job{}, err
 	}
 
-	if fields.Title == "" {
+	if page.LinkedIn && page.Title != "" {
 		fields.Title = page.Title
+	} else if fields.Title == "" {
+		fields.Title = page.Title
+	}
+
+	if page.Company != "" {
+		fields.Company = page.Company
+	}
+
+	if page.Location != "" {
+		fields.Location = page.Location
+	}
+
+	if page.EmploymentType != "" {
+		fields.EmploymentType = page.EmploymentType
+	}
+
+	if workplace := linkedInWorkplace(page.WorkplaceType); workplace != "" {
+		fields.Workplace = workplace
 	}
 
 	return models.Job{
@@ -196,6 +251,19 @@ func (importer *CustomJobImporter) Import(ctx context.Context, sourceURL string)
 		PostedAt:       fields.PostedAt,
 		MetadataJSON:   `{"added_manually":true}`,
 	}, nil
+}
+
+func linkedInWorkplace(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "remote":
+		return "remote"
+	case "hybrid":
+		return "hybrid"
+	case "onsite", "on-site", "on site":
+		return "onsite"
+	default:
+		return ""
+	}
 }
 
 func (importer *CustomJobImporter) extract(ctx context.Context, sourceURL string, page CustomJobPage) (customJobFields, error) {

@@ -246,6 +246,7 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 			"first_seen_at",
 			"last_seen_at",
 			"metadata_json",
+			"profile_match_score",
 		).
 		Values(
 			job.Source,
@@ -264,6 +265,7 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 			now,
 			now,
 			job.MetadataJSON,
+			job.ProfileMatchScore,
 		).
 		Suffix(`ON CONFLICT(source, source_job_id) DO UPDATE SET
 			source_url = excluded.source_url,
@@ -278,7 +280,8 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 			salary_max = excluded.salary_max,
 			posted_at = excluded.posted_at,
 			last_seen_at = excluded.last_seen_at,
-			metadata_json = excluded.metadata_json`).
+			metadata_json = excluded.metadata_json,
+			profile_match_score = excluded.profile_match_score`).
 		ToSql()
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("build custom job insert: %w", err)

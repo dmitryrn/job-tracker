@@ -25,7 +25,6 @@ type Config struct {
 	OpenAI            OpenAIConfig
 	TypeSafe          TypeSafeConfig
 	JobAnalysis       TaskConfig
-	CustomJobImport   TaskConfig
 	ProfileMatcher    TaskConfig
 	JobChat           TaskConfig
 	JobMatch          JobMatchConfig
@@ -124,16 +123,15 @@ type fileConfig struct {
 	Database struct {
 		Path string `toml:"path" validate:"notblank"`
 	} `toml:"database"`
-	OpenCode        fileOpenCodeConfig `toml:"opencode"`
-	OpenAI          fileOpenAIConfig   `toml:"openai"`
-	TypeSafe        fileTypeSafeConfig `toml:"typesafe"`
-	JobAnalysis     fileTaskConfig     `toml:"job_analysis"`
-	CustomJobImport fileTaskConfig     `toml:"custom_job_import"`
-	ProfileMatcher  fileTaskConfig     `toml:"profile_matcher"`
-	JobChat         fileTaskConfig     `toml:"job_chat"`
-	JobMatch        fileJobMatchConfig `toml:"job_match"`
-	Events          fileEventConfig    `toml:"events"`
-	Providers       struct {
+	OpenCode       fileOpenCodeConfig `toml:"opencode"`
+	OpenAI         fileOpenAIConfig   `toml:"openai"`
+	TypeSafe       fileTypeSafeConfig `toml:"typesafe"`
+	JobAnalysis    fileTaskConfig     `toml:"job_analysis"`
+	ProfileMatcher fileTaskConfig     `toml:"profile_matcher"`
+	JobChat        fileTaskConfig     `toml:"job_chat"`
+	JobMatch       fileJobMatchConfig `toml:"job_match"`
+	Events         fileEventConfig    `toml:"events"`
+	Providers      struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
 		Jobicy   fileJobicyConfig   `toml:"jobicy"`
 		LinkedIn fileLinkedInConfig `toml:"linkedin"`
@@ -251,14 +249,13 @@ func Load() (Config, error) {
 			BaseURL: source.OpenAI.BaseURL,
 			APIKey:  credentials.codexProxyAPIKey,
 		},
-		TypeSafe:        TypeSafeConfig{BaseURL: source.TypeSafe.BaseURL, Model: source.TypeSafe.Model, APIKey: credentials.typeSafeAPIKey},
-		JobAnalysis:     TaskConfig{Provider: source.JobAnalysis.Provider, Model: source.JobAnalysis.Model, ReasoningEffort: source.JobAnalysis.ReasoningEffort},
-		CustomJobImport: TaskConfig{Provider: source.CustomJobImport.Provider, Model: source.CustomJobImport.Model, ReasoningEffort: source.CustomJobImport.ReasoningEffort},
-		ProfileMatcher:  TaskConfig{Provider: source.ProfileMatcher.Provider, Model: source.ProfileMatcher.Model, ReasoningEffort: source.ProfileMatcher.ReasoningEffort},
-		JobChat:         TaskConfig{Provider: source.JobChat.Provider, Model: source.JobChat.Model, ReasoningEffort: source.JobChat.ReasoningEffort},
-		JobMatch:        JobMatchConfig{RunInterval: durations.jobMatchRunInterval},
-		Events:          EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: durations.eventFlushInterval},
-		OpenRouter:      OpenRouterConfig{APIKey: credentials.openRouterAPIKey},
+		TypeSafe:       TypeSafeConfig{BaseURL: source.TypeSafe.BaseURL, Model: source.TypeSafe.Model, APIKey: credentials.typeSafeAPIKey},
+		JobAnalysis:    TaskConfig{Provider: source.JobAnalysis.Provider, Model: source.JobAnalysis.Model, ReasoningEffort: source.JobAnalysis.ReasoningEffort},
+		ProfileMatcher: TaskConfig{Provider: source.ProfileMatcher.Provider, Model: source.ProfileMatcher.Model, ReasoningEffort: source.ProfileMatcher.ReasoningEffort},
+		JobChat:        TaskConfig{Provider: source.JobChat.Provider, Model: source.JobChat.Model, ReasoningEffort: source.JobChat.ReasoningEffort},
+		JobMatch:       JobMatchConfig{RunInterval: durations.jobMatchRunInterval},
+		Events:         EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: durations.eventFlushInterval},
+		OpenRouter:     OpenRouterConfig{APIKey: credentials.openRouterAPIKey},
 	}, nil
 }
 

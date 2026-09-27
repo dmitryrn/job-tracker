@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"nice/internal/clients/linkedin"
 	"nice/internal/clients/openai"
 )
 
@@ -22,6 +23,11 @@ type customJobImportCompletionStub struct {
 	model    string
 	session  string
 	request  openai.ChatRequest
+}
+
+type customLinkedInJobFetcherStub struct {
+	job linkedin.Job
+	err error
 }
 
 func TestCustomJobImporterStoresPageMarkdownAndExtractedFields(t *testing.T) {
@@ -38,7 +44,7 @@ func TestCustomJobImporterStoresPageMarkdownAndExtractedFields(t *testing.T) {
 	importer := NewCustomJobImporter(customJobPageFetcherStub{page: CustomJobPage{
 		Title:    "Example Labs careers",
 		Markdown: "# Senior Platform Engineer\n\nBuild reliable systems.",
-	}}, client, "configured-import-model", "high")
+	}}, nil, client, "configured-import-model", "high")
 
 	job, err := importer.Import(context.Background(), "https://careers.example.com/platform-engineer")
 
@@ -55,7 +61,7 @@ func TestCustomJobImporterStoresPageMarkdownAndExtractedFields(t *testing.T) {
 }
 
 func TestCustomJobImporterUsesPageTitleWhenNoTitleIsExtracted(t *testing.T) {
-	importer := NewCustomJobImporter(customJobPageFetcherStub{page: CustomJobPage{Title: "Careers | Example", Markdown: "Job description"}}, &customJobImportCompletionStub{response: openai.ChatResponse{Content: `{
+	importer := NewCustomJobImporter(customJobPageFetcherStub{page: CustomJobPage{Title: "Careers | Example", Markdown: "Job description"}}, nil, &customJobImportCompletionStub{response: openai.ChatResponse{Content: `{
 		"title":"", "company":"", "location":"", "workplace":"unknown", "employmentType":"", "salaryMin":null, "salaryMax":null, "postedAt":""
 	}`}}, "configured-import-model", "low")
 
@@ -63,6 +69,32 @@ func TestCustomJobImporterUsesPageTitleWhenNoTitleIsExtracted(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "Careers | Example", job.Title)
+}
+
+func TestCustomJobImporterUsesLinkedInParserForLinkedInURL(t *testing.T) {
+	completion := &customJobImportCompletionStub{response: openai.ChatResponse{Content: `{
+		"title":"Senior Golang Engineer", "company":"K2 Partnering Solutions", "location":"Spain", "workplace":"unknown", "employmentType":"", "salaryMin":null, "salaryMax":null, "postedAt":""
+	}`}}
+	linkedinFetcher := customLinkedInJobFetcherStub{job: linkedin.Job{
+		Title:          "Senior Golang Engineer",
+		Company:        "K2 Partnering Solutions",
+		Location:       "Spain",
+		Description:    "Senior Software Engineer - Golang/Kubernetes. Fully remote role.",
+		EmploymentType: "Full-time",
+		WorkplaceType:  "Remote",
+	}}
+	importer := NewCustomJobImporter(customJobPageFetcherStub{err: assert.AnError}, linkedinFetcher, completion, "model", "low")
+
+	job, err := importer.Import(context.Background(), "https://www.linkedin.com/jobs/view/4470002318")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Senior Golang Engineer", job.Title)
+	assert.Equal(t, "Senior Software Engineer - Golang/Kubernetes. Fully remote role.", job.BodyText)
+	assert.Equal(t, "K2 Partnering Solutions", job.Company)
+	assert.Equal(t, "Spain", job.Location)
+	assert.Equal(t, "Full-time", job.EmploymentType)
+	assert.Equal(t, "remote", job.Workplace)
+	assert.NotContains(t, completion.request.Messages[1].Content, "LinkedIn respects your privacy")
 }
 
 func TestCustomJobPageFromHTMLRendersReadableMarkdown(t *testing.T) {
@@ -99,6 +131,10 @@ func TestIsPublicAddressRejectsPrivateNetworks(t *testing.T) {
 
 func (stub customJobPageFetcherStub) Fetch(context.Context, string) (CustomJobPage, error) {
 	return stub.page, stub.err
+}
+
+func (stub customLinkedInJobFetcherStub) Job(context.Context, string) (linkedin.Job, error) {
+	return stub.job, stub.err
 }
 
 func (stub *customJobImportCompletionStub) Complete(_ context.Context, model, session string, request openai.ChatRequest) (openai.ChatResponse, error) {

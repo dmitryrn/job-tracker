@@ -23,7 +23,7 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 			assert.Equal(t, "0", request.URL.Query().Get("start"))
 			_, _ = writer.Write([]byte(`<li><a href="https://www.linkedin.com/jobs/view/platform-engineer-42?trackingId=abc"></a><h3 class="base-search-card__title">Platform Engineer</h3><h4 class="base-search-card__subtitle"><a>Example Co</a></h4><span class="job-search-card__location">Berlin, Germany</span><time datetime="2026-09-02"></time></li>`))
 		case "/jobPosting/42":
-			_, _ = writer.Write([]byte(`<div class="show-more-less-html__markup">Build reliable remote systems.</div><ul class="description__job-criteria-list"><li class="description__job-criteria-item"><h3 class="description__job-criteria-subheader">Employment type</h3><span class="description__job-criteria-text description__job-criteria-text--criteria">Full-time</span></li><li class="description__job-criteria-item"><h3 class="description__job-criteria-subheader">Workplace type</h3><span class="description__job-criteria-text description__job-criteria-text--criteria">Hybrid</span></li></ul>`))
+			_, _ = writer.Write([]byte(`<h2 class="top-card-layout__title">Platform Engineer</h2><a class="topcard__org-name-link">Example Co</a><span class="topcard__flavor topcard__flavor--bullet">Berlin, Germany</span><div class="show-more-less-html__markup">Build reliable remote systems.</div><ul class="description__job-criteria-list"><li class="description__job-criteria-item"><h3 class="description__job-criteria-subheader">Employment type</h3><span class="description__job-criteria-text description__job-criteria-text--criteria">Full-time</span></li><li class="description__job-criteria-item"><h3 class="description__job-criteria-subheader">Workplace type</h3><span class="description__job-criteria-text description__job-criteria-text--criteria">Hybrid</span></li></ul>`))
 		default:
 			writer.WriteHeader(http.StatusNotFound)
 		}
@@ -42,6 +42,9 @@ func TestSearchAndJobUsePublicLinkedInEndpoints(t *testing.T) {
 
 	job, err := client.Job(context.Background(), results[0].ID)
 	require.NoError(t, err)
+	assert.Equal(t, "Platform Engineer", job.Title)
+	assert.Equal(t, "Example Co", job.Company)
+	assert.Equal(t, "Berlin, Germany", job.Location)
 	assert.Equal(t, "Build reliable remote systems.", job.Description)
 	assert.Equal(t, "Full-time", job.EmploymentType)
 	assert.Equal(t, "Hybrid", job.WorkplaceType)
@@ -58,4 +61,13 @@ func TestSearchOmitsUnsetFilters(t *testing.T) {
 	_, err := newClient(server.Client(), server.URL).Search(context.Background(), SearchFilter{Keywords: "software engineer"})
 
 	require.NoError(t, err)
+}
+
+func TestJobIDFromURL(t *testing.T) {
+	id, ok := JobIDFromURL("https://es.linkedin.com/jobs/view/senior-golang-engineer-at-example-4470002318?position=4")
+	assert.True(t, ok)
+	assert.Equal(t, "4470002318", id)
+
+	_, ok = JobIDFromURL("https://example.com/jobs/view/4470002318")
+	assert.False(t, ok)
 }

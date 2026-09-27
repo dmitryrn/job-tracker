@@ -21,10 +21,12 @@ var (
 type JobBrowse struct {
 	repository repositories.JobRepository
 	importer   CustomJobImportService
+	profiles   repositories.UserProfileRepository
+	scorer     JobProfileScoreService
 }
 
-func NewJobBrowse(repository repositories.JobRepository, importer CustomJobImportService) *JobBrowse {
-	return &JobBrowse{repository: repository, importer: importer}
+func NewJobBrowse(repository repositories.JobRepository, importer CustomJobImportService, profiles repositories.UserProfileRepository, scorer JobProfileScoreService) *JobBrowse {
+	return &JobBrowse{repository: repository, importer: importer, profiles: profiles, scorer: scorer}
 }
 
 func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) (models.JobPage, error) {
@@ -74,6 +76,22 @@ func (browse *JobBrowse) CreateCustomJob(ctx context.Context, custom models.Cust
 	job, err := browse.importer.Import(ctx, custom.SourceURL)
 	if err != nil {
 		return models.BrowseJob{}, err
+	}
+
+	if browse.profiles != nil && browse.scorer != nil {
+		profile, err := browse.profiles.UserProfile(ctx)
+		if err != nil {
+			return models.BrowseJob{}, fmt.Errorf("load profile for custom job score: %w", err)
+		}
+
+		if profile != nil {
+			score, err := browse.scorer.Score(ctx, job, *profile)
+			if err != nil {
+				return models.BrowseJob{}, fmt.Errorf("score custom job against profile: %w", err)
+			}
+
+			job.ProfileMatchScore = &score
+		}
 	}
 
 	return browse.repository.CreateCustomJob(ctx, job)
