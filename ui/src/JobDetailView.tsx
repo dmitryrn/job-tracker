@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationCoverLetterPDFURL, jobApplicationCoverLetterTXTURL, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
@@ -19,6 +19,7 @@ type JobDetailViewProps = {
 };
 
 type ProfileURLField = "githubURL" | "linkedinURL";
+type JobActionIconName = "listing" | "linkedin" | "github" | "match" | "resume" | "letter" | "applied" | "reject" | "delete";
 
 function plainText(value: string) {
   if (!/<[a-z][\s\S]*>/i.test(value)) {
@@ -50,6 +51,25 @@ function formatAnalysisDate(value: string) {
 function formatTimestamp(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function JobActionIcon({ name }: { name: JobActionIconName }) {
+  const paths: Record<JobActionIconName, ReactNode> = {
+    listing: <><path d="M14 5h5v5" /><path d="m11 13 8-8" /><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4" /></>,
+    linkedin: <><path d="M6 9v9" /><path d="M6 6.25v.01" /><path d="M10 18v-5a3 3 0 0 1 6 0v5" /><path d="M10 9v9" /><path d="M16 18v-4" /></>,
+    github: <><path d="M9 19c-4 .9-4-2-5-2m10 4v-3.1c0-.9.1-1.1-.5-1.7 3.4-.4 7-1.7 7-7.5a5.8 5.8 0 0 0-1.6-4C19.1 5.3 19 4 19 4s-1.1-.4-3.5 1.3a12.2 12.2 0 0 0-6 0C7.1 3.6 6 4 6 4s-.1 1.3.1 1.7a5.8 5.8 0 0 0-1.6 4c0 5.8 3.6 7.1 7 7.5-.6.6-.6 1.2-.5 1.8V21" /></>,
+    match: <><circle cx="12" cy="12" r="8" /><path d="m8.5 12 2.2 2.2 4.8-4.8" /></>,
+    resume: <><path d="M7 3.5h7l3 3V20.5H7z" /><path d="M14 3.5v4h3M9.5 11h5M9.5 14h5M9.5 17h3" /></>,
+    letter: <><rect x="4" y="5" width="16" height="14" rx="1" /><path d="m5 7 7 5 7-5M5 17l4-4M19 17l-4-4" /></>,
+    applied: <><path d="M5 12.5 9.5 17 19 7.5" /></>,
+    reject: <><path d="m6 6 12 12M18 6 6 18" /></>,
+    delete: <><path d="M5 7h14M10 11v5M14 11v5M8 7l1-3h6l1 3M7 7l1 14h8l1-14" /></>,
+  };
+  return <svg className={`job-action-icon ${name}`} viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
+}
+
+function JobActionContent({ icon, children }: { icon: JobActionIconName; children: ReactNode }) {
+  return <><JobActionIcon name={icon} /><span className="job-action-label">{children}</span></>;
 }
 
 function chatRequestID() {
@@ -176,13 +196,17 @@ function JobEligibilityPanel({ check, running, onRun }: { check: JobEligibilityC
 
 type ChatPromptRequest = { id: number; content: string };
 
-function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { jobID: number; match: JobMatch | null | undefined; promptRequest?: ChatPromptRequest; onPromptHandled: (id: number) => void }) {
+function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled, onItemsChanged }: { jobID: number; match: JobMatch | null | undefined; promptRequest?: ChatPromptRequest; onPromptHandled: (id: number) => void; onItemsChanged: (items: JobMatchChatItem[]) => void }) {
   const [items, setItems] = useState<JobMatchChatItem[]>();
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [reverting, setReverting] = useState(false);
   const [queuedPrompt, setQueuedPrompt] = useState<ChatPromptRequest>();
   const lastPromptID = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (items) onItemsChanged(items);
+  }, [items, onItemsChanged]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -471,9 +495,11 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [match, setMatch] = useState<JobMatch | null>();
   const [application, setApplication] = useState<Application | null>();
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
+  const [chatItems, setChatItems] = useState<JobMatchChatItem[]>();
   const [eligibility, setEligibility] = useState<JobEligibilityCheck | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionRailExpanded, setActionRailExpanded] = useState(false);
   const [queueing, setQueueing] = useState(false);
   const [queued, setQueued] = useState(false);
   const [applicationUpdating, setApplicationUpdating] = useState(false);
@@ -482,6 +508,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [profileLinks, setProfileLinks] = useState<Record<ProfileURLField, string>>({ githubURL: "", linkedinURL: "" });
   const [copiedProfileLink, setCopiedProfileLink] = useState<ProfileURLField | "">("");
   const actionsMenuRef = useRef<HTMLDetailsElement>(null);
+  const actionRailRef = useRef<HTMLElement>(null);
   const nextChatPromptID = useRef(0);
   const postedAt = formatTimestamp(job.postedAt);
   const matchedAt = match ? formatTimestamp(match.createdAt) : "";
@@ -493,6 +520,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       setMatch(undefined);
       setApplication(undefined);
       setAnalysis(undefined);
+      setChatItems(undefined);
       try {
         const result = await fetchJobMatch(job.id, controller.signal);
         if (!controller.signal.aborted) {
@@ -508,6 +536,22 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       }
     }
     void loadMatch();
+    return () => controller.abort();
+  }, [job.id]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadChatItems() {
+      try {
+        const result = await fetchJobMatchChat(job.id, controller.signal);
+        if (!controller.signal.aborted) setChatItems(result.items);
+      } catch (reason) {
+        if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+          notifyError(reason, "Could not load application documents");
+        }
+      }
+    }
+    void loadChatItems();
     return () => controller.abort();
   }, [job.id]);
 
@@ -540,6 +584,15 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     document.addEventListener("pointerdown", closeActions);
     return () => document.removeEventListener("pointerdown", closeActions);
   }, [actionsOpen]);
+
+  useEffect(() => {
+    if (!actionRailExpanded) return;
+    function closeActionRail(event: PointerEvent) {
+      if (!actionRailRef.current?.contains(event.target as Node)) setActionRailExpanded(false);
+    }
+    document.addEventListener("pointerdown", closeActionRail);
+    return () => document.removeEventListener("pointerdown", closeActionRail);
+  }, [actionRailExpanded]);
 
   async function removeJob() {
     if (!window.confirm(`Delete ${job.title} from the database?`)) {
@@ -624,6 +677,10 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     onTabChange("chat");
   }
 
+  const updateChatItems = useCallback((items: JobMatchChatItem[]) => setChatItems(items), []);
+  const hasLatestResume = chatItems !== undefined && resumeRevisions(chatItems).length > 0;
+  const hasLatestCoverLetter = chatItems !== undefined && coverLetterRevisions(chatItems).length > 0;
+
   return (
     <section className={tab === "chat" ? "job-page chat-job-page" : "job-page"}>
       <button type="button" className="back-link" onClick={onBack}>Back to jobs</button>
@@ -642,15 +699,60 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
             <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
              <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
               <div className="job-overflow-menu">
-                <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
+                 <a className={`download-resume${hasLatestResume ? "" : " disabled"}`} href={hasLatestResume ? jobApplicationResumePDFURL(job.id) : undefined} aria-disabled={!hasLatestResume} onClick={(event) => { if (!hasLatestResume) event.preventDefault(); }}>Download latest resume</a>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")}>{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</button>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")}>{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</button>
                    <JobRejectionAction jobID={job.id} className="reject-action" onClose={() => setActionsOpen(false)} onRejected={onDeleted}>Won't apply</JobRejectionAction>
                <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
              </div>
           </details>
-        </div>
+          </div>
       </header>
+      <aside className={`job-action-rail${actionRailExpanded ? " expanded" : ""}`} ref={actionRailRef} aria-label="Job actions">
+        <button type="button" className="job-action-rail-toggle" onClick={() => setActionRailExpanded((expanded) => !expanded)} aria-label={actionRailExpanded ? "Collapse job actions" : "Expand job actions"} title={actionRailExpanded ? "Collapse job actions" : "Expand job actions"}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={actionRailExpanded ? "m9 18 6-6-6-6" : "m15 18-6-6 6-6"} /></svg>
+        </button>
+        <div className="job-action-rail-list" onClickCapture={(event) => {
+          if ((event.target as HTMLElement).closest("button, a")) setActionRailExpanded(false);
+        }}>
+          <a className={`job-action-link${job.sourceURL ? "" : " disabled"}`} href={job.sourceURL || undefined} target="_blank" rel="noreferrer" aria-disabled={!job.sourceURL} onClick={(event) => { if (!job.sourceURL) event.preventDefault(); }} title={job.sourceURL ? "Open original listing" : "No listing URL available"}>
+            <JobActionContent icon="listing">Open listing</JobActionContent>
+          </a>
+          <button type="button" className="job-action-button" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")} title={profileLinks.linkedinURL.trim() ? "Copy LinkedIn URL" : "No LinkedIn URL saved"}>
+            <JobActionContent icon="linkedin">{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</JobActionContent>
+          </button>
+          <button type="button" className="job-action-button" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")} title={profileLinks.githubURL.trim() ? "Copy GitHub URL" : "No GitHub URL saved"}>
+            <JobActionContent icon="github">{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</JobActionContent>
+          </button>
+          <span className="job-action-divider" aria-hidden="true" />
+          <button type="button" className="job-action-button" disabled={queueing || match === undefined || !job.bodyText.trim()} onClick={() => void requestMatch(match !== null)} title={!job.bodyText.trim() ? "Add a job description first" : match === null ? "Queue a match" : "Queue a new match"}>
+            <JobActionContent icon="match">{queueing ? "Queueing match..." : match === null ? "Queue match" : "Redo match"}</JobActionContent>
+          </button>
+          <button type="button" className="job-action-button" disabled={!match} onClick={tailorResume} title={match ? "Open resume tailoring chat" : "Create a match first"}>
+            <JobActionContent icon="resume">Tailor my resume</JobActionContent>
+          </button>
+          <button type="button" className="job-action-button" disabled={!match} onClick={createCoverLetter} title={match ? "Open cover letter chat" : "Create a match first"}>
+            <JobActionContent icon="letter">Create cover letter</JobActionContent>
+          </button>
+          <span className="job-action-divider" aria-hidden="true" />
+          <button type="button" className={`job-action-button${application ? " current" : ""}`} disabled={application === undefined || applicationUpdating} onClick={() => void toggleApplication()} title={application ? "Mark this job unapplied" : "Mark this job applied"}>
+            <JobActionContent icon="applied">{applicationUpdating ? "Saving..." : application ? "Mark unapplied" : "Mark applied"}</JobActionContent>
+          </button>
+          <a className={`job-action-link${hasLatestResume ? "" : " disabled"}`} href={hasLatestResume ? jobApplicationResumePDFURL(job.id) : undefined} aria-disabled={!hasLatestResume} onClick={(event) => { if (!hasLatestResume) event.preventDefault(); }} title={hasLatestResume ? "Download latest CV" : "No tailored CV available"}>
+            <JobActionContent icon="resume">Download latest CV</JobActionContent>
+          </a>
+          <a className={`job-action-link${hasLatestCoverLetter ? "" : " disabled"}`} href={hasLatestCoverLetter ? jobApplicationCoverLetterPDFURL(job.id) : undefined} aria-disabled={!hasLatestCoverLetter} onClick={(event) => { if (!hasLatestCoverLetter) event.preventDefault(); }} title={hasLatestCoverLetter ? "Download latest cover letter" : "No cover letter available"}>
+            <JobActionContent icon="letter">Download latest cover letter</JobActionContent>
+          </a>
+          <span className="job-action-divider" aria-hidden="true" />
+          <JobRejectionAction jobID={job.id} className="job-action-button job-action-danger" ariaLabel="Mark job as won't apply" title="Mark job as won't apply" onRejected={onDeleted}>
+            <JobActionContent icon="reject">Won't apply</JobActionContent>
+          </JobRejectionAction>
+          <button type="button" className="job-action-button job-action-danger" disabled={deleting} onClick={() => void removeJob()} title="Delete job from database">
+            <JobActionContent icon="delete">{deleting ? "Deleting..." : "Delete job"}</JobActionContent>
+          </button>
+        </div>
+      </aside>
       <dl className="job-page-meta">
         <div><dt>Location</dt><dd>{job.location || "Location flexible"}</dd></div>
          <div><dt>Work arrangement</dt><dd>{workplaceLabel(job.workplace) || "Not listed"}<WorkplaceClassificationInfo value={job.workplaceClassificationJSON} /></dd></div>
@@ -671,7 +773,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
             <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={createCoverLetter}>Create a cover letter for this application</button>
           </div>
         )}
-       {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} promptRequest={chatPromptRequest} onPromptHandled={(id) => setChatPromptRequest((current) => current?.id === id ? undefined : current)} /> : (
+       {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} promptRequest={chatPromptRequest} onPromptHandled={(id) => setChatPromptRequest((current) => current?.id === id ? undefined : current)} onItemsChanged={updateChatItems} /> : (
         <>
             <section className="match-panel">
              <p className="eyebrow">Current match</p>
