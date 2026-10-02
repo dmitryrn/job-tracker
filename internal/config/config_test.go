@@ -28,6 +28,9 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "opencode", cfg.JobAnalysis.Provider)
 	assert.Equal(t, "job-analysis-model", cfg.JobAnalysis.Model)
 	assert.Equal(t, "high", cfg.JobAnalysis.ReasoningEffort)
+	assert.Equal(t, "openai", cfg.CustomJobImport.Provider)
+	assert.Equal(t, "custom-job-import-model", cfg.CustomJobImport.Model)
+	assert.Equal(t, "medium", cfg.CustomJobImport.ReasoningEffort)
 	assert.Equal(t, "opencode", cfg.ProfileMatcher.Provider)
 	assert.Equal(t, "profile-matcher-model", cfg.ProfileMatcher.Model)
 	assert.Equal(t, "medium", cfg.ProfileMatcher.ReasoningEffort)
@@ -120,6 +123,11 @@ model = "jev-latest"
 provider = "opencode"
 model = "job-analysis-model"
 reasoning_effort = "high"
+
+[custom_job_import]
+provider = "openai"
+model = "custom-job-import-model"
+reasoning_effort = "medium"
 
 [profile_matcher]
 provider = "opencode"

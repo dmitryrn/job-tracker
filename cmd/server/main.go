@@ -125,12 +125,12 @@ func newJobProfileScorer(client *typesafe.Client) services.JobProfileScoreServic
 }
 
 func newCustomJobImporter(clients completionClients, linkedInClient *linkedin.Client, cfg config.Config) (*services.CustomJobImporter, error) {
-	client, err := clients.forProvider(cfg.JobAnalysis.Provider)
+	client, err := clients.forProvider(cfg.CustomJobImport.Provider)
 	if err != nil {
-		return nil, fmt.Errorf("select custom job import client from job analysis config: %w", err)
+		return nil, fmt.Errorf("select custom job import client: %w", err)
 	}
 
-	return services.NewCustomJobImporter(services.NewHTTPJobPageFetcher(), linkedInClient, client, cfg.JobAnalysis.Model, cfg.JobAnalysis.ReasoningEffort), nil
+	return services.NewCustomJobImporter(services.NewHTTPJobPageFetcher(), linkedInClient, client, cfg.CustomJobImport.Model, cfg.CustomJobImport.ReasoningEffort), nil
 }
 
 func newJobAnalysisService(analyzer *services.JobAnalyzer) services.JobAnalysisService {
