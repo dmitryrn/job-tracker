@@ -51,30 +51,29 @@ type JobMatchRequests struct {
 
 // JobMatchWorker schedules queued matching work; repositories only persist its state.
 type JobMatchWorker struct {
-	jobs        repositories.JobRepository
-	analyses    repositories.JobAnalysisRepository
-	matches     repositories.JobMatchRepository
-	queue       repositories.MatchQueueRepository
-	profiles    repositories.UserProfileRepository
-	analyzer    JobAnalysisService
-	scorer      JobProfileScoreService
-	matcher     ProfileJobMatcher
-	events      repositories.EventRecorder
-	logger      *zap.Logger
-	runInterval time.Duration
-	cancel      context.CancelFunc
-	done        chan struct{}
-	wake        chan struct{}
-	mutex       sync.Mutex
+	jobs     repositories.JobRepository
+	analyses repositories.JobAnalysisRepository
+	matches  repositories.JobMatchRepository
+	queue    repositories.MatchQueueRepository
+	profiles repositories.UserProfileRepository
+	analyzer JobAnalysisService
+	scorer   JobProfileScoreService
+	matcher  ProfileJobMatcher
+	events   repositories.EventRecorder
+	logger   *zap.Logger
+	cancel   context.CancelFunc
+	done     chan struct{}
+	wake     chan struct{}
+	mutex    sync.Mutex
 }
 
-func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, runInterval time.Duration, scorers ...JobProfileScoreService) *JobMatchWorker {
+func NewJobMatchWorker(jobs repositories.JobRepository, analyses repositories.JobAnalysisRepository, matches repositories.JobMatchRepository, queue repositories.MatchQueueRepository, profiles repositories.UserProfileRepository, analyzer JobAnalysisService, matcher ProfileJobMatcher, events repositories.EventRecorder, logger *zap.Logger, scorers ...JobProfileScoreService) *JobMatchWorker {
 	var scorer JobProfileScoreService
 	if len(scorers) > 0 {
 		scorer = scorers[0]
 	}
 
-	return &JobMatchWorker{jobs: jobs, analyses: analyses, matches: matches, queue: queue, profiles: profiles, analyzer: analyzer, scorer: scorer, matcher: matcher, events: events, logger: logger, runInterval: runInterval, wake: make(chan struct{}, 1)}
+	return &JobMatchWorker{jobs: jobs, analyses: analyses, matches: matches, queue: queue, profiles: profiles, analyzer: analyzer, scorer: scorer, matcher: matcher, events: events, logger: logger, wake: make(chan struct{}, 1)}
 }
 
 func (worker *JobMatchWorker) Register(lifecycle fx.Lifecycle) {
@@ -121,7 +120,7 @@ func (worker *JobMatchWorker) run(ctx context.Context) {
 	defer close(worker.done)
 	for {
 		worked, err := worker.process(ctx)
-		interval, cooldown := jobMatchRunInterval(worked, err, worker.runInterval)
+		interval, cooldown := jobMatchRunInterval(worked, err)
 		if cooldown {
 			if err != nil {
 				worker.logger.Info("job match worker cooling down after failed run", zap.Duration("run_interval", interval), zap.Error(err))
@@ -429,9 +428,13 @@ func validJobMatchApplied(value string) bool {
 	return value == "all" || value == "applied" || value == "not-applied"
 }
 
-func jobMatchRunInterval(worked bool, err error, runInterval time.Duration) (time.Duration, bool) {
-	if worked || err != nil {
-		return runInterval, true
+func jobMatchRunInterval(worked bool, err error) (time.Duration, bool) {
+	if err != nil {
+		return jobMatchRetryInterval, true
+	}
+
+	if worked {
+		return 0, false
 	}
 
 	return jobMatchRetryInterval, false

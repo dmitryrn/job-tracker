@@ -28,7 +28,6 @@ type Config struct {
 	CustomJobImport   TaskConfig
 	ProfileMatcher    TaskConfig
 	JobChat           TaskConfig
-	JobMatch          JobMatchConfig
 	Events            EventConfig
 	OpenRouter        OpenRouterConfig
 }
@@ -60,10 +59,6 @@ type TaskConfig struct {
 	Provider        string
 	Model           string
 	ReasoningEffort string
-}
-
-type JobMatchConfig struct {
-	RunInterval time.Duration
 }
 
 type EventConfig struct {
@@ -112,7 +107,6 @@ type configDurations struct {
 	linkedInInterval               time.Duration
 	linkedInRequestInterval        time.Duration
 	linkedInPreviewRequestInterval time.Duration
-	jobMatchRunInterval            time.Duration
 	eventFlushInterval             time.Duration
 }
 
@@ -131,7 +125,6 @@ type fileConfig struct {
 	CustomJobImport fileTaskConfig     `toml:"custom_job_import"`
 	ProfileMatcher  fileTaskConfig     `toml:"profile_matcher"`
 	JobChat         fileTaskConfig     `toml:"job_chat"`
-	JobMatch        fileJobMatchConfig `toml:"job_match"`
 	Events          fileEventConfig    `toml:"events"`
 	Providers       struct {
 		Adzuna   fileAdzunaConfig   `toml:"adzuna"`
@@ -158,10 +151,6 @@ type fileTaskConfig struct {
 	Provider        string `toml:"provider" validate:"oneof=opencode openai"`
 	Model           string `toml:"model" validate:"notblank"`
 	ReasoningEffort string `toml:"reasoning_effort" validate:"oneof=low medium high"`
-}
-
-type fileJobMatchConfig struct {
-	RunInterval string `toml:"run_interval" validate:"notblank,duration"`
 }
 
 type fileEventConfig struct {
@@ -256,7 +245,6 @@ func Load() (Config, error) {
 		CustomJobImport: TaskConfig{Provider: source.CustomJobImport.Provider, Model: source.CustomJobImport.Model, ReasoningEffort: source.CustomJobImport.ReasoningEffort},
 		ProfileMatcher:  TaskConfig{Provider: source.ProfileMatcher.Provider, Model: source.ProfileMatcher.Model, ReasoningEffort: source.ProfileMatcher.ReasoningEffort},
 		JobChat:         TaskConfig{Provider: source.JobChat.Provider, Model: source.JobChat.Model, ReasoningEffort: source.JobChat.ReasoningEffort},
-		JobMatch:        JobMatchConfig{RunInterval: durations.jobMatchRunInterval},
 		Events:          EventConfig{QueueSize: source.Events.QueueSize, BatchSize: source.Events.BatchSize, FlushInterval: durations.eventFlushInterval},
 		OpenRouter:      OpenRouterConfig{APIKey: credentials.openRouterAPIKey},
 	}, nil
@@ -342,11 +330,6 @@ func parseConfigDurations(source fileConfig) (configDurations, error) {
 		return configDurations{}, err
 	}
 
-	jobMatchRunInterval, err := parseDuration(source.JobMatch.RunInterval, "job_match.run_interval")
-	if err != nil {
-		return configDurations{}, err
-	}
-
 	eventFlushInterval, err := parseDuration(source.Events.FlushInterval, "events.flush_interval")
 	if err != nil {
 		return configDurations{}, err
@@ -359,7 +342,6 @@ func parseConfigDurations(source fileConfig) (configDurations, error) {
 		linkedInInterval:               linkedInInterval,
 		linkedInRequestInterval:        linkedInRequestInterval,
 		linkedInPreviewRequestInterval: linkedInPreviewRequestInterval,
-		jobMatchRunInterval:            jobMatchRunInterval,
 		eventFlushInterval:             eventFlushInterval,
 	}, nil
 }

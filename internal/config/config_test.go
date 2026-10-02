@@ -42,7 +42,6 @@ func TestLoadUsesProviderConfig(t *testing.T) {
 	assert.Equal(t, "openai", cfg.JobChat.Provider)
 	assert.Equal(t, "job-chat-model", cfg.JobChat.Model)
 	assert.Equal(t, "high", cfg.JobChat.ReasoningEffort)
-	assert.Equal(t, 2*time.Minute, cfg.JobMatch.RunInterval)
 	assert.Equal(t, 1000, cfg.Events.QueueSize)
 	assert.Equal(t, 100, cfg.Events.BatchSize)
 	assert.Equal(t, time.Second, cfg.Events.FlushInterval)
@@ -138,9 +137,6 @@ reasoning_effort = "medium"
 provider = "openai"
 model = "job-chat-model"
 reasoning_effort = "high"
-
-[job_match]
-run_interval = "2m"
 
 [events]
 queue_size = 1000
