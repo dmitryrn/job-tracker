@@ -1,5 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { fetchResume, resumePDFURL, resumePhotoURL, saveResume, uploadResumePhoto, type Resume } from "./api";
+import { notifyError, notifySuccess } from "./notifications";
 
 const emptyResume: Resume = {
   id: 1,
@@ -23,7 +24,6 @@ export default function ResumeView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState("");
 
   useEffect(() => {
@@ -33,11 +33,10 @@ export default function ResumeView() {
         const result = await fetchResume(controller.signal);
         if (!controller.signal.aborted) {
           setResume(result.resume ?? emptyResume);
-          setError("");
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load resume");
+          notifyError(reason, "Could not load resume");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -56,9 +55,9 @@ export default function ResumeView() {
       const result = await saveResume(resume);
       setResume(result.resume);
       setSavedAt(result.resume.updatedAt);
-      setError("");
+      notifySuccess("Resume saved");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save resume");
+      notifyError(reason, "Could not save resume");
     } finally {
       setSaving(false);
     }
@@ -78,9 +77,8 @@ export default function ResumeView() {
     try {
       const result = await uploadResumePhoto(photo);
       setResume((current) => ({ ...current, hasPhoto: result.resume.hasPhoto, updatedAt: result.resume.updatedAt }));
-      setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not upload resume photo");
+      notifyError(reason, "Could not upload resume photo");
     } finally {
       setUploadingPhoto(false);
     }
@@ -121,7 +119,6 @@ export default function ResumeView() {
           <EducationSection resume={resume} setResume={setResume} />
           <SkillsSection resume={resume} setResume={setResume} />
 
-          {error && <p className="query-error">{error}</p>}
            <div className="profile-actions">
              <button className="save-profile" disabled={saving}>{saving ? "Saving..." : "Save base resume"}</button>
              {resume.updatedAt && <a className="download-resume" href={resumePDFURL()}>Download PDF</a>}

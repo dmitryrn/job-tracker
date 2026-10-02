@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { fetchEvents, type EventPage } from "./api";
+import { notifyError } from "./notifications";
 
 const pageSize = 50;
 
@@ -21,7 +22,6 @@ export default function EventsView() {
   const [reload, setReload] = useState(0);
   const [page, setPage] = useState<EventPage>({ events: [], total: 0 });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -31,11 +31,10 @@ export default function EventsView() {
         const result = await fetchEvents(activeProvider, activeRunID, activeType, activeLevel, pageSize, offset, controller.signal);
         if (!controller.signal.aborted) {
           setPage(result);
-          setError("");
         }
       } catch (reason) {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Could not load events");
+          notifyError(reason, "Could not load events");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -79,7 +78,6 @@ export default function EventsView() {
         <button className="secondary-action">Apply filters</button>
       </form>
 
-      {error && <p className="query-error">{error}</p>}
       {loading ? <p className="browse-loading">Loading events...</p> : page.events.length === 0 ? <p className="profile-empty">No events match these filters.</p> : (
         <ol className="events-list">
           {page.events.map((event) => (

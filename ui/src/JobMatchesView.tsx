@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchJobMatches, type BrowseJob, type JobMatchSummary } from "./api";
 import { formatDate, formatRelativeTime } from "./BrowseView";
 import JobRejectionAction from "./JobRejectionAction";
+import { notifyError } from "./notifications";
 import { matchLabelScore, matchScoreStyle, matchStatusLegend } from "./matchScore";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
 
@@ -151,7 +152,7 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load job matches");
+           setError(notifyError(reason, "Could not load job matches"));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -204,7 +205,6 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
         {matchStatusLegend.map((status) => <button type="button" className="match-label match-filter" key={status.label} aria-pressed={minimumScore === status.score} aria-label={`Show ${status.label} and higher`} onClick={() => updateSearch({ minimumScore: minimumScore === status.score ? null : status.score, offset: 0 })} style={matchScoreStyle(status.score)}>{status.label}</button>)}
         <span className="match-label unlabeled">Unlabeled</span>
       </aside>
-      {error && <p className="query-error">{error}</p>}
       {loading && <p className="browse-loading">Loading matches...</p>}
        {!loading && !error && matches.length === 0 && <p className="empty browse-empty">{totalMatches === 0 && minimumScore === null && viewed === "all" && applied === "all" ? "No completed matches yet." : "No matches meet these filters."}</p>}
       {matches.length > 0 && (
@@ -254,7 +254,6 @@ export default function JobMatchesView({ onOpenMatch }: JobMatchesViewProps) {
                     ariaLabel={`Won't apply to ${match.job.title}`}
                     title="Won't apply"
                     onRejected={() => removeRejectedMatch(match.job.id)}
-                    onError={setError}
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
                   </JobRejectionAction>

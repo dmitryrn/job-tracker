@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { rejectJob } from "./api";
+import { notifyError } from "./notifications";
 
 type JobRejectionActionProps = {
   jobID: number;
@@ -10,10 +11,9 @@ type JobRejectionActionProps = {
   onRejected: () => void;
   onOpen?: () => void;
   onClose?: () => void;
-  onError?: (message: string) => void;
 };
 
-export default function JobRejectionAction({ jobID, children, className, ariaLabel, title, onRejected, onOpen, onClose, onError }: JobRejectionActionProps) {
+export default function JobRejectionAction({ jobID, children, className, ariaLabel, title, onRejected, onOpen, onClose }: JobRejectionActionProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
@@ -45,7 +45,7 @@ export default function JobRejectionAction({ jobID, children, className, ariaLab
       dialogRef.current?.close();
       onRejected();
     } catch (error) {
-      onError?.(error instanceof Error ? error.message : "Could not mark job as won't apply");
+      notifyError(error, "Could not mark job as won't apply");
       setRejecting(false);
     }
   }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchMatchQueue, removeMatchQueueItem, reorderMatchQueue, type BrowseJob } from "./api";
+import { notifyError } from "./notifications";
 
 type MatchQueueViewProps = {
   onOpenJob: (job: BrowseJob) => void;
@@ -9,7 +10,6 @@ export default function MatchQueueView({ onOpenJob }: MatchQueueViewProps) {
   const [jobs, setJobs] = useState<BrowseJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -18,11 +18,10 @@ export default function MatchQueueView({ onOpenJob }: MatchQueueViewProps) {
         const result = await fetchMatchQueue(controller.signal);
         if (!controller.signal.aborted) {
           setJobs(result.jobs);
-          setError("");
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load match queue");
+          notifyError(reason, "Could not load match queue");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -45,10 +44,9 @@ export default function MatchQueueView({ onOpenJob }: MatchQueueViewProps) {
     setJobs(next);
     try {
       await reorderMatchQueue(next.map((job) => job.id));
-      setError("");
     } catch (reason) {
       setJobs(jobs);
-      setError(reason instanceof Error ? reason.message : "Could not reorder match queue");
+      notifyError(reason, "Could not reorder match queue");
     } finally {
       setSaving(false);
     }
@@ -61,10 +59,9 @@ export default function MatchQueueView({ onOpenJob }: MatchQueueViewProps) {
     setJobs(next);
     try {
       await removeMatchQueueItem(job.id);
-      setError("");
     } catch (reason) {
       setJobs(jobs);
-      setError(reason instanceof Error ? reason.message : "Could not remove job from match queue");
+      notifyError(reason, "Could not remove job from match queue");
     } finally {
       setSaving(false);
     }
@@ -75,7 +72,6 @@ export default function MatchQueueView({ onOpenJob }: MatchQueueViewProps) {
       <header className="queue-header">
         <div><p className="eyebrow">Match queue</p><h1>Requested matches</h1><p>User-requested matches run in this order. The worker waits when the queue is empty.</p></div>
       </header>
-      {error && <p className="query-error">{error}</p>}
       {loading ? <p className="browse-loading">Loading queue...</p> : jobs.length === 0 ? <p className="empty browse-empty">No requested matches.</p> : (
         <ol className="match-queue-list">
           {jobs.map((job, index) => (

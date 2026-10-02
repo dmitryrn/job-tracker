@@ -8,6 +8,7 @@ import { copyText } from "./clipboard";
 import JobRejectionAction from "./JobRejectionAction";
 import { matchLabelScore, matchScoreStyle } from "./matchScore";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
+import { notifyError, notifySuccess } from "./notifications";
 
 type JobDetailViewProps = {
   job: BrowseJob;
@@ -180,7 +181,6 @@ function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { j
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [reverting, setReverting] = useState(false);
-  const [error, setError] = useState("");
   const [queuedPrompt, setQueuedPrompt] = useState<ChatPromptRequest>();
   const lastPromptID = useRef<number | undefined>(undefined);
 
@@ -210,11 +210,10 @@ function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { j
         const result = await fetchJobMatchChat(jobID, controller.signal);
         if (!controller.signal.aborted) {
           setItems((current) => mergeChatItems(current, result.items));
-          setError("");
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load chat");
+           notifyError(reason, "Could not load chat");
         }
       }
     }
@@ -247,9 +246,8 @@ function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { j
       const result = await sendJobMatchChatMessage(jobID, content, chatRequestID());
       setItems((current) => mergeChatItems(current, [result.item]));
       if (clearDraft) setDraft("");
-      setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not send chat message");
+       notifyError(reason, "Could not send chat message");
     } finally {
       setSending(false);
     }
@@ -276,7 +274,7 @@ function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { j
 
   async function stop() {
     if (!activeRequestID) return;
-    try { await stopJobMatchChat(jobID, activeRequestID); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not stop chat"); }
+    try { await stopJobMatchChat(jobID, activeRequestID); } catch (reason) { notifyError(reason, "Could not stop chat"); }
   }
 
   function keepComposerClear() {
@@ -295,9 +293,8 @@ function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { j
       await revertJobMatchChat(jobID, message.sequence);
       setItems((current) => current?.filter((item) => item.sequence < message.sequence));
       setDraft(content);
-      setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not revert chat");
+       notifyError(reason, "Could not revert chat");
     } finally {
       setReverting(false);
     }
@@ -311,7 +308,6 @@ function JobMatchChatPanel({ jobID, match, promptRequest, onPromptHandled }: { j
   }
 
   return <section className="match-chat">
-    {error && <p className="query-error">{error}</p>}
     {items === undefined ? <p className="analysis-loading">Loading chat...</p> : <ChatTimeline items={items} onRevert={revert} reverting={reverting} />}
     <form className="match-chat-compose" onSubmit={(event) => void send(event)}>
       <textarea aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} onFocus={keepComposerClear} onKeyDown={(event) => {
@@ -476,7 +472,6 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
   const [application, setApplication] = useState<Application | null>();
   const [analysis, setAnalysis] = useState<JobAnalysis | null>();
   const [eligibility, setEligibility] = useState<JobEligibilityCheck | null>(null);
-  const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [queueing, setQueueing] = useState(false);
@@ -504,12 +499,11 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
            setMatch(result.match);
            setApplication(result.application);
            setAnalysis(result.analysis);
-          setError("");
-          setQueued(false);
+           setQueued(false);
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load match");
+           notifyError(reason, "Could not load match");
         }
       }
     }
@@ -530,7 +524,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load profile links");
+           notifyError(reason, "Could not load profile links");
         }
       }
     }
@@ -556,7 +550,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       await deleteJob(job.id);
       onDeleted();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not delete job");
+       notifyError(reason, "Could not delete job");
       setDeleting(false);
     }
   }
@@ -567,9 +561,9 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       await queueJobMatch(job.id, redo);
       setMatch(null);
       setQueued(true);
-      setError("");
+       notifySuccess("Match queued");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not queue match");
+       notifyError(reason, "Could not queue match");
     } finally {
       setQueueing(false);
     }
@@ -581,9 +575,8 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
     try {
       const result = await runJobEligibilityCheck(job.id);
       setEligibility(result.eligibility);
-      setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not run job eligibility check");
+       notifyError(reason, "Could not run job eligibility check");
     } finally {
       setEligibilityRunning(false);
     }
@@ -596,16 +589,14 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
       await copyText(value);
       setCopiedProfileLink(field);
       window.setTimeout(() => setCopiedProfileLink(""), 1500);
-      setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not copy profile link");
+       notifyError(reason, "Could not copy profile link");
     }
   }
 
   async function toggleApplication() {
     if (application === undefined || applicationUpdating) return;
     setApplicationUpdating(true);
-    setError("");
     try {
       if (application) {
         await unapplyFromJob(job.id);
@@ -615,7 +606,7 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
         setApplication(result.application);
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not update application status");
+       notifyError(reason, "Could not update application status");
     } finally {
       setApplicationUpdating(false);
     }
@@ -647,14 +638,14 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
               <a className="primary-action" href={job.sourceURL} target="_blank" rel="noreferrer">Open original listing</a>
               {application !== undefined && <button type="button" className={application ? "application-toggle applied" : "application-toggle"} disabled={applicationUpdating} onClick={() => void toggleApplication()}>{applicationUpdating ? "Saving..." : application ? "Mark unapplied" : "Mark applied"}</button>}
             </div>
-              <JobRejectionAction jobID={job.id} className="reject-action desktop-reject-action" onOpen={() => setActionsOpen(false)} onRejected={onDeleted} onError={setError}>Won't apply</JobRejectionAction>
+              <JobRejectionAction jobID={job.id} className="reject-action desktop-reject-action" onOpen={() => setActionsOpen(false)} onRejected={onDeleted}>Won't apply</JobRejectionAction>
             <details className="job-overflow" ref={actionsMenuRef} open={actionsOpen} onToggle={(event) => setActionsOpen(event.currentTarget.open)}>
              <summary aria-label="Job actions" title="Job actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></summary>
               <div className="job-overflow-menu">
                 <a className="download-resume" href={jobApplicationResumePDFURL(job.id)}>Download latest resume</a>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.githubURL.trim()} onClick={() => void copyProfileLink("githubURL")}>{copiedProfileLink === "githubURL" ? "GitHub URL copied" : "Copy GitHub URL"}</button>
                 <button type="button" className="copy-profile-link" disabled={!profileLinks.linkedinURL.trim()} onClick={() => void copyProfileLink("linkedinURL")}>{copiedProfileLink === "linkedinURL" ? "LinkedIn URL copied" : "Copy LinkedIn URL"}</button>
-                  <JobRejectionAction jobID={job.id} className="reject-action" onClose={() => setActionsOpen(false)} onRejected={onDeleted} onError={setError}>Won't apply</JobRejectionAction>
+                   <JobRejectionAction jobID={job.id} className="reject-action" onClose={() => setActionsOpen(false)} onRejected={onDeleted}>Won't apply</JobRejectionAction>
                <button type="button" className="danger-action" disabled={deleting} onClick={() => void removeJob()}>{deleting ? "Deleting..." : "Delete from database"}</button>
              </div>
           </details>
@@ -680,7 +671,6 @@ export default function JobDetailView({ job, tab, onTabChange, onBack, onDeleted
             <button type="button" className="resume-tailoring-prompt" disabled={!match} onClick={createCoverLetter}>Create a cover letter for this application</button>
           </div>
         )}
-       {error && <p className="query-error">{error}</p>}
        {tab === "post" ? <section className="job-post">{postedAt && <p className="detail-timestamp">Posted {postedAt}</p>}<div>{job.bodyText ? plainText(job.bodyText) : "No job description has been added yet."}</div></section> : tab === "chat" ? <JobMatchChatPanel jobID={job.id} match={match} promptRequest={chatPromptRequest} onPromptHandled={(id) => setChatPromptRequest((current) => current?.id === id ? undefined : current)} /> : (
         <>
             <section className="match-panel">

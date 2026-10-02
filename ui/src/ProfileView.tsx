@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { fetchProfile, saveProfile, type UserProfile } from "./api";
 import { copyText } from "./clipboard";
+import { notifyError, notifySuccess } from "./notifications";
 
 const emptyProfile: UserProfile = {
   id: 1,
@@ -21,7 +22,6 @@ export default function ProfileView() {
   const [profile, setProfile] = useState<UserProfile>(emptyProfile);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState("");
   const [copiedField, setCopiedField] = useState<ProfileURLField | "">("");
 
@@ -32,11 +32,10 @@ export default function ProfileView() {
         const result = await fetchProfile(controller.signal);
         if (!controller.signal.aborted) {
           setProfile(result.profile ?? emptyProfile);
-          setError("");
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load profile");
+          notifyError(reason, "Could not load profile");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -61,9 +60,8 @@ export default function ProfileView() {
       await copyText(value);
       setCopiedField(field);
       window.setTimeout(() => setCopiedField(""), 1500);
-      setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not copy link");
+      notifyError(reason, "Could not copy link");
     }
   }
 
@@ -95,9 +93,9 @@ export default function ProfileView() {
       const result = await saveProfile(profile);
       setProfile(result.profile);
       setSavedAt(result.profile.updatedAt);
-      setError("");
+      notifySuccess("Profile saved");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save profile");
+      notifyError(reason, "Could not save profile");
     } finally {
       setSaving(false);
     }
@@ -191,7 +189,6 @@ export default function ProfileView() {
             )}
           </section>
 
-          {error && <p className="query-error">{error}</p>}
           <div className="profile-actions">
             <button className="save-profile" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button>
             {(savedAt || profile.updatedAt) && <span>Saved {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(savedAt || profile.updatedAt))}</span>}

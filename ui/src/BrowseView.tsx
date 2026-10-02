@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { createCustomJob, fetchCompanies, fetchJobs, fetchMatchQueue, fetchProviders, queueUnmatchedJobMatches, type BrowseCompany, type BrowseJob } from "./api";
 import { profileScoreClassName, profileScoreLabel, profileScoreStyle } from "./profileScore";
+import { notifyError, notifySuccess } from "./notifications";
 
 export type BrowseMode = "jobs" | "companies";
 
@@ -217,7 +218,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
         if (reason instanceof DOMException && reason.name === "AbortError") {
           return;
         }
-        setError(reason instanceof Error ? reason.message : "Could not load browse data");
+          setError(notifyError(reason, "Could not load browse data"));
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -252,7 +253,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       setQueueMessage(result.queued > 0 ? `${result.queued} ${result.queued === 1 ? "role" : "roles"} queued for processing.` : "All unmatched roles in view are already queued.");
       setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not queue unmatched roles");
+      setError(notifyError(reason, "Could not queue unmatched roles"));
     } finally {
       setQueueing(false);
     }
@@ -269,6 +270,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       await createCustomJob({ sourceURL });
       customJobDialogRef.current?.close();
       setCustomJobURL("");
+      notifySuccess("Job imported");
       setProvider("");
       setMatch("all");
       setSearch("");
@@ -276,7 +278,7 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
       setRefresh((current) => current + 1);
       setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not add job");
+      notifyError(reason, "Could not add job");
     } finally {
       setCreatingCustomJob(false);
     }
@@ -342,7 +344,6 @@ export default function BrowseView({ mode, onModeChange, onOpenJob }: BrowseView
         {search && <button type="button" onClick={() => { setSearch(""); setOffset(0); }}>Clear</button>}
       </form>
 
-      {error && <p className="query-error">{error}</p>}
       {queueMessage && <p className="queue-message">{queueMessage}</p>}
       {loading && <p className="browse-loading">Loading...</p>}
       {mode === "jobs" ? (

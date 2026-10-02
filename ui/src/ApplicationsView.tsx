@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchApplications, type ApplicationSummary, type BrowseJob } from "./api";
+import { notifyError } from "./notifications";
 
 type ApplicationsViewProps = {
   onOpenJob: (job: BrowseJob) => void;
@@ -67,7 +68,7 @@ export default function ApplicationsView({ onOpenJob }: ApplicationsViewProps) {
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load applications");
+          setError(notifyError(reason, "Could not load applications"));
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -82,7 +83,6 @@ export default function ApplicationsView({ onOpenJob }: ApplicationsViewProps) {
       <header className="applications-header">
         <div><p className="eyebrow">Applications</p><h1>Jobs you applied to</h1><p>Keep track of roles you have submitted.</p></div>
       </header>
-      {error && <p className="query-error">{error}</p>}
       {loading && <p className="browse-loading">Loading applications...</p>}
       {!loading && !error && applications.length === 0 && <p className="empty browse-empty">No applications yet.</p>}
       {applications.length > 0 && (

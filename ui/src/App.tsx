@@ -12,6 +12,7 @@ import ProfileView from "./ProfileView";
 import ResumeView from "./ResumeView";
 import { apiURL, fetchJob, type BrowseJob } from "./api";
 import { inspectSchema, queryTable, rowLimit, type Rows, type Sort, type Table } from "./database";
+import { notifyError } from "./notifications";
 import "./styles.css";
 
 type View = BrowseMode | "applications" | "events" | "explorer" | "matches" | "profile" | "resume" | "match-queue" | "search-setup";
@@ -206,7 +207,7 @@ export default function App() {
       setError("");
     } catch (reason) {
       setRows({ columns: [], values: [] });
-      setError(reason instanceof Error ? reason.message : "The filter could not be run");
+       setError(notifyError(reason, "The filter could not be run"));
     }
   }, [database, selectedTable, filter, sort]);
 
@@ -333,7 +334,6 @@ export default function App() {
           <button type="button" onClick={() => setFilter("")}>Clear</button>
         </form>
 
-        {error && <p className="query-error">{error}</p>}
         <div className="grid-wrap">
           <table>
             <thead>

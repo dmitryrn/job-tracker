@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { fetchDiscoverySettings, saveDiscoverySettings, streamProviderPreview, triggerDiscoverySync, type DiscoverySettings } from "./api";
 import JSONTree from "./JSONTree";
+import { notifyError, notifySuccess } from "./notifications";
 
 const emptySettings: DiscoverySettings = {
   adzuna: { enabled: true, query: "", country: "", maxDaysOld: 30, maxPages: 1, resultsPerPage: 50, workplace: "remote-hybrid" },
@@ -17,12 +18,10 @@ export default function DiscoverySettingsView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetching, setFetching] = useState<DiscoveryProvider>();
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [fetchMessage, setFetchMessage] = useState("");
   const [previewing, setPreviewing] = useState<PreviewKey>();
   const [previews, setPreviews] = useState<Record<PreviewKey, unknown[]>>({});
-  const [previewErrors, setPreviewErrors] = useState<Record<PreviewKey, string>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -31,11 +30,10 @@ export default function DiscoverySettingsView() {
         const result = await fetchDiscoverySettings(controller.signal);
         if (!controller.signal.aborted) {
           setSettings(result.settings);
-          setError("");
         }
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(reason instanceof Error ? reason.message : "Could not load search setup");
+          notifyError(reason, "Could not load search setup");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -92,9 +90,9 @@ export default function DiscoverySettingsView() {
       setSaved(true);
       const result = await triggerDiscoverySync(provider);
       setFetchMessage(result.started ? `${provider} job fetch started with this search setup.` : "A job fetch is already in progress.");
-      setError("");
+       notifySuccess("Job fetch started");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not start job fetch");
+      notifyError(reason, "Could not start job fetch");
     } finally {
       setFetching(undefined);
     }
@@ -107,9 +105,9 @@ export default function DiscoverySettingsView() {
       const result = await saveDiscoverySettings(settings);
       setSettings(result.settings);
       setSaved(true);
-      setError("");
+       notifySuccess("Search setup saved");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save search setup");
+      notifyError(reason, "Could not save search setup");
     } finally {
       setSaving(false);
     }
@@ -119,14 +117,13 @@ export default function DiscoverySettingsView() {
     const key = linkedinIndex === undefined ? provider : `linkedin-${linkedinIndex}`;
     const previewSettings = linkedinIndex === undefined ? settings : { ...settings, linkedin: [settings.linkedin[linkedinIndex]] };
     setPreviewing(key);
-    setPreviewErrors((current) => ({ ...current, [key]: "" }));
     setPreviews((current) => ({ ...current, [key]: [] }));
     try {
       await streamProviderPreview(provider, previewSettings, (job) => {
         setPreviews((current) => ({ ...current, [key]: [...(current[key] ?? []), job] }));
       });
     } catch (reason) {
-      setPreviewErrors((current) => ({ ...current, [key]: reason instanceof Error ? reason.message : "Could not fetch provider preview" }));
+      notifyError(reason, "Could not fetch provider preview");
     } finally {
       setPreviewing(undefined);
     }
@@ -154,7 +151,6 @@ export default function DiscoverySettingsView() {
                 <PreviewOutcome jobs={previews.adzuna} fetching={previewing === "adzuna"} />
               </div>
             </div>
-            {previewErrors.adzuna && <p className="query-error">{previewErrors.adzuna}</p>}
             <p>Germany-focused aggregated listings, filtered locally for the preferred work arrangement.</p>
             <div className="profile-fields">
               <label>Search phrase<input value={settings.adzuna.query} onChange={(event) => update("adzuna", "query", event.target.value)} /></label>
@@ -177,7 +173,6 @@ export default function DiscoverySettingsView() {
                 <PreviewOutcome jobs={previews.remotive} fetching={previewing === "remotive"} />
               </div>
             </div>
-            {previewErrors.remotive && <p className="query-error">{previewErrors.remotive}</p>}
             <p>Remote listings filtered by a search phrase and Remotive category slug.</p>
             <div className="profile-fields">
               <label>Search phrase<input value={settings.remotive.query} onChange={(event) => update("remotive", "query", event.target.value)} /></label>
@@ -196,7 +191,6 @@ export default function DiscoverySettingsView() {
                 <PreviewOutcome jobs={previews.jobicy} fetching={previewing === "jobicy"} />
               </div>
             </div>
-            {previewErrors.jobicy && <p className="query-error">{previewErrors.jobicy}</p>}
             <p>Remote listings filtered by geography, industry, and an optional tag.</p>
             <div className="profile-fields">
               <label>Results to fetch<input type="number" min="1" max="200" value={settings.jobicy.count} onChange={(event) => update("jobicy", "count", Number(event.target.value))} /></label>
@@ -217,7 +211,6 @@ export default function DiscoverySettingsView() {
                  <PreviewOutcome jobs={previews.linkedin} fetching={previewing === "linkedin"} />
                </div>
              </div>
-             {previewErrors.linkedin && <p className="query-error">{previewErrors.linkedin}</p>}
              <p>Public LinkedIn job listings, fetched without an account. Enabled searches run sequentially in the order shown.</p>
              {settings.linkedin.map((search, index) => {
                const key = `linkedin-${index}`;
@@ -231,7 +224,6 @@ export default function DiscoverySettingsView() {
                      <PreviewOutcome jobs={previews[key]} fetching={previewing === key} />
                    </div>
                  </div>
-                 {previewErrors[key] && <p className="query-error">{previewErrors[key]}</p>}
                  <div className="profile-fields">
                    <label>Name<input value={search.name} onChange={(event) => updateLinkedIn(index, "name", event.target.value)} /></label>
                    <label>Search phrase<input value={search.query} onChange={(event) => updateLinkedIn(index, "query", event.target.value)} /></label>
@@ -247,7 +239,6 @@ export default function DiscoverySettingsView() {
              <button className="secondary-action" type="button" onClick={addLinkedInSearch}>Add LinkedIn search</button>
            </section>
 
-          {error && <p className="query-error">{error}</p>}
           <div className="profile-actions">
             <button className="save-profile" disabled={saving || fetching !== undefined}>{saving ? "Saving..." : "Save search setup"}</button>
             {saved && <span>Saved. The next provider refresh will use these filters.</span>}
