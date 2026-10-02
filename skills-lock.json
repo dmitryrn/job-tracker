@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "jev-architect": {
+      "source": "karanb192/jev-architect",
+      "sourceType": "github",
+      "skillPath": "skills/jev-architect/SKILL.md",
+      "computedHash": "8f91815fb5f537eb458ebeffb3813bbc65c472a558cccd1eb56d7a1fa2447787"
+    },
     "typesafe-ai": {
       "source": "typesafe-ai/skills",
       "sourceType": "github",
