@@ -1046,7 +1046,8 @@ func newTestServerWithDependencies(repository *repositories.SQLite, client servi
 	return New(
 		config.Config{},
 		zap.NewNop(),
-		services.NewJobBrowse(repository, customJobImportStub{}, nil, nil),
+		services.NewJobBrowse(repository),
+		services.NewCustomJobService(repository, customJobImportStub{}, nil, nil),
 		services.NewEventLog(repository),
 		services.NewDiscoverySettingsService(repository),
 		&services.JobSync{},

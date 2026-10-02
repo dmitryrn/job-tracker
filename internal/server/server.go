@@ -58,11 +58,11 @@ type syncTrigger interface {
 	Trigger(string) bool
 }
 
-func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, events *services.EventLog, settings *services.DiscoverySettingsService, syncer *services.JobSync, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, jobs repositories.JobRepository, applications *services.Applications, matches *services.JobMatches, typeSafe *typesafe.Client, requests *services.JobMatchRequests, chat *services.JobMatchChat, metrics *services.LinkedInMetrics) *Server {
+func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, customJobs *services.CustomJobService, events *services.EventLog, settings *services.DiscoverySettingsService, syncer *services.JobSync, previews *services.ProviderPreviewService, profile *services.UserProfileService, resume *services.ResumeService, resumePDF *services.ResumePDFService, jobs repositories.JobRepository, applications *services.Applications, matches *services.JobMatches, typeSafe *typesafe.Client, requests *services.JobMatchRequests, chat *services.JobMatchChat, metrics *services.LinkedInMetrics) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/database", databaseHandler(cfg.DatabasePath))
 	mux.HandleFunc("GET /api/jobs", jobsHandler(browse, logger))
-	mux.HandleFunc("POST /api/jobs", createCustomJobHandler(browse, logger))
+	mux.HandleFunc("POST /api/jobs", createCustomJobHandler(customJobs, logger))
 	mux.HandleFunc("GET /api/jobs/{id}", jobHandler(browse, logger))
 	mux.HandleFunc("DELETE /api/jobs/{id}", deleteJobHandler(browse, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/rejection", rejectJobHandler(browse, logger))
@@ -638,7 +638,7 @@ func jobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc
 	}
 }
 
-func createCustomJobHandler(browse *services.JobBrowse, logger *zap.Logger) http.HandlerFunc {
+func createCustomJobHandler(customJobs *services.CustomJobService, logger *zap.Logger) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		request.Body = http.MaxBytesReader(writer, request.Body, 64*1024)
 		var custom models.CustomJob
@@ -648,7 +648,7 @@ func createCustomJobHandler(browse *services.JobBrowse, logger *zap.Logger) http
 			return
 		}
 
-		job, err := browse.CreateCustomJob(request.Context(), custom)
+		job, err := customJobs.Create(request.Context(), custom)
 		if errors.Is(err, services.ErrInvalidCustomJobURL) {
 			logger.Warn("invalid custom job URL", zap.String("source_url", custom.SourceURL), zap.Error(err))
 			writeError(writer, http.StatusBadRequest, err.Error())

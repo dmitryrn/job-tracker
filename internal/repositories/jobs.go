@@ -58,21 +58,26 @@ func jobExists(ctx context.Context, database jobQueryer, source, sourceID string
 }
 
 func jobBodyExists(ctx context.Context, database jobQueryer, source, bodyText string) (bool, error) {
+	id, err := jobBodyID(ctx, database, source, bodyText)
+	return id != 0, err
+}
+
+func jobBodyID(ctx context.Context, database jobQueryer, source, bodyText string) (int64, error) {
 	statement, args, err := squirrel.Select("id").From("jobs").Where(squirrel.Eq{
 		"source":    source,
 		"body_text": bodyText,
 	}).Limit(1).ToSql()
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	var id int64
 	err = database.QueryRowContext(ctx, statement, args...).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return 0, nil
 	}
 
-	return err == nil, err
+	return id, err
 }
 
 func (repository *SQLite) JobBySourceID(ctx context.Context, source, sourceID string) (*models.Job, error) {
@@ -223,6 +228,19 @@ func (repository *SQLite) CreateCustomJob(ctx context.Context, job models.Job) (
 	defer func() { _ = transaction.Rollback() }()
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	duplicate, found, err := repository.customJobDuplicate(ctx, transaction, job)
+	if err != nil {
+		return models.BrowseJob{}, err
+	}
+
+	if found {
+		if err := transaction.Commit(); err != nil {
+			return models.BrowseJob{}, fmt.Errorf("commit duplicate custom job: %w", err)
+		}
+
+		return duplicate, nil
+	}
+
 	companyID, err := upsertCompany(ctx, transaction, job.Company, now)
 	if err != nil {
 		return models.BrowseJob{}, fmt.Errorf("upsert custom job company: %w", err)
@@ -1232,6 +1250,33 @@ func (repository *SQLite) CompleteMatchRequest(ctx context.Context, jobID int64,
 	}
 
 	return nil
+}
+
+func (repository *SQLite) customJobDuplicate(ctx context.Context, transaction *sql.Tx, job models.Job) (models.BrowseJob, bool, error) {
+	exists, err := jobExists(ctx, transaction, job.Source, job.SourceID)
+	if err != nil {
+		return models.BrowseJob{}, false, fmt.Errorf("check custom job existence: %w", err)
+	}
+
+	if exists || job.BodyText == "" {
+		return models.BrowseJob{}, false, nil
+	}
+
+	duplicateID, err := jobBodyID(ctx, transaction, job.Source, job.BodyText)
+	if err != nil {
+		return models.BrowseJob{}, false, fmt.Errorf("check custom job body duplicate: %w", err)
+	}
+
+	if duplicateID == 0 {
+		return models.BrowseJob{}, false, nil
+	}
+
+	duplicate, err := repository.job(ctx, transaction, duplicateID)
+	if err != nil {
+		return models.BrowseJob{}, false, fmt.Errorf("load duplicate custom job: %w", err)
+	}
+
+	return *duplicate, true, nil
 }
 
 func (repository *SQLite) job(ctx context.Context, query queryRower, jobID int64) (*models.BrowseJob, error) {

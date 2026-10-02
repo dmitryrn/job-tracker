@@ -97,6 +97,30 @@ func TestUpsertSkipsExactBodyDuplicatesWithinProvider(t *testing.T) {
 	assert.NotNil(t, otherProvider)
 }
 
+func TestCreateCustomJobSkipsExactBodyDuplicates(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, migrations.Apply(db))
+
+	repository := NewSQLite(db)
+	require.NoError(t, repository.Upsert(context.Background(), []models.Job{{
+		Source: "custom", SourceID: "first", SourceURL: "https://example.com/jobs/first", Title: "First title", Company: "Example Co", Workplace: "remote", BodyText: "Identical job description.", MetadataJSON: "{}",
+	}}))
+
+	duplicate, err := repository.CreateCustomJob(context.Background(), models.Job{
+		Source: "custom", SourceID: "second", SourceURL: "https://example.com/jobs/second", Title: "Second title", Company: "Other Co", Workplace: "remote", BodyText: "Identical job description.", MetadataJSON: "{\"added_manually\":true}",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), duplicate.ID)
+	assert.Equal(t, "https://example.com/jobs/first", duplicate.SourceURL)
+
+	var jobCount int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM jobs`).Scan(&jobCount))
+	assert.Equal(t, 1, jobCount)
+}
+
 func TestLinkedInWorkplaceClassificationRoundTrips(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)

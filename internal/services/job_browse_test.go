@@ -44,12 +44,12 @@ func TestCreateCustomJobScoresAndPersistsProfileFitSynchronously(t *testing.T) {
 	_, err = repository.SaveUserProfile(context.Background(), models.UserProfile{Headline: "Senior Go engineer"})
 	require.NoError(t, err)
 	scorer := &jobProfileScorerStub{score: 8}
-	browse := NewJobBrowse(repository, customJobImportServiceStub{job: models.Job{
+	customJobs := NewCustomJobService(repository, customJobImportServiceStub{job: models.Job{
 		Source: "custom", SourceID: "https://example.com/job", SourceURL: "https://example.com/job",
 		Title: "Go Engineer", BodyText: "Build Go services", Workplace: "unknown", MetadataJSON: "{}",
 	}}, repository, scorer)
 
-	job, err := browse.CreateCustomJob(context.Background(), models.CustomJob{SourceURL: "https://example.com/job"})
+	job, err := customJobs.Create(context.Background(), models.CustomJob{SourceURL: "https://example.com/job"})
 
 	require.NoError(t, err)
 	require.NotNil(t, job.ProfileMatchScore)

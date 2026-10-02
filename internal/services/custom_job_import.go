@@ -54,7 +54,7 @@ var customJobImportResponseSchema = json.RawMessage(`{
   }
 }`)
 
-type CustomJobImportService interface {
+type JobPostingImporter interface {
 	Import(context.Context, string) (models.Job, error)
 }
 

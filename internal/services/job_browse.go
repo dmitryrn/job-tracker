@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"nice/internal/models"
@@ -15,18 +14,14 @@ var (
 	ErrInvalidSearchField      = errors.New("fields must contain only title, company, location, or body")
 	ErrInvalidMatchFilter      = errors.New("match must be all, has, or none")
 	ErrEmptyJobRejectionReason = errors.New("a reason is required")
-	ErrInvalidCustomJobURL     = errors.New("a valid HTTP or HTTPS job posting URL is required")
 )
 
 type JobBrowse struct {
 	repository repositories.JobRepository
-	importer   CustomJobImportService
-	profiles   repositories.UserProfileRepository
-	scorer     JobProfileScoreService
 }
 
-func NewJobBrowse(repository repositories.JobRepository, importer CustomJobImportService, profiles repositories.UserProfileRepository, scorer JobProfileScoreService) *JobBrowse {
-	return &JobBrowse{repository: repository, importer: importer, profiles: profiles, scorer: scorer}
+func NewJobBrowse(repository repositories.JobRepository) *JobBrowse {
+	return &JobBrowse{repository: repository}
 }
 
 func (browse *JobBrowse) Jobs(ctx context.Context, search models.JobSearch) (models.JobPage, error) {
@@ -64,37 +59,6 @@ func (browse *JobBrowse) OpenJob(ctx context.Context, id int64) (*models.BrowseJ
 
 func (browse *JobBrowse) MarkJobViewed(ctx context.Context, id int64) error {
 	return browse.repository.MarkJobViewed(ctx, id)
-}
-
-func (browse *JobBrowse) CreateCustomJob(ctx context.Context, custom models.CustomJob) (models.BrowseJob, error) {
-	custom.SourceURL = strings.TrimSpace(custom.SourceURL)
-	parsed, err := url.ParseRequestURI(custom.SourceURL)
-	if err != nil || validateFetchURL(parsed) != nil {
-		return models.BrowseJob{}, ErrInvalidCustomJobURL
-	}
-
-	job, err := browse.importer.Import(ctx, custom.SourceURL)
-	if err != nil {
-		return models.BrowseJob{}, err
-	}
-
-	if browse.profiles != nil && browse.scorer != nil {
-		profile, err := browse.profiles.UserProfile(ctx)
-		if err != nil {
-			return models.BrowseJob{}, fmt.Errorf("load profile for custom job score: %w", err)
-		}
-
-		if profile != nil {
-			score, err := browse.scorer.Score(ctx, job, *profile)
-			if err != nil {
-				return models.BrowseJob{}, fmt.Errorf("score custom job against profile: %w", err)
-			}
-
-			job.ProfileMatchScore = &score
-		}
-	}
-
-	return browse.repository.CreateCustomJob(ctx, job)
 }
 
 func (browse *JobBrowse) DeleteJob(ctx context.Context, id int64) (bool, error) {
