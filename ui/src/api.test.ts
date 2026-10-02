@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiURL, fetchJobMatches, fetchJobs, jobApplicationCoverLetterTXTURL, rejectJob } from "./api";
+import { apiURL, fetchJobMatches, fetchJobs, jobApplicationCoverLetterPDFURL, jobApplicationCoverLetterTXTURL, rejectJob } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -16,6 +16,7 @@ describe("apiURL", () => {
     vi.stubGlobal("window", { location: { origin: "http://10.8.0.4:4000" } });
 
     expect(jobApplicationCoverLetterTXTURL(42)).toBe("http://10.8.0.4:4000/api/jobs/42/match/cover-letter.txt");
+    expect(jobApplicationCoverLetterPDFURL(42)).toBe("http://10.8.0.4:4000/api/jobs/42/match/cover-letter.pdf");
   });
 });
 

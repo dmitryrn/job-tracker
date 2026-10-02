@@ -46,3 +46,16 @@ func TestRenderResumePDFRendersLinksBeforeSummary(t *testing.T) {
 		t.Fatalf("links must precede the summary: %q", html)
 	}
 }
+
+func TestRenderCoverLetterPDFPreservesParagraphsAndEscapesHTML(t *testing.T) {
+	t.Parallel()
+
+	html, err := renderCoverLetterPDF("Dear Hiring Team,\r\n\r\nI build <reliable> services.")
+	if err != nil {
+		t.Fatalf("renderCoverLetterPDF() error = %v", err)
+	}
+
+	if !strings.Contains(html, "<p>Dear Hiring Team,</p>") || !strings.Contains(html, "<p>I build &lt;reliable&gt; services.</p>") {
+		t.Fatalf("rendered cover letter = %q", html)
+	}
+}

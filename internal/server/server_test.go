@@ -42,10 +42,16 @@ type applicationResumeStub struct {
 	err    error
 }
 
-type applicationResumePDFStub struct {
-	content []byte
+type applicationCoverLetterStub struct {
+	content string
 	err     error
-	resume  models.Resume
+}
+
+type applicationResumePDFStub struct {
+	content     []byte
+	err         error
+	resume      models.Resume
+	coverLetter string
 }
 
 type syncTriggerStub struct {
@@ -1020,6 +1026,26 @@ func TestJobApplicationResumePDFHandler(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, response.Code)
 }
 
+func TestJobApplicationCoverLetterPDFHandler(t *testing.T) {
+	renderer := &applicationResumePDFStub{content: []byte("cover letter pdf")}
+	handler := jobApplicationCoverLetterPDFHandler(applicationCoverLetterStub{content: "Dear Hiring Team,\n\nI am applying."}, renderer, zap.NewNop())
+	request := httptest.NewRequest(http.MethodGet, "/api/jobs/1/match/cover-letter.pdf", nil)
+	request.SetPathValue("id", "1")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "application/pdf", response.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="application-cover-letter.pdf"`, response.Header().Get("Content-Disposition"))
+	assert.Equal(t, []byte("cover letter pdf"), response.Body.Bytes())
+	assert.Equal(t, "Dear Hiring Team,\n\nI am applying.", renderer.coverLetter)
+
+	response = httptest.NewRecorder()
+	jobApplicationCoverLetterPDFHandler(applicationCoverLetterStub{err: services.ErrApplicationCoverLetterNotFound}, renderer, zap.NewNop()).ServeHTTP(response, request)
+	assert.Equal(t, http.StatusNotFound, response.Code)
+}
+
 func (stub resumePDFStub) Generate(context.Context) ([]byte, error) {
 	return stub.content, stub.err
 }
@@ -1028,8 +1054,17 @@ func (stub applicationResumeStub) LatestResume(context.Context, int64) (*models.
 	return stub.resume, stub.err
 }
 
+func (stub applicationCoverLetterStub) LatestCoverLetter(context.Context, int64) (string, error) {
+	return stub.content, stub.err
+}
+
 func (stub *applicationResumePDFStub) GenerateResume(_ context.Context, resume models.Resume) ([]byte, error) {
 	stub.resume = resume
+	return stub.content, stub.err
+}
+
+func (stub *applicationResumePDFStub) GenerateCoverLetter(_ context.Context, content string) ([]byte, error) {
+	stub.coverLetter = content
 	return stub.content, stub.err
 }
 

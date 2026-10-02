@@ -327,6 +327,7 @@ button { cursor: pointer; }
 .application-cover-letter-activity pre { font-family: inherit; line-height: 1.5; margin: 10px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 
 .download-cover-letter { color: #304860; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.download-cover-letter-links { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
 
 .application-resume-revision { border-top: 1px solid #e4e1d9; font-size: 14px; line-height: 1.6; margin-top: 7px; padding-top: 7px; }
 

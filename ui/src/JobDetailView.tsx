@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationCoverLetterTXTURL, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
+import { applyToJob, deleteJob, fetchJobMatch, fetchJobMatchChat, fetchProfile, jobApplicationCoverLetterPDFURL, jobApplicationCoverLetterTXTURL, jobApplicationResumePDFURL, jobMatchChatEventsURL, queueJobMatch, revertJobMatchChat, runJobEligibilityCheck, sendJobMatchChatMessage, stopJobMatchChat, unapplyFromJob, type Application, type BrowseJob, type JobAnalysis, type JobEligibilityAnswer, type JobEligibilityCheck, type JobMatch, type JobMatchAssessment, type JobMatchChatItem, type Resume } from "./api";
 import JSONTree from "./JSONTree";
 import { formatRelativeTime, WorkplaceClassificationInfo, workplaceLabel } from "./BrowseView";
 import { copyText } from "./clipboard";
@@ -415,7 +415,7 @@ function ApplicationCoverLetterActivity({ jobID, revision, previous }: { jobID: 
   return <section className="application-cover-letter-activity">
     <div className="application-cover-letter-header">
       <h3>{revision.revision === 1 ? "Cover letter created" : `Cover letter revision ${revision.revision} applied`}</h3>
-      <a className="download-cover-letter" href={jobApplicationCoverLetterTXTURL(jobID)}>Download latest TXT</a>
+      <span className="download-cover-letter-links"><a className="download-cover-letter" href={jobApplicationCoverLetterPDFURL(jobID)}>Download PDF</a><a className="download-cover-letter" href={jobApplicationCoverLetterTXTURL(jobID)}>Download TXT</a></span>
     </div>
     {previous && <p className="application-cover-letter-previous">Replaces revision {previous.revision}.</p>}
     <pre>{revision.content}</pre>

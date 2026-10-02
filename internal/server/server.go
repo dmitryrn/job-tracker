@@ -33,6 +33,10 @@ type applicationResumePDFGenerator interface {
 	GenerateResume(context.Context, models.Resume) ([]byte, error)
 }
 
+type applicationCoverLetterPDFGenerator interface {
+	GenerateCoverLetter(context.Context, string) ([]byte, error)
+}
+
 type applicationResumeProvider interface {
 	LatestResume(context.Context, int64) (*models.Resume, error)
 }
@@ -73,6 +77,7 @@ func New(cfg config.Config, logger *zap.Logger, browse *services.JobBrowse, cust
 	mux.HandleFunc("POST /api/jobs/{id}/match/eligibility", jobEligibilityCheckHandler(jobs, typeSafe, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match/resume.pdf", jobApplicationResumePDFHandler(chat, resumePDF, logger))
 	mux.HandleFunc("GET /api/jobs/{id}/match/cover-letter.txt", jobApplicationCoverLetterTXTHandler(chat, logger))
+	mux.HandleFunc("GET /api/jobs/{id}/match/cover-letter.pdf", jobApplicationCoverLetterPDFHandler(chat, resumePDF, logger))
 	mux.HandleFunc("POST /api/jobs/{id}/match", queueJobMatchHandler(requests, logger, false))
 	mux.HandleFunc("POST /api/jobs/{id}/match/redo", queueJobMatchHandler(requests, logger, true))
 	mux.HandleFunc("GET /api/jobs/{id}/match/chat", jobMatchChatItemsHandler(chat, logger))
@@ -215,6 +220,45 @@ func jobApplicationCoverLetterTXTHandler(chat applicationCoverLetterProvider, lo
 		writer.WriteHeader(http.StatusOK)
 		if _, err := writer.Write([]byte(content + "\n")); err != nil {
 			logger.Error("write application cover letter TXT failed", zap.Int64("job_id", jobID), zap.Error(err))
+		}
+	}
+}
+
+func jobApplicationCoverLetterPDFHandler(chat applicationCoverLetterProvider, pdf applicationCoverLetterPDFGenerator, logger *zap.Logger) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		jobID, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || jobID < 1 {
+			logger.Warn("invalid job ID for application cover letter PDF", zap.String("id", request.PathValue("id")))
+			writeError(writer, http.StatusBadRequest, "job ID must be a positive integer")
+			return
+		}
+
+		content, err := chat.LatestCoverLetter(request.Context(), jobID)
+		if errors.Is(err, services.ErrApplicationCoverLetterNotFound) {
+			logger.Warn("download application cover letter PDF without a cover letter", zap.Int64("job_id", jobID), zap.Error(err))
+			writeError(writer, http.StatusNotFound, "application cover letter not found")
+			return
+		}
+
+		if err != nil {
+			logger.Error("load latest application cover letter for PDF failed", zap.Int64("job_id", jobID), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not load application cover letter")
+			return
+		}
+
+		output, err := pdf.GenerateCoverLetter(request.Context(), content)
+		if err != nil {
+			logger.Error("generate application cover letter PDF failed", zap.Int64("job_id", jobID), zap.Error(err))
+			writeError(writer, http.StatusInternalServerError, "could not generate application cover letter PDF")
+			return
+		}
+
+		writer.Header().Set("Cache-Control", "no-store")
+		writer.Header().Set("Content-Disposition", `attachment; filename="application-cover-letter.pdf"`)
+		writer.Header().Set("Content-Type", "application/pdf")
+		writer.WriteHeader(http.StatusOK)
+		if _, err := writer.Write(output); err != nil {
+			logger.Error("write application cover letter PDF failed", zap.Int64("job_id", jobID), zap.Error(err))
 		}
 	}
 }

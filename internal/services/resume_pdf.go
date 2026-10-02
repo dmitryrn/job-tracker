@@ -56,6 +56,19 @@ func (service *ResumePDFService) GenerateResume(ctx context.Context, resume mode
 		return nil, fmt.Errorf("render resume HTML: %w", err)
 	}
 
+	return generatePDF(ctx, html)
+}
+
+func (service *ResumePDFService) GenerateCoverLetter(ctx context.Context, content string) ([]byte, error) {
+	html, err := renderCoverLetterPDF(content)
+	if err != nil {
+		return nil, fmt.Errorf("render cover letter HTML: %w", err)
+	}
+
+	return generatePDF(ctx, html)
+}
+
+func generatePDF(ctx context.Context, html string) ([]byte, error) {
 	renderCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	allocatorCtx, cancelAllocator := chromedp.NewExecAllocator(renderCtx, chromedp.DefaultExecAllocatorOptions[:]...)
@@ -64,7 +77,7 @@ func (service *ResumePDFService) GenerateResume(ctx context.Context, resume mode
 	defer cancelBrowser()
 
 	var output []byte
-	err = chromedp.Run(browserCtx,
+	err := chromedp.Run(browserCtx,
 		chromedp.Navigate("about:blank"),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			frame, err := page.GetFrameTree().Do(ctx)
@@ -81,7 +94,7 @@ func (service *ResumePDFService) GenerateResume(ctx context.Context, resume mode
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("print resume PDF: %w", err)
+		return nil, fmt.Errorf("print PDF: %w", err)
 	}
 
 	return output, nil
